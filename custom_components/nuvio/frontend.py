@@ -9,6 +9,7 @@ import probatio
 from homeassistant.components import frontend, websocket_api
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
 
 from .account import NuvioAuthError
 from .api import Addon, NuvioApiError
@@ -119,7 +120,23 @@ async def _home(hass: HomeAssistant) -> dict[str, Any]:
                     "media_type": media_type,
                     "items": items,
                 })
-    return {"sections": sections}
+    registry = async_get_entity_registry(hass)
+    players: list[dict[str, Any]] = []
+    for entity in registry.entities.values():
+        if entity.domain != "media_player" or entity.platform not in {"androidtv", "webostv"}:
+            continue
+        state = hass.states.get(entity.entity_id)
+        if state is None:
+            continue
+        players.append(
+            {
+                "entity_id": entity.entity_id,
+                "platform": entity.platform,
+                "name": str(state.attributes.get("friendly_name") or entity.entity_id),
+            }
+        )
+    players.sort(key=lambda value: value["name"].casefold())
+    return {"sections": sections, "players": players}
 
 
 @websocket_api.websocket_command({probatio.Required("type"): "nuvio/home"})
