@@ -69,6 +69,8 @@ title: Nuvio
 default_player: media_player.living_room_android_tv
 columns: 6
 show_search: true
+show_remote: true
+remote_side: left
 ```
 
 The card provides horizontal catalog rows, search, title details, seasons and
@@ -198,3 +200,18 @@ resolves URLs; it cannot attach arbitrary Android intent extras. Use
 - Addon servers must be reachable from Home Assistant.
 - Only `http` and `https` manifest URLs are accepted.
 - LG webOS app launching is supported. Direct title/episode routing depends on the upstream Nuvio TV webOS app adding launch-parameter handling.
+
+### Side remote
+
+The card includes a compact TV remote for manual profile selection and recovery
+from Nuvio's profile picker. It supports directional navigation, OK, Back, Home,
+and Wake. The Wake button also dismisses Android TV's screensaver when using the
+ADB entity.
+
+```yaml
+show_remote: true
+remote_side: left   # left or right
+```
+
+Set `remote_side: right` to place the controller on the right side of the
+card, or `show_remote: false` to hide it.
