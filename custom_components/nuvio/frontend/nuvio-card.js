@@ -4,7 +4,7 @@ class NuvioCard extends HTMLElement {
     this._config={}; this._hass=null; this._loaded=false; this._loading=false;
     this._sections=[]; this._results=[]; this._playersMeta=[]; this._playerId=""; this._streams=[]; this._streamLoading=false; this._streamContext=null; this._debridMeta={configured:false,provider:""}; this._resolving=new Set(); this._view="home"; this._item=null; this._details=null; this._season=null; this._query=""; this._error="";
   }
-  static getStubConfig(){ return {title:"Nuvio",columns:6}; }
+  static getStubConfig(){ return {title:"Nuvio",columns:6,show_remote:true,remote_side:"left"}; }
   setConfig(c){ this._config=Object.assign({title:"Nuvio",columns:6,show_search:true,show_remote:true,remote_side:"left"},c||{}); this.render(); }
   set hass(h){ this._hass=h; if(!this._loaded&&!this._loading)this.loadHome(); else this.render(); }
   getCardSize(){ return 8; }
