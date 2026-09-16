@@ -39,6 +39,7 @@ from .const import (
     SERVICE_PLAY,
 )
 from .launcher import deep_link, stream_intent_command
+from .frontend import async_register_frontend
 
 type NuvioConfigEntry = ConfigEntry[dict[str, Any]]
 
@@ -101,6 +102,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
         DATA_API: NuvioApi(session, manifest_urls),
         DATA_ACCOUNT_API: account_api,
     }
+
+    await async_register_frontend(hass)
 
     if not hass.services.has_service(DOMAIN, SERVICE_OPEN):
 
