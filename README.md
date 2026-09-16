@@ -42,9 +42,19 @@ restart Home Assistant, and complete the same config flow.
 For catalog browsing and **Open title**, use an Android TV Remote media player
 that accepts deep links through `media_player.play_media`.
 
-For direct **Play**, also configure the ADB-based **Android TV** integration for
+For direct **Play** on Android TV, also configure the ADB-based **Android TV** integration for
 the device. The `nuvio.play` action sends Nuvio's explicit Android intent through
 `androidtv.adb_command`.
+
+For **LG webOS**, configure Home Assistant's **LG webOS TV** integration and install
+Nuvio TV (`space.nuvio.webos`) on the television. The Nuvio card detects webOS
+players and launches Nuvio TV through `webostv.command` using
+`system.launcher/launch`. Home Assistant sends the selected title/episode metadata
+as webOS launch parameters. The current upstream Nuvio TV webOS build does not yet
+consume those parameters for automatic detail-page or stream navigation, so today
+LG support launches Nuvio TV rather than jumping directly into the selected title.
+The integration is already structured for that behavior to become direct once the
+webOS app implements launch-parameter routing.
 
 
 ## Lovelace card
@@ -140,4 +150,4 @@ resolves URLs; it cannot attach arbitrary Android intent extras. Use
   desired profile uses another index.
 - Addon servers must be reachable from Home Assistant.
 - Only `http` and `https` manifest URLs are accepted.
-- webOS is not included in this first release.
+- LG webOS app launching is supported. Direct title/episode routing depends on the upstream Nuvio TV webOS app adding launch-parameter handling.
