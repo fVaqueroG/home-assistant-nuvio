@@ -15,12 +15,15 @@ from .const import (
     CONF_ACCESS_TOKEN,
     CONF_CONNECT_ACCOUNT,
     CONF_EMAIL,
+    CONF_DEBRID_API_KEY,
+    CONF_DEBRID_PROVIDER,
     CONF_MANIFEST_URLS,
     CONF_PACKAGE_NAME,
     CONF_PROFILE_ID,
     CONF_REFRESH_TOKEN,
     CONF_USER_ID,
     DEFAULT_MANIFEST_URL,
+    DEFAULT_DEBRID_PROVIDER,
     DEFAULT_PACKAGE_NAME,
     DEFAULT_PROFILE_ID,
     DOMAIN,
@@ -34,6 +37,20 @@ def _parse_urls(value: str) -> list[str]:
     if not urls:
         raise ValueError("At least one URL is required")
     return list(dict.fromkeys(urls))
+
+
+DEBRID_OPTIONS = [
+    selector.SelectOptionDict(value="none", label="None"),
+    selector.SelectOptionDict(value="torbox", label="TorBox"),
+    selector.SelectOptionDict(value="premiumize", label="Premiumize"),
+    selector.SelectOptionDict(value="realdebrid", label="Real-Debrid"),
+]
+
+
+def _debrid_key_selector() -> selector.TextSelector:
+    return selector.TextSelector(
+        selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+    )
 
 
 class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -54,6 +71,39 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
         self._login = await self._account_api.async_start_device_login()
         return await self.async_step_device()
 
+    def _user_schema(self, user_input: dict[str, Any] | None = None) -> probatio.Schema:
+        values = user_input or {}
+        return probatio.Schema(
+            {
+                probatio.Required(
+                    CONF_MANIFEST_URLS,
+                    default=values.get(CONF_MANIFEST_URLS, DEFAULT_MANIFEST_URL),
+                ): str,
+                probatio.Required(
+                    CONF_PACKAGE_NAME,
+                    default=values.get(CONF_PACKAGE_NAME, DEFAULT_PACKAGE_NAME),
+                ): str,
+                probatio.Required(
+                    CONF_PROFILE_ID,
+                    default=values.get(CONF_PROFILE_ID, DEFAULT_PROFILE_ID),
+                ): probatio.All(probatio.Coerce(int), probatio.Range(min=1, max=5)),
+                probatio.Required(
+                    CONF_DEBRID_PROVIDER,
+                    default=values.get(CONF_DEBRID_PROVIDER, DEFAULT_DEBRID_PROVIDER),
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=DEBRID_OPTIONS)
+                ),
+                probatio.Optional(
+                    CONF_DEBRID_API_KEY,
+                    default=values.get(CONF_DEBRID_API_KEY, ""),
+                ): _debrid_key_selector(),
+                probatio.Required(
+                    CONF_CONNECT_ACCOUNT,
+                    default=values.get(CONF_CONNECT_ACCOUNT, True),
+                ): bool,
+            }
+        )
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -72,11 +122,26 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
             except NuvioApiError:
                 errors[CONF_MANIFEST_URLS] = "cannot_connect"
             else:
+                provider = str(
+                    user_input.get(CONF_DEBRID_PROVIDER, DEFAULT_DEBRID_PROVIDER)
+                )
+                api_key = str(user_input.get(CONF_DEBRID_API_KEY, "")).strip()
+                if provider != "none" and not api_key:
+                    errors[CONF_DEBRID_API_KEY] = "debrid_key_required"
+                    return self.async_show_form(
+                        step_id="user",
+                        data_schema=self._user_schema(user_input),
+                        errors=errors,
+                    )
+
                 self._pending_data = {
                     CONF_MANIFEST_URLS: urls,
                     CONF_PACKAGE_NAME: user_input[CONF_PACKAGE_NAME].strip(),
                     CONF_PROFILE_ID: user_input[CONF_PROFILE_ID],
+                    CONF_DEBRID_PROVIDER: provider,
                 }
+                if provider != "none":
+                    self._pending_data[CONF_DEBRID_API_KEY] = api_key
                 if not user_input[CONF_CONNECT_ACCOUNT]:
                     return self.async_create_entry(
                         title="Nuvio", data=self._pending_data
@@ -86,31 +151,43 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                 except NuvioAuthError:
                     errors["base"] = "login_start_failed"
 
-        schema = probatio.Schema(
+        return self.async_show_form(
+            step_id="user",
+            data_schema=self._user_schema(user_input),
+            errors=errors,
+        )
+
+    def _reconfigure_schema(
+        self,
+        entry,
+        user_input: dict[str, Any] | None = None,
+    ) -> probatio.Schema:
+        values = user_input or {}
+        return probatio.Schema(
             {
                 probatio.Required(
-                    CONF_MANIFEST_URLS,
-                    default=(user_input or {}).get(
-                        CONF_MANIFEST_URLS, DEFAULT_MANIFEST_URL
-                    ),
-                ): str,
-                probatio.Required(
-                    CONF_PACKAGE_NAME,
-                    default=(user_input or {}).get(
-                        CONF_PACKAGE_NAME, DEFAULT_PACKAGE_NAME
-                    ),
-                ): str,
-                probatio.Required(
                     CONF_PROFILE_ID,
-                    default=(user_input or {}).get(CONF_PROFILE_ID, DEFAULT_PROFILE_ID),
+                    default=values.get(
+                        CONF_PROFILE_ID,
+                        entry.data.get(CONF_PROFILE_ID, DEFAULT_PROFILE_ID),
+                    ),
                 ): probatio.All(probatio.Coerce(int), probatio.Range(min=1, max=5)),
                 probatio.Required(
+                    CONF_DEBRID_PROVIDER,
+                    default=values.get(
+                        CONF_DEBRID_PROVIDER,
+                        entry.data.get(CONF_DEBRID_PROVIDER, DEFAULT_DEBRID_PROVIDER),
+                    ),
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=DEBRID_OPTIONS)
+                ),
+                probatio.Optional(CONF_DEBRID_API_KEY, default=""): _debrid_key_selector(),
+                probatio.Required(
                     CONF_CONNECT_ACCOUNT,
-                    default=(user_input or {}).get(CONF_CONNECT_ACCOUNT, True),
+                    default=values.get(CONF_CONNECT_ACCOUNT, True),
                 ): bool,
             }
         )
-        return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
 
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
@@ -120,10 +197,40 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
         entry = self._get_reconfigure_entry()
         errors: dict[str, str] = {}
         if user_input is not None:
-            self._pending_data = {
-                **entry.data,
-                CONF_PROFILE_ID: user_input[CONF_PROFILE_ID],
-            }
+            provider = str(
+                user_input.get(
+                    CONF_DEBRID_PROVIDER,
+                    entry.data.get(CONF_DEBRID_PROVIDER, DEFAULT_DEBRID_PROVIDER),
+                )
+            )
+            entered_key = str(user_input.get(CONF_DEBRID_API_KEY, "")).strip()
+            existing_provider = str(
+                entry.data.get(CONF_DEBRID_PROVIDER, DEFAULT_DEBRID_PROVIDER)
+            )
+            existing_key = str(entry.data.get(CONF_DEBRID_API_KEY, "")).strip()
+            api_key = entered_key or (
+                existing_key if provider == existing_provider else ""
+            )
+            if provider != "none" and not api_key:
+                errors[CONF_DEBRID_API_KEY] = "debrid_key_required"
+            else:
+                self._pending_data = {
+                    **entry.data,
+                    CONF_PROFILE_ID: user_input[CONF_PROFILE_ID],
+                    CONF_DEBRID_PROVIDER: provider,
+                }
+                if provider == "none":
+                    self._pending_data.pop(CONF_DEBRID_API_KEY, None)
+                else:
+                    self._pending_data[CONF_DEBRID_API_KEY] = api_key
+
+            if errors:
+                return self.async_show_form(
+                    step_id="reconfigure",
+                    data_schema=self._reconfigure_schema(entry, user_input),
+                    errors=errors,
+                )
+
             if not user_input[CONF_CONNECT_ACCOUNT]:
                 for key in (
                     CONF_ACCESS_TOKEN,
@@ -142,21 +249,7 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=probatio.Schema(
-                {
-                    probatio.Required(
-                        CONF_PROFILE_ID,
-                        default=(user_input or {}).get(
-                            CONF_PROFILE_ID,
-                            entry.data.get(CONF_PROFILE_ID, DEFAULT_PROFILE_ID),
-                        ),
-                    ): probatio.All(probatio.Coerce(int), probatio.Range(min=1, max=5)),
-                    probatio.Required(
-                        CONF_CONNECT_ACCOUNT,
-                        default=(user_input or {}).get(CONF_CONNECT_ACCOUNT, True),
-                    ): bool,
-                }
-            ),
+            data_schema=self._reconfigure_schema(entry, user_input),
             errors=errors,
         )
 
