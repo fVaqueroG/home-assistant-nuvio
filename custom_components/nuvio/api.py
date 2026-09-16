@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
+import time
 from typing import Any
 from urllib.parse import quote, urlsplit, urlunsplit
 
@@ -53,6 +55,8 @@ class NuvioApi:
         self._session = session
         self.manifest_urls = [normalize_manifest_url(url) for url in manifest_urls]
         self._addons: list[Addon] | None = None
+        self._catalog_cache: dict[tuple[str, str, str, str | None], tuple[float, list[dict[str, Any]]]] = {}
+        self._catalog_ttl = 60.0
 
     async def _get_json(self, url: str) -> dict[str, Any]:
         try:
@@ -69,15 +73,18 @@ class NuvioApi:
         """Load configured addon manifests."""
         if self._addons is not None and not refresh:
             return self._addons
-        addons: list[Addon] = []
-        errors: list[str] = []
-        for manifest_url in self.manifest_urls:
+        async def load_manifest(manifest_url: str):
             try:
                 manifest = await self._get_json(manifest_url)
+                return Addon(manifest_url, addon_base_url(manifest_url), manifest), None
             except NuvioApiError as err:
-                errors.append(str(err))
-                continue
-            addons.append(Addon(manifest_url, addon_base_url(manifest_url), manifest))
+                return None, str(err)
+
+        loaded = await asyncio.gather(
+            *(load_manifest(manifest_url) for manifest_url in self.manifest_urls)
+        )
+        addons = [addon for addon, _ in loaded if addon is not None]
+        errors = [error for _, error in loaded if error]
         if not addons:
             raise NuvioApiError("; ".join(errors) or "No addon manifests configured")
         self._addons = addons
@@ -92,12 +99,19 @@ class NuvioApi:
         extra: str | None = None,
     ) -> list[dict[str, Any]]:
         """Return catalog metas."""
+        cache_key = (addon.manifest_url, media_type, catalog_id, extra)
+        cached = self._catalog_cache.get(cache_key)
+        now = time.monotonic()
+        if cached is not None and now - cached[0] < self._catalog_ttl:
+            return cached[1]
+
         path = f"catalog/{quote(media_type, safe='')}/{quote(catalog_id, safe='')}"
         if extra:
             path += f"/{extra}"
         data = await self._get_json(f"{addon.base_url}/{path}.json")
-        metas = data.get("metas", [])
-        return [meta for meta in metas if isinstance(meta, dict)]
+        metas = [meta for meta in data.get("metas", []) if isinstance(meta, dict)]
+        self._catalog_cache[cache_key] = (now, metas)
+        return metas
 
     async def async_meta(
         self, addon: Addon, media_type: str, content_id: str
@@ -115,8 +129,7 @@ class NuvioApi:
 
     async def async_search(self, text: str) -> list[tuple[Addon, dict[str, Any]]]:
         """Search all catalogs that advertise the search extra."""
-        results: list[tuple[Addon, dict[str, Any]]] = []
-        seen: set[tuple[str, str]] = set()
+        tasks: list[tuple[Addon, str, str]] = []
         for addon in await self.async_addons():
             for catalog in addon.manifest.get("catalogs", []):
                 if not isinstance(catalog, dict):
@@ -129,21 +142,32 @@ class NuvioApi:
                     continue
                 media_type = str(catalog.get("type", ""))
                 catalog_id = str(catalog.get("id", ""))
-                if not media_type or not catalog_id:
+                if media_type and catalog_id:
+                    tasks.append((addon, media_type, catalog_id))
+
+        async def run_search(addon: Addon, media_type: str, catalog_id: str):
+            try:
+                metas = await self.async_catalog(
+                    addon,
+                    media_type,
+                    catalog_id,
+                    extra=f"search={quote(text, safe='')}",
+                )
+                return addon, media_type, metas
+            except NuvioApiError:
+                return addon, media_type, []
+
+        batches = await asyncio.gather(
+            *(run_search(addon, media_type, catalog_id) for addon, media_type, catalog_id in tasks)
+        )
+
+        results: list[tuple[Addon, dict[str, Any]]] = []
+        seen: set[tuple[str, str]] = set()
+        for addon, media_type, metas in batches:
+            for meta in metas:
+                key = (str(meta.get("type", media_type)), str(meta.get("id", "")))
+                if not key[1] or key in seen:
                     continue
-                try:
-                    metas = await self.async_catalog(
-                        addon,
-                        media_type,
-                        catalog_id,
-                        extra=f"search={quote(text, safe='')}",
-                    )
-                except NuvioApiError:
-                    continue
-                for meta in metas:
-                    key = (str(meta.get("type", media_type)), str(meta.get("id", "")))
-                    if not key[1] or key in seen:
-                        continue
-                    seen.add(key)
-                    results.append((addon, meta))
+                seen.add(key)
+                results.append((addon, meta))
         return results
