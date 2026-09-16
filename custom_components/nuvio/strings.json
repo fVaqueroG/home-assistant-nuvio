@@ -31,7 +31,11 @@
       },
       "device": {
         "title": "Authorize Nuvio",
-        "description": "1. Open [Nuvio authorization]({url}).\n2. Enter code **{code}** and approve access.\n3. Return here and select **Continue**."
+        "description": "Scan the QR code or open [Nuvio authorization]({url}), approve code **{code}**, then return here and select **Submit**.",
+        "data": {
+          "qr_code": "Scan to authorize",
+          "authorization_code": "Authorization code"
+        }
       }
     },
     "error": {

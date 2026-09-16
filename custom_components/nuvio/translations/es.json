@@ -31,7 +31,11 @@
       },
       "device": {
         "title": "Autorizar Nuvio",
-        "description": "1. Abre la [autorización de Nuvio]({url}).\n2. Ingresa el código **{code}** y aprueba el acceso.\n3. Regresa aquí y selecciona **Continuar**."
+        "description": "Escanea el código QR o abre la [autorización de Nuvio]({url}), aprueba el código **{code}**, regresa aquí y selecciona **Enviar**.",
+        "data": {
+          "qr_code": "Escanear para autorizar",
+          "authorization_code": "Código de autorización"
+        }
       }
     },
     "error": {

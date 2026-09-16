@@ -6,6 +6,7 @@ from typing import Any
 
 import probatio
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .account import NuvioAccountApi, NuvioAuthError, NuvioLoginExpired
@@ -185,7 +186,23 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="device",
-            data_schema=probatio.Schema({}),
+            data_schema=probatio.Schema(
+                {
+                    probatio.Optional("qr_code"): selector.QrCodeSelector(
+                        config=selector.QrCodeSelectorConfig(
+                            data=str(self._login["verification_uri_complete"]),
+                            scale=6,
+                            error_correction_level=selector.QrErrorCorrectionLevel.QUARTILE,
+                        )
+                    ),
+                    probatio.Optional("authorization_code"): selector.ConstantSelector(
+                        config=selector.ConstantSelectorConfig(
+                            label="Authorization code",
+                            value=str(self._login["user_code"]),
+                        )
+                    ),
+                }
+            ),
             errors=errors,
             description_placeholders={
                 "url": str(self._login["verification_uri_complete"]),
