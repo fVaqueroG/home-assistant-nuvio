@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
+import time
 from typing import Any
 
 import probatio
@@ -26,6 +28,8 @@ CARD_VERSION = "0.3.4"
 CARD_RESOURCE_URL = f"{CARD_URL}?v={CARD_VERSION}"
 CARD_FILE = Path(__file__).parent / "frontend" / "nuvio-card.js"
 DATA_FRONTEND_REGISTERED = "frontend_registered"
+DATA_HOME_CACHE = "home_cache"
+HOME_CACHE_TTL = 30.0
 
 
 def _entry(hass: HomeAssistant):
@@ -51,7 +55,13 @@ def _item(meta: dict[str, Any], media_type: str, manifest_url: str | None = None
     return result
 
 
-async def _home(hass: HomeAssistant) -> dict[str, Any]:
+async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]:
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    cached = domain_data.get(DATA_HOME_CACHE)
+    now = time.monotonic()
+    if not refresh and cached is not None and now - cached[0] < HOME_CACHE_TTL:
+        return cached[1]
+
     entry = _entry(hass)
     api = entry.runtime_data[DATA_API]
     account = entry.runtime_data.get(DATA_ACCOUNT_API)
@@ -60,8 +70,10 @@ async def _home(hass: HomeAssistant) -> dict[str, Any]:
     if account is not None:
         profile_id = int(entry.data.get(CONF_PROFILE_ID, 1))
         try:
-            library = await account.async_library(profile_id)
-            progress = await account.async_watch_progress(profile_id)
+            library, progress = await asyncio.gather(
+                account.async_library(profile_id),
+                account.async_watch_progress(profile_id),
+            )
             lib_index = {
                 (str(x.get("content_type")), str(x.get("content_id"))): x for x in library
             }
@@ -72,7 +84,7 @@ async def _home(hass: HomeAssistant) -> dict[str, Any]:
             ]
             active.sort(key=lambda x: int(x.get("last_watched") or 0), reverse=True)
             continue_items = []
-            for p in active[:30]:
+            for p in active[:20]:
                 media_type = str(p.get("content_type") or "movie")
                 content_id = str(p.get("content_id") or "")
                 meta = lib_index.get((media_type, content_id), {})
@@ -94,7 +106,7 @@ async def _home(hass: HomeAssistant) -> dict[str, Any]:
                 sections.append({"id": "continue", "name": "Continue Watching", "items": continue_items})
 
             library_items = []
-            for meta in sorted(library, key=lambda x: int(x.get("added_at") or 0), reverse=True)[:40]:
+            for meta in sorted(library, key=lambda x: int(x.get("added_at") or 0), reverse=True)[:30]:
                 media_type = str(meta.get("content_type") or "movie")
                 addon_base = meta.get("addon_base_url")
                 library_items.append(_item(
@@ -107,27 +119,47 @@ async def _home(hass: HomeAssistant) -> dict[str, Any]:
         except NuvioAuthError:
             pass
 
+    catalog_specs: list[tuple[Addon, dict[str, Any], str, str]] = []
     for addon in await api.async_addons():
         for catalog in addon.manifest.get("catalogs", []):
             if not isinstance(catalog, dict):
                 continue
             media_type = str(catalog.get("type") or "")
             catalog_id = str(catalog.get("id") or "")
-            if media_type not in {"movie", "series"} or not catalog_id:
-                continue
-            try:
+            if media_type in {"movie", "series"} and catalog_id:
+                catalog_specs.append((addon, catalog, media_type, catalog_id))
+
+    semaphore = asyncio.Semaphore(8)
+
+    async def load_section(
+        addon: Addon,
+        catalog: dict[str, Any],
+        media_type: str,
+        catalog_id: str,
+    ) -> dict[str, Any] | None:
+        try:
+            async with semaphore:
                 metas = await api.async_catalog(addon, media_type, catalog_id)
-            except NuvioApiError:
-                continue
-            items = [_item(meta, media_type, addon.manifest_url) for meta in metas[:30]]
-            if items:
-                sections.append({
-                    "id": f"{addon.name}:{media_type}:{catalog_id}",
-                    "name": str(catalog.get("name") or catalog_id),
-                    "addon": addon.name,
-                    "media_type": media_type,
-                    "items": items,
-                })
+        except NuvioApiError:
+            return None
+        items = [_item(meta, media_type, addon.manifest_url) for meta in metas[:20]]
+        if not items:
+            return None
+        return {
+            "id": f"{addon.name}:{media_type}:{catalog_id}",
+            "name": str(catalog.get("name") or catalog_id),
+            "addon": addon.name,
+            "media_type": media_type,
+            "items": items,
+        }
+
+    catalog_sections = await asyncio.gather(
+        *(
+            load_section(addon, catalog, media_type, catalog_id)
+            for addon, catalog, media_type, catalog_id in catalog_specs
+        )
+    )
+    sections.extend(section for section in catalog_sections if section is not None)
     registry = async_get_entity_registry(hass)
     players: list[dict[str, Any]] = []
     for entity in registry.entities.values():
@@ -144,14 +176,19 @@ async def _home(hass: HomeAssistant) -> dict[str, Any]:
             }
         )
     players.sort(key=lambda value: value["name"].casefold())
-    return {"sections": sections, "players": players}
+    result = {"sections": sections, "players": players}
+    domain_data[DATA_HOME_CACHE] = (now, result)
+    return result
 
 
-@websocket_api.websocket_command({probatio.Required("type"): "nuvio/home"})
+@websocket_api.websocket_command({
+    probatio.Required("type"): "nuvio/home",
+    probatio.Optional("refresh", default=False): bool,
+})
 @websocket_api.async_response
 async def ws_home(hass, connection, msg) -> None:
     try:
-        connection.send_result(msg["id"], await _home(hass))
+        connection.send_result(msg["id"], await _home(hass, refresh=msg["refresh"]))
     except (NuvioApiError, NuvioAuthError) as err:
         connection.send_error(msg["id"], "nuvio_error", str(err))
 
