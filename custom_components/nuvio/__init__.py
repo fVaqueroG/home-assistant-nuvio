@@ -23,6 +23,7 @@ from .const import (
     ATTR_EPISODE_TITLE,
     ATTR_LOGO,
     ATTR_MIME_TYPE,
+    ATTR_KEY,
     ATTR_MEDIA_TYPE,
     ATTR_POSTER,
     ATTR_SEASON,
@@ -45,6 +46,7 @@ from .const import (
     SERVICE_OPEN,
     SERVICE_PLAY,
     SERVICE_PLAY_SOURCE,
+    SERVICE_REMOTE_KEY,
 )
 from .launcher import deep_link, direct_stream_command, stream_intent_command, webos_launch_payload
 from .frontend import async_register_frontend
@@ -71,6 +73,15 @@ PLAY_SOURCE_SCHEMA = probatio.Schema(
         probatio.Required(ATTR_STREAM_URL): cv.url,
         probatio.Optional(ATTR_STREAM_TITLE): cv.string,
         probatio.Optional(ATTR_MIME_TYPE): cv.string,
+    }
+)
+
+REMOTE_KEY_SCHEMA = probatio.Schema(
+    {
+        probatio.Required(ATTR_ENTITY_ID): cv.entity_ids,
+        probatio.Required(ATTR_KEY): probatio.In(
+            ["up", "down", "left", "right", "ok", "back", "home", "wake"]
+        ),
     }
 )
 
@@ -349,6 +360,109 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
                     blocking=True,
                 )
 
+        async def handle_remote_key(call: ServiceCall) -> None:
+            """Send a navigation key to the selected TV."""
+            entity_ids = call.data[ATTR_ENTITY_ID]
+            key = call.data[ATTR_KEY]
+            registry = async_get_entity_registry(hass)
+
+            adb_keycodes = {
+                "up": "KEYCODE_DPAD_UP",
+                "down": "KEYCODE_DPAD_DOWN",
+                "left": "KEYCODE_DPAD_LEFT",
+                "right": "KEYCODE_DPAD_RIGHT",
+                "ok": "KEYCODE_DPAD_CENTER",
+                "back": "KEYCODE_BACK",
+                "home": "KEYCODE_HOME",
+                "wake": "KEYCODE_WAKEUP",
+            }
+            android_remote_commands = {
+                "up": "DPAD_UP",
+                "down": "DPAD_DOWN",
+                "left": "DPAD_LEFT",
+                "right": "DPAD_RIGHT",
+                "ok": "DPAD_CENTER",
+                "back": "BACK",
+                "home": "HOME",
+                # HOME reliably wakes/dismisses the screensaver without
+                # risking a POWER toggle on an already-on television.
+                "wake": "HOME",
+            }
+            webos_buttons = {
+                "up": "UP",
+                "down": "DOWN",
+                "left": "LEFT",
+                "right": "RIGHT",
+                "ok": "ENTER",
+                "back": "BACK",
+                "home": "HOME",
+                "wake": "HOME",
+            }
+
+            unsupported: list[str] = []
+            for entity_id in entity_ids:
+                registry_entry = registry.async_get(entity_id)
+                if registry_entry is None:
+                    unsupported.append(entity_id)
+                    continue
+
+                if registry_entry.platform == "androidtv":
+                    await hass.services.async_call(
+                        "androidtv",
+                        "adb_command",
+                        {
+                            ATTR_ENTITY_ID: [entity_id],
+                            "command": f"input keyevent {adb_keycodes[key]}",
+                        },
+                        blocking=True,
+                    )
+                    continue
+
+                if registry_entry.platform == "androidtv_remote":
+                    remote_entity_id = next(
+                        (
+                            candidate.entity_id
+                            for candidate in registry.entities.values()
+                            if candidate.entity_id.startswith("remote.")
+                            and candidate.platform == "androidtv_remote"
+                            and candidate.config_entry_id == registry_entry.config_entry_id
+                        ),
+                        None,
+                    )
+                    if remote_entity_id is None:
+                        unsupported.append(entity_id)
+                        continue
+                    await hass.services.async_call(
+                        "remote",
+                        "send_command",
+                        {
+                            ATTR_ENTITY_ID: [remote_entity_id],
+                            "command": [android_remote_commands[key]],
+                        },
+                        blocking=True,
+                    )
+                    continue
+
+                if registry_entry.platform == "webostv":
+                    await hass.services.async_call(
+                        "webostv",
+                        "button",
+                        {
+                            ATTR_ENTITY_ID: [entity_id],
+                            "button": webos_buttons[key],
+                        },
+                        blocking=True,
+                    )
+                    continue
+
+                unsupported.append(entity_id)
+
+            if unsupported:
+                raise HomeAssistantError(
+                    "Nuvio remote control supports Android TV (ADB), Android TV Remote, "
+                    f"and LG webOS media players: {', '.join(unsupported)}"
+                )
+
         hass.services.async_register(
             DOMAIN, SERVICE_OPEN, handle_open, schema=OPEN_SCHEMA
         )
@@ -357,6 +471,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
         )
         hass.services.async_register(
             DOMAIN, SERVICE_PLAY_SOURCE, handle_play_source, schema=PLAY_SOURCE_SCHEMA
+        )
+        hass.services.async_register(
+            DOMAIN, SERVICE_REMOTE_KEY, handle_remote_key, schema=REMOTE_KEY_SCHEMA
         )
 
     return True
@@ -368,4 +485,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> bo
         hass.services.async_remove(DOMAIN, SERVICE_OPEN)
         hass.services.async_remove(DOMAIN, SERVICE_PLAY)
         hass.services.async_remove(DOMAIN, SERVICE_PLAY_SOURCE)
+        hass.services.async_remove(DOMAIN, SERVICE_REMOTE_KEY)
     return True
