@@ -133,6 +133,30 @@ data:
 movie it defaults to `content_id`. For a series episode, provide it whenever the
 addon's ID is not exactly `content_id:season:episode`.
 
+
+## Debrid link resolution
+
+Nuvio does not synchronize TorBox, Premiumize, or Real-Debrid credentials with
+your Nuvio account. To let Home Assistant turn torrent/debrid results into final
+HTTP file URLs, open **Settings → Devices & services → Nuvio → Reconfigure** and
+select a debrid provider, then enter that provider's API key/access token.
+
+Supported resolvers:
+
+- **TorBox**
+- **Premiumize**
+- **Real-Debrid**
+
+The credential is stored locally in the Home Assistant config entry and is never
+sent to the Lovelace card. The card sends only the torrent hash/magnet metadata
+back to the integration for resolution.
+
+On the **Sources** screen, unresolved torrent results get a **Resolve link**
+button. If a provider is configured, **Resolve up to 6 links** resolves a small
+batch without flooding the provider API. Once resolved, the row exposes the
+final HTTP URL with **Play**, **Open link**, and **Copy link** actions. Resolved
+links are cached in memory for 15 minutes.
+
 ## Media browser behavior
 
 Selecting **Play** on a Media browser item resolves to Nuvio's public deep link,
