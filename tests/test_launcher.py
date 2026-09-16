@@ -2,6 +2,7 @@
 
 from custom_components.nuvio.launcher import (
     deep_link,
+    direct_stream_command,
     stream_intent_command,
     webos_launch_payload,
 )
@@ -57,3 +58,13 @@ def test_webos_launch_payload() -> None:
     assert payload["params"]["season"] == 2
     assert payload["params"]["episode"] == 4
     assert payload["params"]["launchMode"] == "stream"
+
+
+def test_direct_stream_command() -> None:
+    command = direct_stream_command(
+        "https://example.com/video/master.m3u8?token=a&b=2",
+        mime_type="application/vnd.apple.mpegurl",
+    )
+    assert "android.intent.action.VIEW" in command
+    assert "https://example.com/video/master.m3u8?token=a&b=2" in command
+    assert "application/vnd.apple.mpegurl" in command
