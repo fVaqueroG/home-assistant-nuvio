@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+import re
 import time
 from typing import Any
 
@@ -210,6 +211,214 @@ async def ws_search(hass, connection, msg) -> None:
         connection.send_error(msg["id"], "nuvio_error", str(err))
 
 
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    return []
+
+
+def _format_bytes(value: Any) -> str | None:
+    try:
+        size = int(value)
+    except (TypeError, ValueError):
+        return None
+    if size <= 0:
+        return None
+    units = ("B", "KB", "MB", "GB", "TB")
+    amount = float(size)
+    unit = units[0]
+    for candidate in units:
+        unit = candidate
+        if amount < 1024 or candidate == units[-1]:
+            break
+        amount /= 1024
+    if unit in {"GB", "TB"}:
+        return f"{amount:.1f} {unit}"
+    if unit == "MB":
+        return f"{amount:.0f} {unit}"
+    return f"{amount:.0f} {unit}"
+
+
+def _stream_presentation(
+    stream: dict[str, Any],
+    behavior: dict[str, Any],
+    client_resolve: dict[str, Any],
+) -> dict[str, Any]:
+    """Normalize useful source metadata into compact Nuvio-like badges."""
+    resolve_stream = _as_dict(client_resolve.get("stream"))
+    raw = _as_dict(resolve_stream.get("raw"))
+    parsed = _as_dict(raw.get("parsed"))
+
+    filename = (
+        behavior.get("filename")
+        or client_resolve.get("filename")
+        or raw.get("filename")
+    )
+    searchable = " ".join(
+        str(value)
+        for value in (
+            stream.get("name"),
+            stream.get("title"),
+            stream.get("description"),
+            filename,
+            parsed.get("raw_title"),
+            parsed.get("rawTitle"),
+            parsed.get("parsed_title"),
+            parsed.get("parsedTitle"),
+            parsed.get("quality"),
+            parsed.get("resolution"),
+            parsed.get("codec"),
+        )
+        if value
+    )
+    lowered = searchable.casefold()
+
+    badges: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    def add_badge(label: Any, kind: str) -> None:
+        text = str(label or "").strip()
+        key = text.casefold()
+        if not text or key in seen:
+            return
+        seen.add(key)
+        badges.append({"label": text, "kind": kind})
+
+    resolution = str(parsed.get("resolution") or "").strip()
+    if not resolution:
+        resolution_match = re.search(
+            r"(?<!\d)(4320p|8k|2160p|4k|1080p|720p|576p|480p)(?!\d)",
+            lowered,
+            re.IGNORECASE,
+        )
+        if resolution_match:
+            resolution = resolution_match.group(1)
+    resolution_map = {
+        "4320p": "8K",
+        "8k": "8K",
+        "2160p": "4K",
+        "4k": "4K",
+        "1080p": "1080p",
+        "720p": "720p",
+        "576p": "576p",
+        "480p": "480p",
+    }
+    if resolution:
+        add_badge(resolution_map.get(resolution.casefold(), resolution), "resolution")
+
+    quality = str(parsed.get("quality") or "").strip()
+    if not quality:
+        quality_patterns = (
+            (r"\b(remux)\b", "REMUX"),
+            (r"\b(uhd[ ._-]?blu[ ._-]?ray|blu[ ._-]?ray|bluray|bdrip|brrip)\b", "BluRay"),
+            (r"\b(web[ ._-]?dl)\b", "WEB-DL"),
+            (r"\b(web[ ._-]?rip)\b", "WEBRip"),
+            (r"\b(hd[ ._-]?rip|hdrip)\b", "HDRip"),
+            (r"\b(dvdrip|dvd)\b", "DVD"),
+            (r"\b(telesync|\bts\b)\b", "TS"),
+            (r"\b(camrip|\bcam\b)\b", "CAM"),
+        )
+        for pattern, label in quality_patterns:
+            if re.search(pattern, lowered, re.IGNORECASE):
+                quality = label
+                break
+    if quality:
+        add_badge(quality, "source")
+
+    hdr_values = _string_list(parsed.get("hdr"))
+    if hdr_values:
+        for hdr in hdr_values[:3]:
+            normalized = {
+                "dolby vision": "DV",
+                "dolbyvision": "DV",
+                "hdr10plus": "HDR10+",
+                "hdr10+": "HDR10+",
+            }.get(hdr.casefold(), hdr)
+            add_badge(normalized, "hdr")
+    else:
+        if re.search(r"\b(dolby[ ._-]?vision|dovi|dv)\b", lowered, re.IGNORECASE):
+            add_badge("DV", "hdr")
+        if re.search(r"\bhdr10\+\b|\bhdr10plus\b", lowered, re.IGNORECASE):
+            add_badge("HDR10+", "hdr")
+        elif re.search(r"\bhdr10\b", lowered, re.IGNORECASE):
+            add_badge("HDR10", "hdr")
+        elif re.search(r"\bhdr\b", lowered, re.IGNORECASE):
+            add_badge("HDR", "hdr")
+
+    bit_depth = parsed.get("bit_depth") or parsed.get("bitDepth")
+    if bit_depth:
+        add_badge(str(bit_depth), "hdr")
+    elif re.search(r"\b10[ ._-]?bit\b", lowered, re.IGNORECASE):
+        add_badge("10-bit", "hdr")
+
+    codec = str(parsed.get("codec") or "").strip()
+    if not codec:
+        codec_patterns = (
+            (r"\b(av1)\b", "AV1"),
+            (r"\b(hevc|h[ ._-]?265|x265)\b", "HEVC"),
+            (r"\b(avc|h[ ._-]?264|x264)\b", "AVC"),
+            (r"\b(vp9)\b", "VP9"),
+        )
+        for pattern, label in codec_patterns:
+            if re.search(pattern, lowered, re.IGNORECASE):
+                codec = label
+                break
+    if codec:
+        add_badge(codec.upper() if codec.casefold() in {"av1", "vp9"} else codec, "codec")
+
+    audio_values = _string_list(parsed.get("audio"))
+    if audio_values:
+        for audio in audio_values[:2]:
+            add_badge(audio, "audio")
+    else:
+        audio_patterns = (
+            (r"\batmos\b", "Atmos"),
+            (r"\btruehd\b", "TrueHD"),
+            (r"\bdts[ ._-]?(?:hd|x|ma)\b", "DTS-HD"),
+            (r"\bdts\b", "DTS"),
+            (r"\b(eac3|e-ac-3|ddp|dd\+)\b", "DD+"),
+            (r"\b(ac3|ac-3)\b", "AC3"),
+            (r"\bflac\b", "FLAC"),
+            (r"\baac\b", "AAC"),
+        )
+        for pattern, label in audio_patterns:
+            if re.search(pattern, lowered, re.IGNORECASE):
+                add_badge(label, "audio")
+
+    for channel in _string_list(parsed.get("channels"))[:1]:
+        add_badge(channel, "audio")
+
+    for language in _string_list(parsed.get("languages"))[:3]:
+        add_badge(language.upper() if len(language) <= 3 else language, "language")
+
+    size_bytes = (
+        behavior.get("videoSize")
+        or behavior.get("video_size")
+        or raw.get("size")
+        or raw.get("folderSize")
+        or raw.get("folder_size")
+    )
+    size_label = _format_bytes(size_bytes)
+    if size_label:
+        add_badge(size_label, "size")
+
+    return {
+        "badges": badges[:12],
+        "size_bytes": size_bytes,
+        "size_label": size_label,
+        "quality": quality or None,
+        "resolution": resolution_map.get(resolution.casefold(), resolution) if resolution else None,
+        "filename": filename,
+    }
+
+
 @websocket_api.websocket_command({
     probatio.Required("type"): "nuvio/streams",
     probatio.Required("media_type"): probatio.In(["movie", "series"]),
@@ -247,6 +456,7 @@ async def ws_streams(hass, connection, msg) -> None:
             if not isinstance(request_headers, dict):
                 request_headers = {}
 
+            presentation = _stream_presentation(stream, behavior, client_resolve)
             rows.append(
                 {
                     "addon": addon.name,
@@ -260,9 +470,13 @@ async def ws_streams(hass, connection, msg) -> None:
                     "file_idx": stream.get("fileIdx")
                     if stream.get("fileIdx") is not None
                     else client_resolve.get("fileIdx"),
-                    "filename": behavior.get("filename")
-                    or client_resolve.get("filename"),
+                    "filename": presentation["filename"],
                     "binge_group": behavior.get("bingeGroup"),
+                    "badges": presentation["badges"],
+                    "size_bytes": presentation["size_bytes"],
+                    "size_label": presentation["size_label"],
+                    "quality": presentation["quality"],
+                    "resolution": presentation["resolution"],
                     "requires_headers": bool(request_headers),
                     "direct": bool(direct_url) and not request_headers,
                 }
