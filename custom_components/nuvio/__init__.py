@@ -13,6 +13,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
 
+from .account import NuvioAccountApi, NuvioAuthError
 from .api import NuvioApi
 from .const import (
     ATTR_BACKDROP,
@@ -25,8 +26,12 @@ from .const import (
     ATTR_SEASON,
     ATTR_TITLE,
     ATTR_VIDEO_ID,
+    CONF_ACCESS_TOKEN,
     CONF_MANIFEST_URLS,
     CONF_PACKAGE_NAME,
+    CONF_PROFILE_ID,
+    CONF_REFRESH_TOKEN,
+    DATA_ACCOUNT_API,
     DATA_API,
     DEFAULT_PACKAGE_NAME,
     DOMAIN,
@@ -61,10 +66,40 @@ PLAY_SCHEMA = probatio.Schema(
 
 async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> bool:
     """Set up Nuvio from a config entry."""
-    entry.runtime_data = {
-        DATA_API: NuvioApi(
-            async_get_clientsession(hass), list(entry.data[CONF_MANIFEST_URLS])
+    session = async_get_clientsession(hass)
+    manifest_urls = list(entry.data[CONF_MANIFEST_URLS])
+    account_api: NuvioAccountApi | None = None
+
+    async def token_updated(token_data: dict[str, Any]) -> None:
+        """Persist rotated Nuvio tokens."""
+        hass.config_entries.async_update_entry(
+            entry,
+            data={
+                **entry.data,
+                CONF_ACCESS_TOKEN: token_data[CONF_ACCESS_TOKEN],
+                CONF_REFRESH_TOKEN: token_data.get(CONF_REFRESH_TOKEN)
+                or entry.data[CONF_REFRESH_TOKEN],
+            },
         )
+
+    if refresh_token := entry.data.get(CONF_REFRESH_TOKEN):
+        account_api = NuvioAccountApi(
+            session,
+            access_token=entry.data.get(CONF_ACCESS_TOKEN),
+            refresh_token=refresh_token,
+            token_updated=token_updated,
+        )
+        try:
+            account_manifest_urls = await account_api.async_addon_urls(
+                int(entry.data.get(CONF_PROFILE_ID, 1))
+            )
+        except NuvioAuthError:
+            account_manifest_urls = []
+        manifest_urls = list(dict.fromkeys([*account_manifest_urls, *manifest_urls]))
+
+    entry.runtime_data = {
+        DATA_API: NuvioApi(session, manifest_urls),
+        DATA_ACCOUNT_API: account_api,
     }
 
     if not hass.services.has_service(DOMAIN, SERVICE_OPEN):

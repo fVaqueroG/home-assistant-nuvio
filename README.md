@@ -7,6 +7,10 @@ an Android TV / Google TV device.
 ## Features
 
 - Browse every `catalog` declared by one or more addon manifests.
+- Sign in securely through Nuvio's device authorization page—no password is
+  stored in Home Assistant.
+- Browse the selected Nuvio profile's **Continue Watching** and **My Library**.
+- Automatically load enabled addons synchronized with the selected profile.
 - Search addons whose catalogs advertise the `search` extra.
 - Browse a series by season and episode using the addon's `meta` resource.
 - Open a movie, series, or episode with Nuvio's native `nuvio://` deep link.
@@ -22,7 +26,9 @@ an Android TV / Google TV device.
 2. Restart Home Assistant.
 3. Go to **Settings → Devices & services → Add integration → Nuvio**.
 4. Enter one addon manifest URL per line. A Cinemeta URL is supplied by default.
-5. Pick the Nuvio package installed on the TV. Play Store builds normally use
+5. Leave **Connect Nuvio account** enabled, select the profile number, then open
+   the displayed Nuvio authorization URL and enter the code.
+6. Pick the Nuvio package installed on the TV. Play Store builds normally use
    `com.nuvio.app`; GitHub/sideload builds normally use `com.nuvio.tv`.
 
 ### HACS custom repository
@@ -106,7 +112,11 @@ resolves URLs; it cannot attach arbitrary Android intent extras. Use
 
 - This integration reads catalog and metadata only. Stream URLs and debrid
   credentials stay in Nuvio and its configured addons.
+- Account login uses Nuvio's public device authorization flow. Home Assistant
+  stores renewable access/refresh tokens in its config entry, never the account
+  password.
+- Profile `1` is Nuvio's primary profile. Select `2`–`5` during setup when the
+  desired profile uses another index.
 - Addon servers must be reachable from Home Assistant.
 - Only `http` and `https` manifest URLs are accepted.
 - webOS is not included in this first release.
-

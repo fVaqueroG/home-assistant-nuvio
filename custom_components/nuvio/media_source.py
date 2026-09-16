@@ -22,8 +22,9 @@ from homeassistant.components.media_source import (
 )
 from homeassistant.core import HomeAssistant
 
+from .account import NuvioAccountApi, NuvioAuthError
 from .api import Addon, NuvioApi, NuvioApiError
-from .const import DATA_API, DOMAIN
+from .const import CONF_PROFILE_ID, DATA_ACCOUNT_API, DATA_API, DOMAIN
 from .launcher import deep_link
 
 
@@ -72,6 +73,20 @@ class NuvioMediaSource(MediaSource):
             raise BrowseError("Nuvio is not configured")
         return entries[0].runtime_data[DATA_API]
 
+    @property
+    def account_api(self) -> NuvioAccountApi | None:
+        """Return the optional authenticated account client."""
+        entries = self.hass.config_entries.async_loaded_entries(DOMAIN)
+        if not entries:
+            return None
+        return entries[0].runtime_data.get(DATA_ACCOUNT_API)
+
+    @property
+    def profile_id(self) -> int:
+        """Return the selected Nuvio profile index."""
+        entries = self.hass.config_entries.async_loaded_entries(DOMAIN)
+        return int(entries[0].data.get(CONF_PROFILE_ID, 1)) if entries else 1
+
     async def _addon(self, manifest_url: str) -> Addon:
         for addon in await self.api.async_addons():
             if addon.manifest_url == manifest_url:
@@ -88,16 +103,45 @@ class NuvioMediaSource(MediaSource):
             kind = payload.get("k")
             if kind == "catalog":
                 return await self._catalog(payload)
-            if kind == "title" and payload.get("t") == "series":
+            if kind == "library":
+                return await self._library(payload)
+            if kind == "continue":
+                return await self._continue_watching(payload)
+            if kind in {"title", "account_title"} and payload.get("t") == "series":
                 return await self._series(payload)
             if kind == "season":
                 return await self._season(payload)
             raise BrowseError("This Nuvio item cannot be expanded")
-        except NuvioApiError as err:
+        except (NuvioApiError, NuvioAuthError) as err:
             raise BrowseError(str(err)) from err
 
     async def _root(self) -> BrowseMediaSource:
         children: list[BrowseMediaSource] = []
+        if self.account_api is not None:
+            children.extend(
+                [
+                    BrowseMediaSource(
+                        domain=DOMAIN,
+                        identifier=_encode({"k": "continue"}),
+                        media_class=MediaClass.DIRECTORY,
+                        media_content_type=MediaType.VIDEO,
+                        title="Continue Watching",
+                        can_play=False,
+                        can_expand=True,
+                        children_media_class=MediaClass.VIDEO,
+                    ),
+                    BrowseMediaSource(
+                        domain=DOMAIN,
+                        identifier=_encode({"k": "library"}),
+                        media_class=MediaClass.DIRECTORY,
+                        media_content_type=MediaType.VIDEO,
+                        title="My Library",
+                        can_play=False,
+                        can_expand=True,
+                        children_media_class=MediaClass.VIDEO,
+                    ),
+                ]
+            )
         for addon in await self.api.async_addons():
             for catalog in addon.manifest.get("catalogs", []):
                 if not isinstance(catalog, dict):
@@ -137,6 +181,118 @@ class NuvioMediaSource(MediaSource):
             can_search=True,
             search_media_classes=[MediaClass.MOVIE, MediaClass.TV_SHOW],
             children_media_class=MediaClass.DIRECTORY,
+            children=children,
+        )
+
+    async def _library(self, payload: dict[str, Any]) -> BrowseMediaSource:
+        """Build the signed-in profile's Nuvio library."""
+        if self.account_api is None:
+            raise BrowseError("Nuvio account is not connected")
+        items = await self.account_api.async_library(self.profile_id)
+        children: list[BrowseMediaSource] = []
+        for meta in sorted(
+            items, key=lambda value: int(value.get("added_at") or 0), reverse=True
+        ):
+            media_type = str(meta.get("content_type") or "movie")
+            content_id = str(meta.get("content_id") or "")
+            if not content_id:
+                continue
+            title_payload: dict[str, Any] = {
+                "k": "account_title",
+                "t": media_type,
+                "i": content_id,
+            }
+            if addon_base := meta.get("addon_base_url"):
+                title_payload["a"] = f"{str(addon_base).rstrip('/')}/manifest.json"
+            children.append(
+                BrowseMediaSource(
+                    domain=DOMAIN,
+                    identifier=_encode(title_payload),
+                    media_class=_media_class(media_type),
+                    media_content_type=_media_type(media_type),
+                    title=str(meta.get("name") or content_id),
+                    can_play=True,
+                    can_expand=media_type == "series" and "a" in title_payload,
+                    thumbnail=meta.get("poster") or meta.get("background"),
+                )
+            )
+        return BrowseMediaSource(
+            domain=DOMAIN,
+            identifier=_encode(payload),
+            media_class=MediaClass.DIRECTORY,
+            media_content_type=MediaType.VIDEO,
+            title="My Library",
+            can_play=False,
+            can_expand=True,
+            children_media_class=MediaClass.VIDEO,
+            children=children,
+        )
+
+    async def _continue_watching(self, payload: dict[str, Any]) -> BrowseMediaSource:
+        """Build the signed-in profile's active watch-progress list."""
+        if self.account_api is None:
+            raise BrowseError("Nuvio account is not connected")
+        progress = await self.account_api.async_watch_progress(self.profile_id)
+        library = await self.account_api.async_library(self.profile_id)
+        metadata = {
+            (str(item.get("content_type")), str(item.get("content_id"))): item
+            for item in library
+        }
+        active = [
+            item
+            for item in progress
+            if int(item.get("duration") or 0) > 0
+            and int(item.get("position") or 0) < int(item.get("duration") or 0) * 0.95
+        ]
+        active.sort(key=lambda value: int(value.get("last_watched") or 0), reverse=True)
+        children: list[BrowseMediaSource] = []
+        for item in active:
+            media_type = str(item.get("content_type") or "movie")
+            content_id = str(item.get("content_id") or "")
+            meta = metadata.get((media_type, content_id), {})
+            season = item.get("season")
+            episode = item.get("episode")
+            episode_suffix = (
+                f" · S{season} E{episode}"
+                if season is not None and episode is not None
+                else ""
+            )
+            children.append(
+                BrowseMediaSource(
+                    domain=DOMAIN,
+                    identifier=_encode(
+                        {
+                            "k": "episode"
+                            if media_type == "series"
+                            else "account_title",
+                            "t": media_type,
+                            "i": content_id,
+                            "v": item.get("video_id") or content_id,
+                            "s": season,
+                            "e": episode,
+                        }
+                    ),
+                    media_class=_media_class(
+                        media_type, episode=media_type == "series"
+                    ),
+                    media_content_type=_media_type(
+                        media_type, episode=media_type == "series"
+                    ),
+                    title=f"{meta.get('name') or content_id}{episode_suffix}",
+                    can_play=True,
+                    can_expand=False,
+                    thumbnail=meta.get("poster") or meta.get("background"),
+                )
+            )
+        return BrowseMediaSource(
+            domain=DOMAIN,
+            identifier=_encode(payload),
+            media_class=MediaClass.DIRECTORY,
+            media_content_type=MediaType.VIDEO,
+            title="Continue Watching",
+            can_play=False,
+            can_expand=True,
+            children_media_class=MediaClass.VIDEO,
             children=children,
         )
 

@@ -7,19 +7,40 @@
         "description": "Enter one Stremio-compatible addon manifest URL per line.",
         "data": {
           "manifest_urls": "Addon manifest URLs",
-          "package_name": "Nuvio Android package"
+          "package_name": "Nuvio Android package",
+          "profile_id": "Nuvio profile number",
+          "connect_account": "Connect Nuvio account"
         },
         "data_description": {
-          "package_name": "Use com.nuvio.app for Play Store builds or com.nuvio.tv for most GitHub/sideload builds."
+          "package_name": "Use com.nuvio.app for Play Store builds or com.nuvio.tv for most GitHub/sideload builds.",
+          "profile_id": "Profile 1 is the primary profile. Use 2–5 for another profile.",
+          "connect_account": "Adds Continue Watching, My Library, profiles, and synchronized addons."
+        }
+      },
+      "reconfigure": {
+        "title": "Nuvio account",
+        "description": "Connect, reconnect, or disconnect your Nuvio account and select the profile used by Home Assistant.",
+        "data": {
+          "profile_id": "Nuvio profile number",
+          "connect_account": "Connect Nuvio account"
+        },
+        "data_description": {
+          "profile_id": "Profile 1 is the primary profile. Use 2–5 for another profile.",
+          "connect_account": "Turn this off to disconnect the currently linked Nuvio account."
         }
       }
     },
     "error": {
       "cannot_connect": "Could not load any addon manifest",
-      "invalid_url": "Enter at least one valid http or https manifest URL"
+      "invalid_url": "Enter at least one valid http or https manifest URL",
+      "login_start_failed": "Could not start Nuvio account authorization"
     },
     "abort": {
-      "single_instance_allowed": "Nuvio is already configured"
+      "single_instance_allowed": "Nuvio is already configured",
+      "login_failed": "Nuvio authorization failed or expired; start setup again"
+    },
+    "progress": {
+      "wait_for_device": "Open [Nuvio authorization]({url}) and enter code **{code}**. Keep this window open while Home Assistant waits for approval."
     }
   }
 }
