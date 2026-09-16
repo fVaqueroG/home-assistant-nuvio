@@ -1,6 +1,10 @@
 """Tests for Nuvio launch contracts."""
 
-from custom_components.nuvio.launcher import deep_link, stream_intent_command
+from custom_components.nuvio.launcher import (
+    deep_link,
+    stream_intent_command,
+    webos_launch_payload,
+)
 
 
 def test_deep_link() -> None:
@@ -34,3 +38,22 @@ def test_episode_stream_intent_and_quoting() -> None:
     assert "'Bob'\"'\"'s Show'" in command
     assert "--ei season 2" in command
     assert "--ei episode 4" in command
+
+
+def test_webos_launch_payload() -> None:
+    payload = webos_launch_payload(
+        media_type="series",
+        content_id="tt456",
+        title="A Show",
+        season=2,
+        episode=4,
+        launch_mode="stream",
+    )
+    assert payload["id"] == "space.nuvio.webos"
+    assert payload["params"]["target"] == "nuvio://series/tt456"
+    assert payload["params"]["contentId"] == "tt456"
+    assert payload["params"]["contentType"] == "series"
+    assert payload["params"]["videoId"] == "tt456:2:4"
+    assert payload["params"]["season"] == 2
+    assert payload["params"]["episode"] == 4
+    assert payload["params"]["launchMode"] == "stream"
