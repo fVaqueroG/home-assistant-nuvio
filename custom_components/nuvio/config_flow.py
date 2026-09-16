@@ -242,6 +242,14 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                 return self.async_update_reload_and_abort(
                     entry, data=self._pending_data, title="Nuvio"
                 )
+
+            if entry.data.get(CONF_REFRESH_TOKEN):
+                return self.async_update_reload_and_abort(
+                    entry,
+                    data=self._pending_data,
+                    title=entry.title,
+                )
+
             try:
                 return await self._async_start_account_login()
             except NuvioAuthError:
