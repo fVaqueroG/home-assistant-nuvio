@@ -153,6 +153,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
             entity_ids = call.data[ATTR_ENTITY_ID]
             registry = async_get_entity_registry(hass)
             android_ids: list[str] = []
+            android_remote_ids: list[str] = []
             webos_ids: list[str] = []
             invalid: list[str] = []
 
@@ -162,6 +163,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
                     invalid.append(entity_id)
                 elif registry_entry.platform == "androidtv":
                     android_ids.append(entity_id)
+                elif registry_entry.platform == "androidtv_remote":
+                    android_remote_ids.append(entity_id)
                 elif registry_entry.platform == "webostv":
                     webos_ids.append(entity_id)
                 else:
@@ -169,7 +172,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
 
             if invalid:
                 raise HomeAssistantError(
-                    "Nuvio playback supports ADB-based Android TV and LG webOS "
+                    "Nuvio playback supports ADB-based Android TV, Android TV Remote, and LG webOS "
                     f"media_player entities: {', '.join(invalid)}"
                 )
 
@@ -194,6 +197,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
                     "androidtv",
                     "adb_command",
                     {ATTR_ENTITY_ID: android_ids, "command": command},
+                    blocking=True,
+                )
+
+            if android_remote_ids:
+                # Android TV Remote can launch app/deep links, but it cannot send
+                # the arbitrary Android intent extras used by Nuvio's direct
+                # stream contract. Fall back to opening the selected title.
+                uri = deep_link(call.data[ATTR_MEDIA_TYPE], call.data[ATTR_CONTENT_ID])
+                await hass.services.async_call(
+                    "media_player",
+                    "play_media",
+                    {
+                        ATTR_ENTITY_ID: android_remote_ids,
+                        "media_content_id": uri,
+                        "media_content_type": "url",
+                    },
                     blocking=True,
                 )
 
