@@ -493,13 +493,22 @@ async def ws_streams(hass, connection, msg) -> None:
             )
 
         resolver = _entry(hass).runtime_data.get(DATA_DEBRID_RESOLVER)
+        if resolver is not None:
+            for row in rows:
+                row["resolvable"] = resolver.can_resolve(row)
+
         connection.send_result(
             msg["id"],
             {
                 "streams": rows,
                 "debrid": {
                     "configured": bool(resolver and resolver.configured),
-                    "provider": resolver.provider if resolver else "",
+                    "providers": resolver.providers if resolver else [],
+                    "provider": (
+                        resolver.providers[0]
+                        if resolver and resolver.providers
+                        else ""
+                    ),
                 },
             },
         )
@@ -528,7 +537,7 @@ async def ws_resolve_stream(hass, connection, msg) -> None:
         resolver = entry.runtime_data.get(DATA_DEBRID_RESOLVER)
         if resolver is None:
             raise DebridNotConfigured(
-                "Configure a debrid provider in the Nuvio integration."
+                "No debrid credential is available from the Nuvio account or local integration settings."
             )
         source = {
             key: msg.get(key)
