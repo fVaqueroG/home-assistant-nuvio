@@ -75,7 +75,7 @@ play:
 
 play_source:
   name: Play exact source
-  description: Play one exact HTTP/HLS source returned by a Nuvio addon on Android TV, Android TV Remote, or LG webOS.
+  description: Play one exact HTTP/HLS source directly on the TV or, with a compatible modified Nuvio build, inside Nuvio's internal player.
   target:
     entity:
       domain: media_player
@@ -89,6 +89,80 @@ play_source:
       selector:
         text:
     mime_type:
+      selector:
+        text:
+    in_nuvio:
+      selector:
+        boolean:
+    media_type:
+      selector:
+        select:
+          options:
+            - movie
+            - series
+    content_id:
+      selector:
+        text:
+    video_id:
+      selector:
+        text:
+    title:
+      selector:
+        text:
+    poster:
+      selector:
+        text:
+          type: url
+    backdrop:
+      selector:
+        text:
+          type: url
+    logo:
+      selector:
+        text:
+          type: url
+    season:
+      selector:
+        number:
+          min: 0
+          max: 999
+          mode: box
+    episode:
+      selector:
+        number:
+          min: 0
+          max: 9999
+          mode: box
+    episode_title:
+      selector:
+        text:
+    filename:
+      selector:
+        text:
+    video_size:
+      selector:
+        number:
+          min: 0
+          mode: box
+    addon_name:
+      selector:
+        text:
+    addon_logo:
+      selector:
+        text:
+          type: url
+    stream_description:
+      selector:
+        text:
+    info_hash:
+      selector:
+        text:
+    file_idx:
+      selector:
+        number:
+          min: 0
+          mode: box
+    content_language:
       selector:
         text:
 
