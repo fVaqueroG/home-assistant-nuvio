@@ -9,12 +9,16 @@
           "manifest_urls": "URLs de manifiestos de addons",
           "package_name": "Paquete Android de Nuvio",
           "profile_id": "Número de perfil de Nuvio",
-          "connect_account": "Conectar cuenta de Nuvio"
+          "connect_account": "Conectar cuenta de Nuvio",
+          "debrid_provider": "Proveedor de debrid",
+          "debrid_api_key": "Clave API / token de debrid"
         },
         "data_description": {
           "package_name": "Usa com.nuvio.app para la versión de Play Store o com.nuvio.tv para la mayoría de versiones de GitHub/sideload.",
           "profile_id": "El perfil 1 es el perfil principal. Usa 2–5 para otro perfil.",
-          "connect_account": "Agrega Continuar viendo, Mi biblioteca, perfiles y addons sincronizados."
+          "connect_account": "Agrega Continuar viendo, Mi biblioteca, perfiles y addons sincronizados.",
+          "debrid_provider": "Se usa para convertir resultados torrent/debrid en enlaces HTTP reproducibles.",
+          "debrid_api_key": "Se guarda en la configuración local de Home Assistant. Nuvio no sincroniza credenciales de debrid con su cuenta."
         }
       },
       "reconfigure": {
@@ -22,11 +26,15 @@
         "description": "Conecta, vuelve a conectar o desconecta tu cuenta de Nuvio y selecciona el perfil que usará Home Assistant.",
         "data": {
           "profile_id": "Número de perfil de Nuvio",
-          "connect_account": "Conectar cuenta de Nuvio"
+          "connect_account": "Conectar cuenta de Nuvio",
+          "debrid_provider": "Proveedor de debrid",
+          "debrid_api_key": "Clave API / token de debrid"
         },
         "data_description": {
           "profile_id": "El perfil 1 es el perfil principal. Usa 2–5 para otro perfil.",
-          "connect_account": "Desactiva esta opción para desconectar la cuenta de Nuvio vinculada."
+          "connect_account": "Desactiva esta opción para desconectar la cuenta de Nuvio vinculada.",
+          "debrid_provider": "Selecciona el proveedor que Home Assistant usará para resolver enlaces.",
+          "debrid_api_key": "Déjalo vacío para conservar la clave actual cuando el proveedor no cambie. Nuvio no sincroniza estas credenciales."
         }
       },
       "device": {
@@ -43,7 +51,8 @@
       "invalid_url": "Ingresa al menos una URL http o https válida",
       "login_start_failed": "No se pudo iniciar la autorización de la cuenta de Nuvio",
       "login_pending": "Nuvio aún no ha aprobado este código. Autorízalo e intenta Continuar nuevamente.",
-      "login_connection_failed": "No se pudo comprobar la autorización de Nuvio. Revisa la conexión e inténtalo nuevamente."
+      "login_connection_failed": "No se pudo comprobar la autorización de Nuvio. Revisa la conexión e inténtalo nuevamente.",
+      "debrid_key_required": "Ingresa una clave API/token para el proveedor de debrid seleccionado."
     },
     "abort": {
       "single_instance_allowed": "Nuvio ya está configurado",
