@@ -5,11 +5,12 @@
   "config_flow": true,
   "dependencies": [
     "media_source",
-    "frontend"
+    "frontend",
+    "lovelace"
   ],
   "documentation": "https://github.com/fVaqueroG/home-assistant-nuvio",
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "requirements": [],
-  "version": "0.3.1"
+  "version": "0.3.2"
 }
