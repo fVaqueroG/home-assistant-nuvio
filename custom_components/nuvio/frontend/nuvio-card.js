@@ -13,9 +13,9 @@ class NuvioCard extends HTMLElement {
   players(){ return this._playersMeta.length?this._playersMeta.map(x=>x.entity_id):(this._hass?Object.keys(this._hass.states).filter(x=>x.startsWith("media_player.")).sort():[]); }
   platform(id){ var p=this._playersMeta.find(x=>x.entity_id===id); return p?p.platform:""; }
   player(){ var s=this.shadowRoot&&this.shadowRoot.querySelector("#player"); return this._playerId||(s&&s.value)||this._config.default_player||this._config.entity||this.players()[0]||""; }
-  async loadHome(){
+  async loadHome(refresh=false){
     if(!this._hass)return; this._loading=true; this._error=""; this.render();
-    try{ var r=await this.ws({type:"nuvio/home"}); this._sections=r.sections||[]; this._playersMeta=r.players||[]; if(!this._playerId)this._playerId=this._config.default_player||this._config.entity||this.players()[0]||""; this._loaded=true; }
+    try{ var r=await this.ws({type:"nuvio/home",refresh:refresh}); this._sections=r.sections||[]; this._playersMeta=r.players||[]; if(!this._playerId)this._playerId=this._config.default_player||this._config.entity||this.players()[0]||""; this._loaded=true; }
     catch(e){ this._error=e.message||"Could not load Nuvio."; }
     this._loading=false; this.render();
   }
@@ -97,7 +97,7 @@ class NuvioCard extends HTMLElement {
   wire(){
     var r=this.shadowRoot,q=r.querySelector("#search");
     if(q){q.addEventListener("input",e=>this._query=e.target.value);q.addEventListener("keydown",e=>{if(e.key==="Enter")this.search();});}
-    r.querySelector("#refresh")?.addEventListener("click",()=>{this._loaded=false;this.loadHome();});
+    r.querySelector("#refresh")?.addEventListener("click",()=>{this._loaded=false;this.loadHome(true);});
     r.querySelector("#back")?.addEventListener("click",()=>{this._view="home";this._error="";this.render();});
     r.querySelector("#open")?.addEventListener("click",()=>this.play(true,null));
     r.querySelector("#play")?.addEventListener("click",()=>this.play(false,null));
@@ -114,4 +114,4 @@ class NuvioCard extends HTMLElement {
 if(!customElements.get("nuvio-card"))customElements.define("nuvio-card",NuvioCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==="nuvio-card"))window.customCards.push({type:"nuvio-card",name:"Nuvio",description:"Browse, search and play your Nuvio catalog.",preview:true});
-console.info("NUVIO-CARD v0.3.4");
+console.info("NUVIO-CARD v0.3.5");
