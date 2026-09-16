@@ -20,7 +20,7 @@ open:
 
 play:
   name: Play title
-  description: Start Nuvio on ADB-based Android TV or LG webOS. Android supports direct stream launch; webOS receives launch metadata for compatible Nuvio TV builds.
+  description: Start Nuvio on ADB-based Android TV, Android TV Remote, or LG webOS. ADB Android TV supports direct stream launch; Android TV Remote falls back to opening the selected title; webOS receives launch metadata for compatible Nuvio TV builds.
   target:
     entity:
       domain: media_player
