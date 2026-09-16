@@ -22,7 +22,8 @@ from homeassistant.helpers.entity_registry import async_get as async_get_entity_
 
 from .account import NuvioAuthError
 from .api import Addon, NuvioApiError
-from .const import CONF_PROFILE_ID, DATA_ACCOUNT_API, DATA_API, DOMAIN
+from .debrid import DebridNotCached, DebridNotConfigured, DebridResolveError
+from .const import CONF_PROFILE_ID, DATA_ACCOUNT_API, DATA_API, DATA_DEBRID_RESOLVER, DOMAIN
 
 CARD_URL = "/nuvio/nuvio-card.js"
 CARD_VERSION = "0.3.9"
@@ -468,6 +469,11 @@ async def ws_streams(hass, connection, msg) -> None:
                     "info_hash": stream.get("infoHash")
                     or client_resolve.get("infoHash"),
                     "magnet_uri": client_resolve.get("magnetUri"),
+                    "resolver_service": client_resolve.get("service"),
+                    "torrent_name": client_resolve.get("torrentName"),
+                    "resolve_filename": client_resolve.get("filename"),
+                    "resolve_season": client_resolve.get("season"),
+                    "resolve_episode": client_resolve.get("episode"),
                     "torrent_sources": client_resolve.get("sources")
                     or stream.get("sources")
                     or [],
@@ -486,9 +492,77 @@ async def ws_streams(hass, connection, msg) -> None:
                 }
             )
 
-        connection.send_result(msg["id"], {"streams": rows})
+        resolver = _entry(hass).runtime_data.get(DATA_DEBRID_RESOLVER)
+        connection.send_result(
+            msg["id"],
+            {
+                "streams": rows,
+                "debrid": {
+                    "configured": bool(resolver and resolver.configured),
+                    "provider": resolver.provider if resolver else "",
+                },
+            },
+        )
     except (NuvioApiError, NuvioAuthError) as err:
         connection.send_error(msg["id"], "nuvio_error", str(err))
+
+
+@websocket_api.websocket_command({
+    probatio.Required("type"): "nuvio/resolve_stream",
+    probatio.Optional("info_hash"): str,
+    probatio.Optional("magnet_uri"): str,
+    probatio.Optional("torrent_sources", default=[]): [str],
+    probatio.Optional("file_idx"): probatio.Coerce(int),
+    probatio.Optional("filename"): str,
+    probatio.Optional("resolve_filename"): str,
+    probatio.Optional("torrent_name"): str,
+    probatio.Optional("resolver_service"): str,
+    probatio.Optional("season"): probatio.Coerce(int),
+    probatio.Optional("episode"): probatio.Coerce(int),
+})
+@websocket_api.async_response
+async def ws_resolve_stream(hass, connection, msg) -> None:
+    """Resolve a torrent/debrid source into its final HTTP URL."""
+    try:
+        entry = _entry(hass)
+        resolver = entry.runtime_data.get(DATA_DEBRID_RESOLVER)
+        if resolver is None:
+            raise DebridNotConfigured(
+                "Configure a debrid provider in the Nuvio integration."
+            )
+        source = {
+            key: msg.get(key)
+            for key in (
+                "info_hash",
+                "magnet_uri",
+                "torrent_sources",
+                "file_idx",
+                "filename",
+                "resolve_filename",
+                "torrent_name",
+                "resolver_service",
+            )
+        }
+        resolved = await resolver.async_resolve(
+            source,
+            season=msg.get("season"),
+            episode=msg.get("episode"),
+        )
+        connection.send_result(
+            msg["id"],
+            {
+                "url": resolved.url,
+                "filename": resolved.filename,
+                "video_size": resolved.video_size,
+                "provider": resolved.provider,
+            },
+        )
+    except DebridNotConfigured as err:
+        connection.send_error(msg["id"], "debrid_not_configured", str(err))
+    except DebridNotCached as err:
+        connection.send_error(msg["id"], "debrid_not_cached", str(err))
+    except DebridResolveError as err:
+        connection.send_error(msg["id"], "debrid_error", str(err))
 
 
 @websocket_api.websocket_command({
@@ -581,5 +655,6 @@ async def async_register_frontend(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_home)
     websocket_api.async_register_command(hass, ws_search)
     websocket_api.async_register_command(hass, ws_streams)
+    websocket_api.async_register_command(hass, ws_resolve_stream)
     websocket_api.async_register_command(hass, ws_details)
     data[DATA_FRONTEND_REGISTERED] = True
