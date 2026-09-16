@@ -205,8 +205,8 @@ class NuvioCard extends HTMLElement {
       this.render();
     }
   }
-  openSourceLink(stream){
-    if(stream&&stream.url)window.open(stream.url,"_blank","noopener,noreferrer");
+  async openSourceLink(stream){
+    await this.playSource(stream);
   }
   sourcesView(){
     var ep=this._streamContext,d=this._details||this._item,title=d.name||this._item.name||"Nuvio";
@@ -233,9 +233,9 @@ class NuvioCard extends HTMLElement {
         var resolving=this._resolving.has(n);
         var nuvioButton='<button class="action nuvioplay" data-source-index="'+n+'">Open in Nuvio</button>';
         var actionHtml=s.direct
-          ? '<button class="action primary playsource" data-source-index="'+n+'">▶ Play direct</button>'+nuvioButton+'<button class="action copylink" data-source-index="'+n+'">Copy link</button>'
+          ? '<button class="action primary playsource" data-source-index="'+n+'">▶ Play on TV</button>'+nuvioButton+'<button class="action copylink" data-source-index="'+n+'">Copy link</button>'
           : canResolve
-            ? '<button class="action primary playdirect" data-source-index="'+n+'" '+(resolving?"disabled":"")+'>'+(resolving?"Resolving…":"▶ Play direct")+'</button>'+nuvioButton+'<button class="action resolvesource" data-source-index="'+n+'" '+(resolving?"disabled":"")+'">Resolve only</button>'+(torrentLink?'<button class="action copytorrent" data-source-index="'+n+'">Copy magnet</button>':"")
+            ? '<button class="action primary playdirect" data-source-index="'+n+'" '+(resolving?"disabled":"")+'>'+(resolving?"Resolving…":"▶ Play on TV")+'</button>'+nuvioButton+'<button class="action resolvesource" data-source-index="'+n+'" '+(resolving?"disabled":"")+'">Resolve only</button>'+(torrentLink?'<button class="action copytorrent" data-source-index="'+n+'">Copy magnet</button>':"")
             : nuvioButton+'<span class="resolver">'+this.esc(unavailable)+'</span>'+(torrentLink?'<button class="action copytorrent" data-source-index="'+n+'">Copy magnet</button>':"");
         return '<div class="source-row">'+
           '<div class="source-main">'+
@@ -299,4 +299,4 @@ class NuvioCard extends HTMLElement {
 if(!customElements.get("nuvio-card"))customElements.define("nuvio-card",NuvioCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==="nuvio-card"))window.customCards.push({type:"nuvio-card",name:"Nuvio",description:"Browse, search and play your Nuvio catalog.",preview:true});
-console.info("NUVIO-CARD v0.4.2");
+console.info("NUVIO-CARD v0.4.3");
