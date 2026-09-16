@@ -24,7 +24,7 @@ from .api import Addon, NuvioApiError
 from .const import CONF_PROFILE_ID, DATA_ACCOUNT_API, DATA_API, DOMAIN
 
 CARD_URL = "/nuvio/nuvio-card.js"
-CARD_VERSION = "0.3.6"
+CARD_VERSION = "0.3.7"
 CARD_RESOURCE_URL = f"{CARD_URL}?v={CARD_VERSION}"
 CARD_FILE = Path(__file__).parent / "frontend" / "nuvio-card.js"
 DATA_FRONTEND_REGISTERED = "frontend_registered"
@@ -231,13 +231,21 @@ async def ws_streams(hass, connection, msg) -> None:
             if not isinstance(client_resolve, dict):
                 client_resolve = {}
 
-            direct_url = stream.get("url") or stream.get("externalUrl")
-            if isinstance(direct_url, str):
-                stripped = direct_url.lstrip().lower()
-                if stripped.startswith(("magnet:", "torrent:")):
-                    direct_url = None
-            else:
-                direct_url = None
+            direct_url = None
+            for candidate in (stream.get("url"), stream.get("externalUrl")):
+                if not isinstance(candidate, str):
+                    continue
+                stripped = candidate.lstrip().lower()
+                if stripped.startswith(("http://", "https://")):
+                    direct_url = candidate
+                    break
+
+            proxy_headers = behavior.get("proxyHeaders")
+            if not isinstance(proxy_headers, dict):
+                proxy_headers = {}
+            request_headers = proxy_headers.get("request")
+            if not isinstance(request_headers, dict):
+                request_headers = {}
 
             rows.append(
                 {
@@ -255,7 +263,8 @@ async def ws_streams(hass, connection, msg) -> None:
                     "filename": behavior.get("filename")
                     or client_resolve.get("filename"),
                     "binge_group": behavior.get("bingeGroup"),
-                    "direct": bool(direct_url),
+                    "requires_headers": bool(request_headers),
+                    "direct": bool(direct_url) and not request_headers,
                 }
             )
 
