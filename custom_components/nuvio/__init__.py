@@ -108,6 +108,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
             },
         )
 
+    synced_debrid_credentials: dict[str, str] = {}
     if refresh_token := entry.data.get(CONF_REFRESH_TOKEN):
         account_api = NuvioAccountApi(
             session,
@@ -115,12 +116,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
             refresh_token=refresh_token,
             token_updated=token_updated,
         )
+        profile_id = int(entry.data.get(CONF_PROFILE_ID, 1))
         try:
-            account_manifest_urls = await account_api.async_addon_urls(
-                int(entry.data.get(CONF_PROFILE_ID, 1))
-            )
+            account_manifest_urls = await account_api.async_addon_urls(profile_id)
         except NuvioAuthError:
             account_manifest_urls = []
+        try:
+            synced_debrid_credentials = await account_api.async_provider_credentials(
+                profile_id
+            )
+        except NuvioAuthError:
+            synced_debrid_credentials = {}
         manifest_urls = list(dict.fromkeys([*account_manifest_urls, *manifest_urls]))
 
     entry.runtime_data = {
@@ -130,6 +136,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
             session,
             provider=entry.data.get(CONF_DEBRID_PROVIDER),
             api_key=entry.data.get(CONF_DEBRID_API_KEY),
+            credentials=synced_debrid_credentials,
         ),
     }
 
