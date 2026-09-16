@@ -83,11 +83,11 @@ class NuvioCard extends HTMLElement {
     while(n>=1024&&i<units.length-1){n/=1024;i++;}
     return (i>=3?n.toFixed(1):Math.round(n))+ " "+units[i];
   }
-  async resolveSource(index){
-    var s=this._streams[index];if(!s||this._resolving.has(index))return;
+  async resolveSource(index,renderAfter=true){
+    var s=this._streams[index];if(!s||this._resolving.has(index))return null;
     if(!this._debridMeta.configured){
       this._error="Configure your debrid provider and API key in Settings → Devices & services → Nuvio → Reconfigure.";
-      this.render();return;
+      this.render();return null;
     }
     this._resolving.add(index);this._error="";this.render();
     try{
@@ -115,18 +115,20 @@ class NuvioCard extends HTMLElement {
         if(!s.badges.some(b=>b.kind==="size"))s.badges.push({kind:"size",label:s.size_label});
       }
       s.resolved_provider=result.provider||this._debridMeta.provider||"";
+      return s;
     }catch(e){
       this._error=e.message||"Could not resolve this debrid source.";
     }finally{
-      this._resolving.delete(index);this.render();
+      this._resolving.delete(index);if(renderAfter)this.render();
     }
+    return null;
   }
   async resolveVisibleSources(){
     if(!this._debridMeta.configured){
       this._error="Configure your debrid provider and API key in Settings → Devices & services → Nuvio → Reconfigure.";
       this.render();return;
     }
-    var candidates=this._streams.map((s,i)=>({s,i})).filter(x=>!x.s.direct&&!x.s.requires_headers&&(x.s.info_hash||x.s.magnet_uri)).slice(0,6);
+    var candidates=this._streams.map((s,i)=>({s,i})).filter(x=>!x.s.direct&&x.s.resolvable&&!x.s.requires_headers&&(x.s.info_hash||x.s.magnet_uri)).slice(0,6);
     for(var item of candidates)await this.resolveSource(item.i);
   }
   async playSource(stream){
@@ -139,6 +141,19 @@ class NuvioCard extends HTMLElement {
         mime_type:this.inferMime(stream.url)
       },{entity_id:p});
     }catch(e){this._error=e.message||"Direct source playback failed.";this.render();}
+  }
+  async playInNuvio(){
+    await this.play(false,this._streamContext||null);
+  }
+  async playDirectIndex(index){
+    var s=this._streams[index];if(!s)return;
+    if(s.direct&&s.url){await this.playSource(s);return;}
+    if(!s.resolvable){
+      this._error="This source cannot be resolved directly with the debrid providers synced to your Nuvio account.";
+      this.render();return;
+    }
+    var resolved=await this.resolveSource(index,false);
+    if(resolved&&resolved.url)await this.playSource(resolved);
   }
   poster(i){
     var u=i.poster||i.background;
@@ -220,14 +235,14 @@ class NuvioCard extends HTMLElement {
             : s.info_hash
               ? '<div class="source-url-wrap"><span class="source-url torrent-url">infoHash: '+this.esc(s.info_hash)+'</span></div>'
               : "";
-        var canResolve=!s.requires_headers&&(s.info_hash||s.magnet_uri);
+        var canResolve=!!s.resolvable&&!s.requires_headers&&(s.info_hash||s.magnet_uri);
         var resolving=this._resolving.has(n);
+        var nuvioButton='<button class="action nuvioplay" data-source-index="'+n+'">Play in Nuvio</button>';
         var actionHtml=s.direct
-          ? '<button class="action primary playsource" data-source-index="'+n+'">▶ Play</button><button class="action openlink" data-source-index="'+n+'">Open link</button><button class="action copylink" data-source-index="'+n+'">Copy link</button>'
-          : (canResolve
-              ? '<button class="action primary resolvesource" data-source-index="'+n+'" '+(resolving?"disabled":"")+'>'+(resolving?"Resolving…":"Resolve link")+'</button>'
-              : '<span class="resolver">'+this.esc(unavailable)+'</span>')+
-            (torrentLink?'<button class="action copytorrent" data-source-index="'+n+'">Copy magnet</button>':"");
+          ? nuvioButton+'<button class="action primary playsource" data-source-index="'+n+'">▶ Play direct</button><button class="action openlink" data-source-index="'+n+'">Open link</button><button class="action copylink" data-source-index="'+n+'">Copy link</button>'
+          : canResolve
+            ? nuvioButton+'<button class="action primary playdirect" data-source-index="'+n+'" '+(resolving?"disabled":"")+'>'+(resolving?"Resolving…":"▶ Play direct")+'</button><button class="action resolvesource" data-source-index="'+n+'" '+(resolving?"disabled":"")+'">Resolve link</button>'+(torrentLink?'<button class="action copytorrent" data-source-index="'+n+'">Copy magnet</button>':"")
+            : nuvioButton+'<span class="resolver">'+this.esc(unavailable)+'</span>'+(torrentLink?'<button class="action copytorrent" data-source-index="'+n+'">Copy magnet</button>':"");
         return '<div class="source-row">'+
           '<div class="source-main">'+
             '<div class="source-label">'+this.esc(label)+'</div>'+
@@ -247,11 +262,11 @@ class NuvioCard extends HTMLElement {
         rows+
       '</section>';
     }).join("");
-    var unresolved=this._streams.filter(s=>!s.direct&&!s.requires_headers&&(s.info_hash||s.magnet_uri)).length;
+    var unresolved=this._streams.filter(s=>!s.direct&&s.resolvable&&!s.requires_headers&&(s.info_hash||s.magnet_uri)).length;
     var debridControls=unresolved
       ? (this._debridMeta.configured
-          ? '<button class="action resolveall" id="resolveAll">Resolve up to 6 links · '+this.esc(this._debridMeta.provider||"debrid")+'</button>'
-          : '<span class="debrid-note">To turn torrent results into file URLs, configure a debrid provider in the Nuvio integration.</span>')
+          ? '<button class="action resolveall" id="resolveAll">Resolve up to 6 links · '+this.esc((this._debridMeta.providers||[]).join(", ")||this._debridMeta.provider||"Nuvio debrid")+'</button>'
+          : '<span class="debrid-note">Play in Nuvio uses the debrid setup inside Nuvio. Direct playback needs a direct URL or a synced debrid credential available to Home Assistant.</span>')
       : "";
     return '<div class="top source-top"><button class="back" id="backDetails">← '+this.esc(title)+'</button><h3>Sources · '+this.esc(sub)+'</h3><div class="controls">'+this.playerSelect()+debridControls+'</div><div class="source-summary">'+this._streams.length+' source'+(this._streams.length===1?"":"s")+' from '+groups.size+' addon'+(groups.size===1?"":"s")+(unresolved?' · '+unresolved+' resolvable':"")+'</div></div>'+
       (this._streamLoading?'<div class="status">Loading sources…</div>':(groupHtml?'<div class="sources">'+groupHtml+'</div>':'<div class="status">No sources were returned by your configured Nuvio addons.</div>'));
@@ -272,6 +287,8 @@ class NuvioCard extends HTMLElement {
     r.querySelectorAll(".playep").forEach(b=>b.addEventListener("click",()=>{var eps=(this._details.videos||[]).filter(v=>Number(v.season)===Number(this._season)).sort((a,c)=>(Number(a.episode)||0)-(Number(c.episode)||0));this.play(false,eps[Number(b.dataset.ep)]);}));
     r.querySelectorAll(".sourceep").forEach(b=>b.addEventListener("click",()=>{var eps=(this._details.videos||[]).filter(v=>Number(v.season)===Number(this._season)).sort((a,c)=>(Number(a.episode)||0)-(Number(c.episode)||0));this.showSources(eps[Number(b.dataset.ep)]);}));
     r.querySelectorAll(".playsource").forEach(b=>b.addEventListener("click",()=>this.playSource(this._streams[Number(b.dataset.sourceIndex)])));
+    r.querySelectorAll(".nuvioplay").forEach(b=>b.addEventListener("click",()=>this.playInNuvio()));
+    r.querySelectorAll(".playdirect").forEach(b=>b.addEventListener("click",()=>this.playDirectIndex(Number(b.dataset.sourceIndex))));
     r.querySelectorAll(".resolvesource").forEach(b=>b.addEventListener("click",()=>this.resolveSource(Number(b.dataset.sourceIndex))));
     r.querySelector("#resolveAll")?.addEventListener("click",()=>this.resolveVisibleSources());
     r.querySelectorAll("button.openlink").forEach(b=>b.addEventListener("click",()=>this.openSourceLink(this._streams[Number(b.dataset.sourceIndex)])));
@@ -288,4 +305,4 @@ class NuvioCard extends HTMLElement {
 if(!customElements.get("nuvio-card"))customElements.define("nuvio-card",NuvioCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==="nuvio-card"))window.customCards.push({type:"nuvio-card",name:"Nuvio",description:"Browse, search and play your Nuvio catalog.",preview:true});
-console.info("NUVIO-CARD v0.4.0");
+console.info("NUVIO-CARD v0.4.1");
