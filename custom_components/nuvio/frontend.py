@@ -22,7 +22,7 @@ from .api import Addon, NuvioApiError
 from .const import CONF_PROFILE_ID, DATA_ACCOUNT_API, DATA_API, DOMAIN
 
 CARD_URL = "/nuvio/nuvio-card.js"
-CARD_VERSION = "0.3.2"
+CARD_VERSION = "0.3.3"
 CARD_RESOURCE_URL = f"{CARD_URL}?v={CARD_VERSION}"
 CARD_FILE = Path(__file__).parent / "frontend" / "nuvio-card.js"
 DATA_FRONTEND_REGISTERED = "frontend_registered"
@@ -131,7 +131,7 @@ async def _home(hass: HomeAssistant) -> dict[str, Any]:
     registry = async_get_entity_registry(hass)
     players: list[dict[str, Any]] = []
     for entity in registry.entities.values():
-        if entity.domain != "media_player" or entity.platform not in {"androidtv", "webostv"}:
+        if entity.domain != "media_player" or entity.platform not in {"androidtv", "androidtv_remote", "webostv"}:
             continue
         state = hass.states.get(entity.entity_id)
         if state is None:
