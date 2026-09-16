@@ -203,8 +203,8 @@ resolves URLs; it cannot attach arbitrary Android intent extras. Use
 
 ### Side remote
 
-The card includes a compact TV remote for manual profile selection and recovery
-from Nuvio's profile picker. It supports directional navigation, OK, Back, Home,
+The card includes a compact, floating and collapsible TV remote for manual profile selection and recovery
+from Nuvio's profile picker. It overlays the card instead of consuming catalog width. It supports directional navigation, OK, Back, Home,
 and Wake. The Wake button also dismisses Android TV's screensaver when using the
 ADB entity.
 
