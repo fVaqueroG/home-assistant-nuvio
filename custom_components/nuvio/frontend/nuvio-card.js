@@ -139,7 +139,7 @@ class NuvioCard extends HTMLElement {
     data.mime_type=this.inferMime(stream.url);
     data.in_nuvio=!!inNuvio;
     if(stream.filename)data.filename=stream.filename;
-    if(stream.size_bytes)data.video_size=Number(stream.size_bytes);
+    var videoSize=Number(stream.size_bytes);if(Number.isFinite(videoSize)&&videoSize>0)data.video_size=Math.round(videoSize);
     if(stream.addon)data.addon_name=stream.addon;
     if(stream.addon_logo)data.addon_logo=stream.addon_logo;
     if(stream.description)data.stream_description=stream.description;
