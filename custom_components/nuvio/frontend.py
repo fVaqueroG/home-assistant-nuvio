@@ -24,7 +24,7 @@ from .api import Addon, NuvioApiError
 from .const import CONF_PROFILE_ID, DATA_ACCOUNT_API, DATA_API, DOMAIN
 
 CARD_URL = "/nuvio/nuvio-card.js"
-CARD_VERSION = "0.3.4"
+CARD_VERSION = "0.3.5"
 CARD_RESOURCE_URL = f"{CARD_URL}?v={CARD_VERSION}"
 CARD_FILE = Path(__file__).parent / "frontend" / "nuvio-card.js"
 DATA_FRONTEND_REGISTERED = "frontend_registered"
