@@ -4,7 +4,7 @@
   "codeowners": [],
   "config_flow": true,
   "dependencies": ["media_source"],
-  "documentation": "https://github.com/felipevaquero/home-assistant-nuvio",
+  "documentation": "https://github.com/fVaqueroG/home-assistant-nuvio",
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "requirements": [],
