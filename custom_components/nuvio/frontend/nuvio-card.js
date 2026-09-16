@@ -197,87 +197,135 @@ class NuvioCard extends HTMLElement {
     var portal=document.getElementById("nuvio-remote-portal");
     if(portal)portal.remove();
   }
+  updateRemoteButtons(){
+    if(!this.shadowRoot)return;
+    this.shadowRoot.querySelectorAll(".remote-toggle-button").forEach(b=>{
+      b.classList.toggle("remote-active",this._remoteExpanded);
+      b.setAttribute("aria-pressed",this._remoteExpanded?"true":"false");
+    });
+  }
+  toggleRemote(){
+    this._remoteExpanded=!this._remoteExpanded;
+    if(this._remoteExpanded)this.syncRemotePortal();
+    else this.removeRemotePortal();
+    this.updateRemoteButtons();
+  }
   syncRemotePortal(){
-    this.removeRemotePortal();
-    if(this._config.show_remote===false||!this._remoteExpanded)return;
+    if(this._config.show_remote===false||!this._remoteExpanded){
+      this.removeRemotePortal();
+      return;
+    }
+
+    // Keep the existing controller alive across Home Assistant/card re-renders.
+    // This is especially important while the catalog is loading.
+    if(document.getElementById("nuvio-remote-portal"))return;
 
     var side=String(this._config.remote_side||"left").toLowerCase()==="right"?"right":"left";
     var portal=document.createElement("div");
     portal.id="nuvio-remote-portal";
-    portal.style.position="fixed";
-    portal.style.inset="0";
-    portal.style.zIndex="2147483000";
-    portal.style.pointerEvents="none";
+    portal.style.cssText="position:fixed;inset:0;z-index:2147483000;pointer-events:none;";
 
-    var root=portal.attachShadow({mode:"open"});
-    root.innerHTML=`
+    var shellSide=side==="right"?"right:12px;left:auto;":"left:12px;right:auto;";
+    portal.innerHTML=`
       <style>
-        :host{all:initial}
-        .backdrop{position:fixed;inset:0;background:rgba(0,0,0,.16);pointer-events:auto}
-        .remote-shell{
+        #nuvio-remote-portal .nuvio-remote-backdrop{
+          position:fixed;inset:0;background:rgba(0,0,0,.16);pointer-events:auto;
+        }
+        #nuvio-remote-portal .nuvio-remote-shell{
           position:fixed;
           top:max(180px,calc(env(safe-area-inset-top) + 110px));
-          ${side==="right"?"right:12px":"left:12px"};
-          width:176px;
-          box-sizing:border-box;
-          border:1px solid rgba(255,255,255,.14);
-          border-radius:24px;
-          padding:12px;
-          background:rgba(28,28,30,.96);
-          color:#fff;
-          box-shadow:0 18px 50px rgba(0,0,0,.42);
-          backdrop-filter:blur(18px);
-          pointer-events:auto;
-          font-family:var(--paper-font-body1_-_font-family,Roboto,Arial,sans-serif);
+          ${shellSide}
+          width:176px;box-sizing:border-box;border:1px solid rgba(255,255,255,.14);
+          border-radius:24px;padding:12px;background:rgba(28,28,30,.98);color:#fff;
+          box-shadow:0 18px 50px rgba(0,0,0,.42);backdrop-filter:blur(18px);
+          pointer-events:auto;font-family:Roboto,Arial,sans-serif;
         }
-        .remote-head{display:flex;align-items:center;justify-content:space-between;font-size:13px;font-weight:700;color:#d0d0d0;margin-bottom:10px}
-        button{font:inherit}
-        .remote-close{width:30px;height:30px;border:0;border-radius:15px;background:#2f2f31;color:white;display:grid;place-items:center;cursor:pointer;font-size:20px}
-        .wake-btn{width:100%;height:36px;border:0;border-radius:18px;background:#303033;color:white;display:flex;align-items:center;justify-content:center;gap:7px;font-size:12px;cursor:pointer;margin-bottom:12px}
-        .remote-ring{position:relative;width:132px;height:132px;margin:0 auto 12px;border-radius:50%;background:radial-gradient(circle at center,#2c2c2e 0 34%,#35353a 35% 100%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
-        .remote-ring button{position:absolute;border:0;background:transparent;color:white;display:grid;place-items:center;cursor:pointer}
-        .ring-btn{width:44px;height:44px;border-radius:50%}
-        .ring-btn.up{top:2px;left:44px}.ring-btn.down{bottom:2px;left:44px}.ring-btn.left{left:2px;top:44px}.ring-btn.right{right:2px;top:44px}
-        .ring-btn span{font-size:28px;line-height:1}
-        .ring-ok{width:48px;height:48px;left:42px;top:42px;border-radius:50%!important;background:var(--primary-color,#03a9d9)!important;color:white!important;font-size:11px;font-weight:800;box-shadow:0 3px 10px rgba(0,0,0,.25)}
-        .remote-footer{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-        .remote-footer button{height:40px;border:0;border-radius:14px;background:#303033;color:white;display:flex;align-items:center;justify-content:center;gap:6px;font-size:12px;cursor:pointer}
-        .icon{font-size:18px;line-height:1}
-        button:active{transform:scale(.96)}
+        #nuvio-remote-portal .nuvio-remote-head{
+          display:flex;align-items:center;justify-content:space-between;
+          font-size:13px;font-weight:700;color:#d0d0d0;margin-bottom:10px;
+        }
+        #nuvio-remote-portal button{font:inherit;box-sizing:border-box}
+        #nuvio-remote-portal .nuvio-remote-close{
+          width:30px;height:30px;border:0;border-radius:15px;background:#2f2f31;
+          color:white;display:grid;place-items:center;cursor:pointer;font-size:20px;padding:0;
+        }
+        #nuvio-remote-portal .nuvio-wake-btn{
+          width:100%;height:36px;border:0;border-radius:18px;background:#303033;color:white;
+          display:flex;align-items:center;justify-content:center;gap:7px;font-size:12px;
+          cursor:pointer;margin:0 0 12px;padding:0;
+        }
+        #nuvio-remote-portal .nuvio-remote-ring{
+          position:relative;width:132px;height:132px;margin:0 auto 12px;border-radius:50%;
+          background:radial-gradient(circle at center,#2c2c2e 0 34%,#35353a 35% 100%);
+          box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);
+        }
+        #nuvio-remote-portal .nuvio-remote-ring button{
+          position:absolute;border:0;background:transparent;color:white;
+          display:grid;place-items:center;cursor:pointer;padding:0;
+        }
+        #nuvio-remote-portal .nuvio-ring-btn{width:44px;height:44px;border-radius:50%}
+        #nuvio-remote-portal .nuvio-ring-up{top:2px;left:44px}
+        #nuvio-remote-portal .nuvio-ring-down{bottom:2px;left:44px}
+        #nuvio-remote-portal .nuvio-ring-left{left:2px;top:44px}
+        #nuvio-remote-portal .nuvio-ring-right{right:2px;top:44px}
+        #nuvio-remote-portal .nuvio-ring-btn span{font-size:28px;line-height:1}
+        #nuvio-remote-portal .nuvio-ring-ok{
+          width:48px;height:48px;left:42px;top:42px;border-radius:50%;
+          background:#03a9d9;border:0;color:white;font-size:11px;font-weight:800;
+          box-shadow:0 3px 10px rgba(0,0,0,.25);
+        }
+        #nuvio-remote-portal .nuvio-remote-footer{
+          display:grid;grid-template-columns:1fr 1fr;gap:8px;
+        }
+        #nuvio-remote-portal .nuvio-remote-footer button{
+          height:40px;border:0;border-radius:14px;background:#303033;color:white;
+          display:flex;align-items:center;justify-content:center;gap:6px;font-size:12px;
+          cursor:pointer;padding:0;
+        }
+        #nuvio-remote-portal button:active{transform:scale(.96)}
         @media(max-width:700px){
-          .remote-shell{width:166px;padding:11px}
-          .remote-ring{width:122px;height:122px}
-          .ring-btn.up{left:39px}.ring-btn.down{left:39px}.ring-btn.left{top:39px}.ring-btn.right{top:39px}
-          .ring-ok{left:37px;top:37px}
+          #nuvio-remote-portal .nuvio-remote-shell{width:166px;padding:11px}
+          #nuvio-remote-portal .nuvio-remote-ring{width:122px;height:122px}
+          #nuvio-remote-portal .nuvio-ring-up,
+          #nuvio-remote-portal .nuvio-ring-down{left:39px}
+          #nuvio-remote-portal .nuvio-ring-left,
+          #nuvio-remote-portal .nuvio-ring-right{top:39px}
+          #nuvio-remote-portal .nuvio-ring-ok{left:37px;top:37px}
         }
       </style>
-      <div class="backdrop" id="remoteBackdrop"></div>
-      <div class="remote-shell" role="dialog" aria-label="TV Remote">
-        <div class="remote-head"><span>TV Remote</span><button class="remote-close" id="remoteClose" title="Close">×</button></div>
-        <button class="wake-btn" data-remote-key="wake"><span class="icon">▣</span><span>Wake</span></button>
-        <div class="remote-ring">
-          <button class="ring-btn up" data-remote-key="up" title="Up"><span>⌃</span></button>
-          <button class="ring-btn left" data-remote-key="left" title="Left"><span>‹</span></button>
-          <button class="ring-ok" data-remote-key="ok" title="OK">OK</button>
-          <button class="ring-btn right" data-remote-key="right" title="Right"><span>›</span></button>
-          <button class="ring-btn down" data-remote-key="down" title="Down"><span>⌄</span></button>
+      <div class="nuvio-remote-backdrop"></div>
+      <div class="nuvio-remote-shell" role="dialog" aria-label="TV Remote">
+        <div class="nuvio-remote-head">
+          <span>TV Remote</span>
+          <button class="nuvio-remote-close" title="Close" aria-label="Close">×</button>
         </div>
-        <div class="remote-footer">
-          <button data-remote-key="back"><span class="icon">←</span><span>Back</span></button>
-          <button data-remote-key="home"><span class="icon">⌂</span><span>Home</span></button>
+        <button class="nuvio-wake-btn" data-remote-key="wake"><span>▣</span><span>Wake</span></button>
+        <div class="nuvio-remote-ring">
+          <button class="nuvio-ring-btn nuvio-ring-up" data-remote-key="up" title="Up"><span>⌃</span></button>
+          <button class="nuvio-ring-btn nuvio-ring-left" data-remote-key="left" title="Left"><span>‹</span></button>
+          <button class="nuvio-ring-ok" data-remote-key="ok" title="OK">OK</button>
+          <button class="nuvio-ring-btn nuvio-ring-right" data-remote-key="right" title="Right"><span>›</span></button>
+          <button class="nuvio-ring-btn nuvio-ring-down" data-remote-key="down" title="Down"><span>⌄</span></button>
+        </div>
+        <div class="nuvio-remote-footer">
+          <button data-remote-key="back"><span>←</span><span>Back</span></button>
+          <button data-remote-key="home"><span>⌂</span><span>Home</span></button>
         </div>
       </div>
     `;
 
-    root.querySelectorAll("[data-remote-key]").forEach(b=>b.addEventListener("click",()=>this.remoteKey(b.dataset.remoteKey)));
+    portal.querySelectorAll("[data-remote-key]").forEach(
+      b=>b.addEventListener("click",()=>this.remoteKey(b.dataset.remoteKey))
+    );
     var close=()=>{
       this._remoteExpanded=false;
       this.removeRemotePortal();
-      this.render();
+      this.updateRemoteButtons();
     };
-    root.querySelector("#remoteClose")?.addEventListener("click",close);
-    root.querySelector("#remoteBackdrop")?.addEventListener("click",close);
-    document.body.appendChild(portal);
+    portal.querySelector(".nuvio-remote-close")?.addEventListener("click",close);
+    portal.querySelector(".nuvio-remote-backdrop")?.addEventListener("click",close);
+
+    (document.body||document.documentElement).appendChild(portal);
   }
   disconnectedCallback(){
     this.removeRemotePortal();
@@ -375,7 +423,7 @@ class NuvioCard extends HTMLElement {
     if(q){q.addEventListener("input",e=>this._query=e.target.value);q.addEventListener("keydown",e=>{if(e.key==="Enter")this.search();});}
     r.querySelector("#refresh")?.addEventListener("click",()=>{this._loaded=false;this.loadHome(true);});
     r.querySelectorAll("[data-remote-key]").forEach(b=>b.addEventListener("click",()=>this.remoteKey(b.dataset.remoteKey)));
-    r.querySelectorAll(".remote-toggle-button").forEach(b=>b.addEventListener("click",()=>{this._remoteExpanded=!this._remoteExpanded;this.render();}));
+    r.querySelectorAll(".remote-toggle-button").forEach(b=>b.addEventListener("click",()=>this.toggleRemote()));
     r.querySelector("#back")?.addEventListener("click",()=>{this._view="home";this._error="";this.render();});
     r.querySelector("#open")?.addEventListener("click",()=>this.play(true,null));
     r.querySelector("#play")?.addEventListener("click",()=>this.play(false,null));
@@ -402,9 +450,10 @@ class NuvioCard extends HTMLElement {
       : '<div class="nuvio-layout">'+this.remotePanel()+'<main class="nuvio-main">'+body+'</main></div>';
     this.shadowRoot.innerHTML=this.styles()+'<ha-card>'+(this._view==="home"?this.header():"")+(this._error?'<div class="error">'+this.esc(this._error)+'</div>':"")+content+'</ha-card>';this.wire();
     this.syncRemotePortal();
+    this.updateRemoteButtons();
   }
 }
 if(!customElements.get("nuvio-card"))customElements.define("nuvio-card",NuvioCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==="nuvio-card"))window.customCards.push({type:"nuvio-card",name:"Nuvio",description:"Browse, search and play your Nuvio catalog.",preview:true});
-console.info("NUVIO-CARD v0.4.10");
+console.info("NUVIO-CARD v0.4.11");
