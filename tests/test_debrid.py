@@ -4,6 +4,7 @@ from custom_components.nuvio.debrid import (
     PREMIUMIZE,
     REAL_DEBRID,
     TORBOX,
+    DebridResolver,
     _magnet_uri,
     _select_file,
     normalize_provider,
@@ -64,3 +65,28 @@ def test_select_named_file() -> None:
     )
     assert selected is not None
     assert selected["id"] == 2
+
+
+def test_synced_provider_credentials_are_selected_by_source() -> None:
+    resolver = DebridResolver(
+        object(),  # type: ignore[arg-type]
+        provider=None,
+        api_key=None,
+        credentials={"torbox": "tb-token", "premiumize": "pm-token"},
+    )
+    assert resolver.configured
+    assert resolver.providers == ["torbox", "premiumize"]
+    assert resolver.can_resolve({"resolver_service": "torbox"})
+    assert resolver.can_resolve({"resolver_service": "premiumize"})
+    assert not resolver.can_resolve({"resolver_service": "realdebrid"})
+
+
+def test_local_provider_override_is_available() -> None:
+    resolver = DebridResolver(
+        object(),  # type: ignore[arg-type]
+        provider="realdebrid",
+        api_key="rd-token",
+        credentials={"torbox": "tb-token"},
+    )
+    assert resolver.can_resolve({"resolver_service": "realdebrid"})
+    assert resolver.can_resolve({"resolver_service": "torbox"})
