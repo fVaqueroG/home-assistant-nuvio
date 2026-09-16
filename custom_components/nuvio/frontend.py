@@ -8,6 +8,12 @@ from typing import Any
 import probatio
 from homeassistant.components import frontend, websocket_api
 from homeassistant.components.http import StaticPathConfig
+from homeassistant.components.lovelace.const import (
+    CONF_RESOURCE_TYPE_WS,
+    LOVELACE_DATA,
+    MODE_STORAGE,
+)
+from homeassistant.const import CONF_ID, CONF_TYPE, CONF_URL
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
 
@@ -16,6 +22,8 @@ from .api import Addon, NuvioApiError
 from .const import CONF_PROFILE_ID, DATA_ACCOUNT_API, DATA_API, DOMAIN
 
 CARD_URL = "/nuvio/nuvio-card.js"
+CARD_VERSION = "0.3.2"
+CARD_RESOURCE_URL = f"{CARD_URL}?v={CARD_VERSION}"
 CARD_FILE = Path(__file__).parent / "frontend" / "nuvio-card.js"
 DATA_FRONTEND_REGISTERED = "frontend_registered"
 
@@ -201,14 +209,57 @@ async def ws_details(hass, connection, msg) -> None:
         connection.send_error(msg["id"], "nuvio_error", str(err))
 
 
+async def _async_register_lovelace_resource(hass: HomeAssistant) -> None:
+    """Ensure the bundled card is a Lovelace module resource in storage mode."""
+    lovelace = hass.data.get(LOVELACE_DATA)
+    if lovelace is None or lovelace.resource_mode != MODE_STORAGE:
+        return
+
+    resource_collection = lovelace.resources
+    await resource_collection.async_get_info()
+    resources = resource_collection.async_items() or []
+
+    for resource in resources:
+        url = str(resource.get(CONF_URL) or "")
+        if url.split("?", 1)[0] != CARD_URL:
+            continue
+
+        if (
+            url != CARD_RESOURCE_URL
+            or resource.get(CONF_TYPE) != "module"
+        ):
+            await resource_collection.async_update_item(
+                resource[CONF_ID],
+                {
+                    CONF_URL: CARD_RESOURCE_URL,
+                    CONF_RESOURCE_TYPE_WS: "module",
+                },
+            )
+        return
+
+    await resource_collection.async_create_item(
+        {
+            CONF_URL: CARD_RESOURCE_URL,
+            CONF_RESOURCE_TYPE_WS: "module",
+        }
+    )
+
+
 async def async_register_frontend(hass: HomeAssistant) -> None:
+    """Register the Nuvio card, APIs, and Lovelace resource."""
     data = hass.data.setdefault(DOMAIN, {})
     if data.get(DATA_FRONTEND_REGISTERED):
         return
-    await hass.http.async_register_static_paths([
-        StaticPathConfig(CARD_URL, str(CARD_FILE), cache_headers=False)
-    ])
-    frontend.add_extra_js_url(hass, CARD_URL)
+
+    await hass.http.async_register_static_paths(
+        [StaticPathConfig(CARD_URL, str(CARD_FILE), cache_headers=False)]
+    )
+
+    # Extra-module registration makes the card available outside Lovelace too,
+    # while the Lovelace resource below makes dashboard loading deterministic.
+    frontend.add_extra_js_url(hass, CARD_RESOURCE_URL)
+    await _async_register_lovelace_resource(hass)
+
     websocket_api.async_register_command(hass, ws_home)
     websocket_api.async_register_command(hass, ws_search)
     websocket_api.async_register_command(hass, ws_details)
