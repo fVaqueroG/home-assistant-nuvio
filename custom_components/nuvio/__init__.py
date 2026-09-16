@@ -407,12 +407,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
                     continue
 
                 if registry_entry.platform == "androidtv":
+                    command = (
+                        "input keyevent KEYCODE_WAKEUP; input keyevent KEYCODE_HOME"
+                        if key == "wake"
+                        else f"input keyevent {adb_keycodes[key]}"
+                    )
                     await hass.services.async_call(
                         "androidtv",
                         "adb_command",
                         {
                             ATTR_ENTITY_ID: [entity_id],
-                            "command": f"input keyevent {adb_keycodes[key]}",
+                            "command": command,
                         },
                         blocking=True,
                     )
