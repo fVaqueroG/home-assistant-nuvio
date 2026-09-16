@@ -211,6 +211,60 @@ async def ws_search(hass, connection, msg) -> None:
 
 
 @websocket_api.websocket_command({
+    probatio.Required("type"): "nuvio/streams",
+    probatio.Required("media_type"): probatio.In(["movie", "series"]),
+    probatio.Required("video_id"): str,
+})
+@websocket_api.async_response
+async def ws_streams(hass, connection, msg) -> None:
+    """Return selectable streams for one movie or episode."""
+    try:
+        api = _entry(hass).runtime_data[DATA_API]
+        rows = []
+        for addon, stream in await api.async_all_streams(
+            msg["media_type"], msg["video_id"]
+        ):
+            behavior = stream.get("behaviorHints")
+            if not isinstance(behavior, dict):
+                behavior = {}
+            client_resolve = stream.get("clientResolve")
+            if not isinstance(client_resolve, dict):
+                client_resolve = {}
+
+            direct_url = stream.get("url") or stream.get("externalUrl")
+            if isinstance(direct_url, str):
+                stripped = direct_url.lstrip().lower()
+                if stripped.startswith(("magnet:", "torrent:")):
+                    direct_url = None
+            else:
+                direct_url = None
+
+            rows.append(
+                {
+                    "addon": addon.name,
+                    "addon_logo": addon.manifest.get("logo"),
+                    "name": stream.get("name"),
+                    "title": stream.get("title"),
+                    "description": stream.get("description"),
+                    "url": direct_url,
+                    "info_hash": stream.get("infoHash")
+                    or client_resolve.get("infoHash"),
+                    "file_idx": stream.get("fileIdx")
+                    if stream.get("fileIdx") is not None
+                    else client_resolve.get("fileIdx"),
+                    "filename": behavior.get("filename")
+                    or client_resolve.get("filename"),
+                    "binge_group": behavior.get("bingeGroup"),
+                    "direct": bool(direct_url),
+                }
+            )
+
+        connection.send_result(msg["id"], {"streams": rows})
+    except (NuvioApiError, NuvioAuthError) as err:
+        connection.send_error(msg["id"], "nuvio_error", str(err))
+
+
+@websocket_api.websocket_command({
     probatio.Required("type"): "nuvio/details",
     probatio.Required("manifest_url"): str,
     probatio.Required("media_type"): probatio.In(["movie", "series"]),
@@ -299,5 +353,6 @@ async def async_register_frontend(hass: HomeAssistant) -> None:
 
     websocket_api.async_register_command(hass, ws_home)
     websocket_api.async_register_command(hass, ws_search)
+    websocket_api.async_register_command(hass, ws_streams)
     websocket_api.async_register_command(hass, ws_details)
     data[DATA_FRONTEND_REGISTERED] = True
