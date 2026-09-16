@@ -467,6 +467,10 @@ async def ws_streams(hass, connection, msg) -> None:
                     "url": direct_url,
                     "info_hash": stream.get("infoHash")
                     or client_resolve.get("infoHash"),
+                    "magnet_uri": client_resolve.get("magnetUri"),
+                    "torrent_sources": client_resolve.get("sources")
+                    or stream.get("sources")
+                    or [],
                     "file_idx": stream.get("fileIdx")
                     if stream.get("fileIdx") is not None
                     else client_resolve.get("fileIdx"),
