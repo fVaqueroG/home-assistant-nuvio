@@ -166,6 +166,13 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
         return probatio.Schema(
             {
                 probatio.Required(
+                    CONF_PACKAGE_NAME,
+                    default=values.get(
+                        CONF_PACKAGE_NAME,
+                        entry.data.get(CONF_PACKAGE_NAME, DEFAULT_PACKAGE_NAME),
+                    ),
+                ): str,
+                probatio.Required(
                     CONF_PROFILE_ID,
                     default=values.get(
                         CONF_PROFILE_ID,
@@ -216,6 +223,7 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
             else:
                 self._pending_data = {
                     **entry.data,
+                    CONF_PACKAGE_NAME: str(user_input[CONF_PACKAGE_NAME]).strip(),
                     CONF_PROFILE_ID: user_input[CONF_PROFILE_ID],
                     CONF_DEBRID_PROVIDER: provider,
                 }
