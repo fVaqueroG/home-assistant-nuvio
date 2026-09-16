@@ -1,0 +1,75 @@
+open:
+  name: Open title
+  description: Open a movie or series details page in Nuvio.
+  target:
+    entity:
+      domain: media_player
+  fields:
+    media_type:
+      required: true
+      selector:
+        select:
+          options:
+            - movie
+            - series
+    content_id:
+      required: true
+      example: tt16311594
+      selector:
+        text:
+
+play:
+  name: Play title
+  description: Start Nuvio's stream flow through an ADB-based Android TV entity.
+  target:
+    entity:
+      domain: media_player
+      integration: androidtv
+  fields:
+    media_type:
+      required: true
+      selector:
+        select:
+          options:
+            - movie
+            - series
+    content_id:
+      required: true
+      example: tt16311594
+      selector:
+        text:
+    video_id:
+      selector:
+        text:
+    title:
+      required: true
+      selector:
+        text:
+    poster:
+      selector:
+        text:
+          type: url
+    backdrop:
+      selector:
+        text:
+          type: url
+    logo:
+      selector:
+        text:
+          type: url
+    season:
+      selector:
+        number:
+          min: 0
+          max: 999
+          mode: box
+    episode:
+      selector:
+        number:
+          min: 0
+          max: 9999
+          mode: box
+    episode_title:
+      selector:
+        text:
+

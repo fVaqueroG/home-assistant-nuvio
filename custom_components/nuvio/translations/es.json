@@ -1,0 +1,25 @@
+{
+  "title": "Nuvio",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Conectar catálogos de Nuvio",
+        "description": "Ingresa una URL de manifiesto compatible con Stremio por línea.",
+        "data": {
+          "manifest_urls": "URLs de manifiestos de addons",
+          "package_name": "Paquete Android de Nuvio"
+        },
+        "data_description": {
+          "package_name": "Usa com.nuvio.app para la versión de Play Store o com.nuvio.tv para la mayoría de versiones de GitHub/sideload."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "No se pudo cargar ningún manifiesto de addon",
+      "invalid_url": "Ingresa al menos una URL http o https válida"
+    },
+    "abort": {
+      "single_instance_allowed": "Nuvio ya está configurado"
+    }
+  }
+}

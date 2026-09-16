@@ -1,0 +1,25 @@
+{
+  "title": "Nuvio",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect Nuvio catalogs",
+        "description": "Enter one Stremio-compatible addon manifest URL per line.",
+        "data": {
+          "manifest_urls": "Addon manifest URLs",
+          "package_name": "Nuvio Android package"
+        },
+        "data_description": {
+          "package_name": "Use com.nuvio.app for Play Store builds or com.nuvio.tv for most GitHub/sideload builds."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not load any addon manifest",
+      "invalid_url": "Enter at least one valid http or https manifest URL"
+    },
+    "abort": {
+      "single_instance_allowed": "Nuvio is already configured"
+    }
+  }
+}
