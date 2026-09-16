@@ -17,8 +17,8 @@
           "package_name": "Use com.nuvio.app for Play Store builds or com.nuvio.tv for most GitHub/sideload builds.",
           "profile_id": "Profile 1 is the primary profile. Use 2–5 for another profile.",
           "connect_account": "Adds Continue Watching, My Library, profiles, and synchronized addons.",
-          "debrid_provider": "Used to turn torrent/debrid results into directly playable HTTP file links.",
-          "debrid_api_key": "Stored locally in Home Assistant's config entry. Nuvio does not sync debrid credentials with your account."
+          "debrid_provider": "Optional. With a linked Nuvio account, Home Assistant automatically uses supported debrid credentials synced for the profile. Select a provider here only as a local override.",
+          "debrid_api_key": "Optional when your Nuvio account already has synced debrid. Stored only in Home Assistant when provided."
         }
       },
       "reconfigure": {
@@ -33,8 +33,8 @@
         "data_description": {
           "profile_id": "Profile 1 is the primary profile. Use 2–5 for another profile.",
           "connect_account": "Turn this off to disconnect the currently linked Nuvio account.",
-          "debrid_provider": "Select the provider Home Assistant should use when resolving file links.",
-          "debrid_api_key": "Leave blank to keep the current key when the provider is unchanged. Nuvio does not sync these credentials."
+          "debrid_provider": "Optional: use Nuvio-account synced credentials automatically, or select a provider as a local override.",
+          "debrid_api_key": "Leave blank to use Nuvio-synced credentials or keep an existing local override."
         }
       },
       "device": {
