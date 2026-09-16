@@ -38,6 +38,14 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           grep -F "NUVIO-CARD v$VERSION" custom_components/nuvio/frontend/nuvio-card.js
 
+      - name: Compile Python integration
+        shell: bash
+        run: python -m compileall -q custom_components/nuvio
+
+      - name: Check Lovelace card syntax
+        shell: bash
+        run: node --check custom_components/nuvio/frontend/nuvio-card.js
+
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
