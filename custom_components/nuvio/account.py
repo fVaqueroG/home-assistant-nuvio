@@ -229,3 +229,33 @@ class NuvioAccountApi:
             authenticated=True,
         )
         return [item for item in data or [] if isinstance(item, dict)]
+
+
+    async def async_provider_credentials(self, profile_id: int) -> dict[str, str]:
+        """Return synced debrid credentials for a Nuvio profile.
+
+        Nuvio stores provider credentials separately from the ordinary profile
+        settings blob. Keep the values server-side/in memory; callers should
+        never expose them to the Lovelace frontend.
+        """
+        data = await self._request(
+            "POST",
+            "/rest/v1/rpc/sync_pull_provider_credentials",
+            json={"p_profile_id": profile_id},
+            authenticated=True,
+        )
+        credentials: dict[str, str] = {}
+        for item in data or []:
+            if not isinstance(item, dict):
+                continue
+            provider = str(item.get("provider") or "").strip().lower()
+            if not provider.startswith("debrid:"):
+                continue
+            provider_id = provider.split(":", 1)[1].strip()
+            payload = item.get("credential_json")
+            if not isinstance(payload, dict):
+                continue
+            api_key = str(payload.get("api_key") or "").strip()
+            if provider_id and api_key:
+                credentials[provider_id] = api_key
+        return credentials
