@@ -28,19 +28,22 @@
           "profile_id": "El perfil 1 es el perfil principal. Usa 2–5 para otro perfil.",
           "connect_account": "Desactiva esta opción para desconectar la cuenta de Nuvio vinculada."
         }
+      },
+      "device": {
+        "title": "Autorizar Nuvio",
+        "description": "1. Abre la [autorización de Nuvio]({url}).\n2. Ingresa el código **{code}** y aprueba el acceso.\n3. Regresa aquí y selecciona **Continuar**."
       }
     },
     "error": {
       "cannot_connect": "No se pudo cargar ningún manifiesto de addon",
       "invalid_url": "Ingresa al menos una URL http o https válida",
-      "login_start_failed": "No se pudo iniciar la autorización de la cuenta de Nuvio"
+      "login_start_failed": "No se pudo iniciar la autorización de la cuenta de Nuvio",
+      "login_pending": "Nuvio aún no ha aprobado este código. Autorízalo e intenta Continuar nuevamente.",
+      "login_connection_failed": "No se pudo comprobar la autorización de Nuvio. Revisa la conexión e inténtalo nuevamente."
     },
     "abort": {
       "single_instance_allowed": "Nuvio ya está configurado",
       "login_failed": "La autorización de Nuvio falló o caducó; inicia la configuración nuevamente"
-    },
-    "progress": {
-      "wait_for_device": "Abre la [autorización de Nuvio]({url}) e ingresa el código **{code}**. Mantén esta ventana abierta mientras Home Assistant espera la aprobación."
     }
   }
 }

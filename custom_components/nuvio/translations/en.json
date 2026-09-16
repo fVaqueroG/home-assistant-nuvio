@@ -28,19 +28,22 @@
           "profile_id": "Profile 1 is the primary profile. Use 2–5 for another profile.",
           "connect_account": "Turn this off to disconnect the currently linked Nuvio account."
         }
+      },
+      "device": {
+        "title": "Authorize Nuvio",
+        "description": "1. Open [Nuvio authorization]({url}).\n2. Enter code **{code}** and approve access.\n3. Return here and select **Continue**."
       }
     },
     "error": {
       "cannot_connect": "Could not load any addon manifest",
       "invalid_url": "Enter at least one valid http or https manifest URL",
-      "login_start_failed": "Could not start Nuvio account authorization"
+      "login_start_failed": "Could not start Nuvio account authorization",
+      "login_pending": "Nuvio has not approved this code yet. Authorize it and try Continue again.",
+      "login_connection_failed": "Could not check the Nuvio authorization. Check the connection and try again."
     },
     "abort": {
       "single_instance_allowed": "Nuvio is already configured",
       "login_failed": "Nuvio authorization failed or expired; start setup again"
-    },
-    "progress": {
-      "wait_for_device": "Open [Nuvio authorization]({url}) and enter code **{code}**. Keep this window open while Home Assistant waits for approval."
     }
   }
 }

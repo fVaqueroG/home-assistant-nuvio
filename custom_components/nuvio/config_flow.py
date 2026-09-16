@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 import probatio
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .account import NuvioAccountApi, NuvioAuthError
+from .account import NuvioAccountApi, NuvioAuthError, NuvioLoginExpired
 from .api import NuvioApi, NuvioApiError, normalize_manifest_url
 from .const import (
     CONF_ACCESS_TOKEN,
@@ -46,16 +45,12 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
         self._pending_data: dict[str, Any] = {}
         self._account_api: NuvioAccountApi | None = None
         self._login: dict[str, Any] | None = None
-        self._login_task: asyncio.Task[dict[str, Any]] | None = None
         self._reconfigure = False
 
     async def _async_start_account_login(self) -> ConfigFlowResult:
         """Start Nuvio's device authorization flow."""
         self._account_api = NuvioAccountApi(async_get_clientsession(self.hass))
         self._login = await self._account_api.async_start_device_login()
-        self._login_task = self.hass.async_create_task(
-            self._account_api.async_wait_for_device_login(self._login)
-        )
         return await self.async_step_device()
 
     async def async_step_user(
@@ -167,29 +162,39 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_device(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Wait for Nuvio device authorization."""
+        """Confirm Nuvio device authorization without an indefinite spinner."""
         assert self._login is not None
-        assert self._login_task is not None
-        if self._login_task.done():
-            if self._login_task.exception():
-                return self.async_show_progress_done(next_step_id="login_failed")
-            return self.async_show_progress_done(next_step_id="finish")
-        return self.async_show_progress(
+        assert self._account_api is not None
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                poll = await self._account_api.async_poll_device_login(self._login)
+                status = str(poll.get("status", "")).lower()
+                if status == "approved":
+                    token_data = await self._account_api.async_exchange_device_login(
+                        self._login
+                    )
+                    return self._finish_login(token_data)
+                if status in {"expired", "used", "cancelled"}:
+                    raise NuvioLoginExpired(f"Nuvio device login is {status}")
+                errors["base"] = "login_pending"
+            except NuvioLoginExpired:
+                return self.async_abort(reason="login_failed")
+            except NuvioAuthError:
+                errors["base"] = "login_connection_failed"
+
+        return self.async_show_form(
             step_id="device",
-            progress_action="wait_for_device",
-            progress_task=self._login_task,
+            data_schema=probatio.Schema({}),
+            errors=errors,
             description_placeholders={
                 "url": str(self._login["verification_uri_complete"]),
                 "code": str(self._login["user_code"]),
             },
         )
 
-    async def async_step_finish(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    def _finish_login(self, token_data: dict[str, Any]) -> ConfigFlowResult:
         """Store the authorized renewable session."""
-        assert self._login_task is not None
-        token_data = self._login_task.result()
         user = token_data.get("user") or {}
         self._pending_data.update(
             {

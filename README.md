@@ -27,7 +27,8 @@ an Android TV / Google TV device.
 3. Go to **Settings → Devices & services → Add integration → Nuvio**.
 4. Enter one addon manifest URL per line. A Cinemeta URL is supplied by default.
 5. Leave **Connect Nuvio account** enabled, select the profile number, then open
-   the displayed Nuvio authorization URL and enter the code.
+   the displayed Nuvio authorization URL, enter the code, and return to Home
+   Assistant to select **Continue**.
 6. Pick the Nuvio package installed on the TV. Play Store builds normally use
    `com.nuvio.app`; GitHub/sideload builds normally use `com.nuvio.tv`.
 

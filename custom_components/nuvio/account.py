@@ -114,23 +114,28 @@ class NuvioAccountApi:
         )
         while datetime.now(UTC) < expires_at:
             await asyncio.sleep(interval)
-            result = await self._request(
-                "POST",
-                "/rest/v1/rpc/poll_tv_login_session",
-                json={
-                    "p_code": login["device_code"],
-                    "p_device_nonce": login["device_nonce"],
-                },
-            )
-            if not isinstance(result, list) or not result:
-                raise NuvioAuthError("Nuvio returned no login status")
-            status = str(result[0].get("status", "")).lower()
-            interval = max(2, int(result[0].get("poll_interval_seconds") or interval))
+            result = await self.async_poll_device_login(login)
+            status = str(result.get("status", "")).lower()
+            interval = max(2, int(result.get("poll_interval_seconds") or interval))
             if status == "approved":
                 return await self.async_exchange_device_login(login)
             if status in {"expired", "used", "cancelled"}:
                 raise NuvioLoginExpired(f"Nuvio device login is {status}")
         raise NuvioLoginExpired("Nuvio device login expired")
+
+    async def async_poll_device_login(self, login: dict[str, Any]) -> dict[str, Any]:
+        """Check the current state of a device authorization request once."""
+        result = await self._request(
+            "POST",
+            "/rest/v1/rpc/poll_tv_login_session",
+            json={
+                "p_code": login["device_code"],
+                "p_device_nonce": login["device_nonce"],
+            },
+        )
+        if not isinstance(result, list) or not result:
+            raise NuvioAuthError("Nuvio returned no login status")
+        return result[0]
 
     async def async_exchange_device_login(
         self, login: dict[str, Any]
