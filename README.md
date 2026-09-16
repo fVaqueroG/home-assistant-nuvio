@@ -73,8 +73,9 @@ show_search: true
 
 The card provides horizontal catalog rows, search, title details, seasons and
 episodes, a media-player selector, **Open in Nuvio**, and direct **Play** for
-ADB-based Android TV entities. The frontend is served by the integration itself,
-so no separate Lovelace resource or frontend HACS repository is required.
+ADB-based Android TV entities. The frontend is served by the integration itself. Since v0.3.2 the integration also
+registers the card as a Lovelace module resource with a versioned URL, avoiding stale
+mobile/browser caches and `Custom element doesn't exist: nuvio-card` errors.
 
 ## Actions
 
