@@ -134,12 +134,33 @@ movie it defaults to `content_id`. For a series episode, provide it whenever the
 addon's ID is not exactly `content_id:season:episode`.
 
 
+
+## Play in Nuvio vs direct playback
+
+The card offers both playback paths on the **Sources** screen:
+
+- **Play in Nuvio** opens Nuvio's stream screen for the selected movie/episode.
+  Nuvio then uses its own synced addon/debrid configuration. Current Nuvio TV
+  launch intents can target the movie/episode stream screen, but do not accept
+  an individual preselected stream row, so the exact source is still selected
+  inside Nuvio.
+- **Play direct** uses the exact HTTP/HLS file URL. For torrent/debrid sources,
+  Home Assistant can resolve the URL with credentials synchronized to the Nuvio
+  account through Nuvio's provider-credential sync endpoint. The credential is
+  kept server-side/in memory and is never returned to the Lovelace card.
+
+A locally entered debrid token in Nuvio's Home Assistant reconfigure screen is
+only an optional override/fallback; it is not required when the linked Nuvio
+profile already has a supported synced credential.
+
 ## Debrid link resolution
 
-Nuvio does not synchronize TorBox, Premiumize, or Real-Debrid credentials with
-your Nuvio account. To let Home Assistant turn torrent/debrid results into final
-HTTP file URLs, open **Settings → Devices & services → Nuvio → Reconfigure** and
-select a debrid provider, then enter that provider's API key/access token.
+Nuvio synchronizes provider credentials separately from the ordinary profile
+settings blob. When a Nuvio account is linked, Home Assistant now pulls the
+supported debrid credentials for the selected profile and uses them only on the
+backend to turn torrent/debrid results into final HTTP file URLs. You can still
+open **Settings → Devices & services → Nuvio → Reconfigure** and enter a local
+provider/token as an optional override or fallback.
 
 Supported resolvers:
 
