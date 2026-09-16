@@ -22,9 +22,12 @@ from .const import (
     ATTR_EPISODE,
     ATTR_EPISODE_TITLE,
     ATTR_LOGO,
+    ATTR_MIME_TYPE,
     ATTR_MEDIA_TYPE,
     ATTR_POSTER,
     ATTR_SEASON,
+    ATTR_STREAM_TITLE,
+    ATTR_STREAM_URL,
     ATTR_TITLE,
     ATTR_VIDEO_ID,
     CONF_ACCESS_TOKEN,
@@ -38,8 +41,9 @@ from .const import (
     DOMAIN,
     SERVICE_OPEN,
     SERVICE_PLAY,
+    SERVICE_PLAY_SOURCE,
 )
-from .launcher import deep_link, stream_intent_command, webos_launch_payload
+from .launcher import deep_link, direct_stream_command, stream_intent_command, webos_launch_payload
 from .frontend import async_register_frontend
 
 type NuvioConfigEntry = ConfigEntry[dict[str, Any]]
@@ -57,6 +61,15 @@ BASE_SCHEMA = {
 }
 
 OPEN_SCHEMA = probatio.Schema(BASE_SCHEMA)
+PLAY_SOURCE_SCHEMA = probatio.Schema(
+    {
+        probatio.Required(ATTR_ENTITY_ID): cv.entity_ids,
+        probatio.Required(ATTR_STREAM_URL): cv.url,
+        probatio.Optional(ATTR_STREAM_TITLE): cv.string,
+        probatio.Optional(ATTR_MIME_TYPE): cv.string,
+    }
+)
+
 PLAY_SCHEMA = probatio.Schema(
     {
         **BASE_SCHEMA,
@@ -247,11 +260,87 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
                     blocking=True,
                 )
 
+        async def handle_play_source(call: ServiceCall) -> None:
+            """Play one exact HTTP/HLS stream source on the selected device."""
+            entity_ids = call.data[ATTR_ENTITY_ID]
+            stream_url = call.data[ATTR_STREAM_URL]
+            title = call.data.get(ATTR_STREAM_TITLE)
+            mime_type = call.data.get(ATTR_MIME_TYPE)
+            registry = async_get_entity_registry(hass)
+
+            android_ids: list[str] = []
+            android_remote_ids: list[str] = []
+            webos_ids: list[str] = []
+            invalid: list[str] = []
+
+            for entity_id in entity_ids:
+                registry_entry = registry.async_get(entity_id)
+                if registry_entry is None:
+                    invalid.append(entity_id)
+                elif registry_entry.platform == "androidtv":
+                    android_ids.append(entity_id)
+                elif registry_entry.platform == "androidtv_remote":
+                    android_remote_ids.append(entity_id)
+                elif registry_entry.platform == "webostv":
+                    webos_ids.append(entity_id)
+                else:
+                    invalid.append(entity_id)
+
+            if invalid:
+                raise HomeAssistantError(
+                    "Direct source playback supports Android TV, Android TV Remote, "
+                    f"and LG webOS media players: {', '.join(invalid)}"
+                )
+
+            if android_ids:
+                command = direct_stream_command(
+                    stream_url,
+                    mime_type=mime_type or "video/*",
+                )
+                await hass.services.async_call(
+                    "androidtv",
+                    "adb_command",
+                    {ATTR_ENTITY_ID: android_ids, "command": command},
+                    blocking=True,
+                )
+
+            if android_remote_ids:
+                await hass.services.async_call(
+                    "media_player",
+                    "play_media",
+                    {
+                        ATTR_ENTITY_ID: android_remote_ids,
+                        "media_content_id": stream_url,
+                        "media_content_type": "url",
+                    },
+                    blocking=True,
+                )
+
+            if webos_ids:
+                payload: dict[str, Any] = {"target": stream_url}
+                if title:
+                    payload["title"] = title
+                if mime_type:
+                    payload["mimeType"] = mime_type
+                await hass.services.async_call(
+                    "webostv",
+                    "command",
+                    {
+                        ATTR_ENTITY_ID: webos_ids,
+                        "command": "media.viewer/open",
+                        "payload": payload,
+                    },
+                    blocking=True,
+                )
+
         hass.services.async_register(
             DOMAIN, SERVICE_OPEN, handle_open, schema=OPEN_SCHEMA
         )
         hass.services.async_register(
             DOMAIN, SERVICE_PLAY, handle_play, schema=PLAY_SCHEMA
+        )
+        hass.services.async_register(
+            DOMAIN, SERVICE_PLAY_SOURCE, handle_play_source, schema=PLAY_SOURCE_SCHEMA
         )
 
     return True
@@ -262,4 +351,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> bo
     if len(hass.config_entries.async_loaded_entries(DOMAIN)) <= 1:
         hass.services.async_remove(DOMAIN, SERVICE_OPEN)
         hass.services.async_remove(DOMAIN, SERVICE_PLAY)
+        hass.services.async_remove(DOMAIN, SERVICE_PLAY_SOURCE)
     return True
