@@ -16,6 +16,7 @@ DEFAULT_MANIFEST_URL: Final = "https://v3-cinemeta.strem.io/manifest.json"
 DEFAULT_PACKAGE_NAME: Final = "com.nuvio.app"
 DEFAULT_PROFILE_ID: Final = 1
 NUVIO_ACTIVITY: Final = "com.nuvio.tv.MainActivity"
+NUVIO_WEBOS_APP_ID: Final = "space.nuvio.webos"
 
 NUVIO_BACKEND_URL: Final = "https://api.nuvio.tv"
 # Nuvio's public Supabase publishable key, also distributed in the Nuvio client.
