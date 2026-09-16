@@ -11,10 +11,13 @@ CONF_REFRESH_TOKEN: Final = "refresh_token"
 CONF_PROFILE_ID: Final = "profile_id"
 CONF_USER_ID: Final = "user_id"
 CONF_EMAIL: Final = "email"
+CONF_DEBRID_PROVIDER: Final = "debrid_provider"
+CONF_DEBRID_API_KEY: Final = "debrid_api_key"
 
 DEFAULT_MANIFEST_URL: Final = "https://v3-cinemeta.strem.io/manifest.json"
 DEFAULT_PACKAGE_NAME: Final = "com.nuvio.app"
 DEFAULT_PROFILE_ID: Final = 1
+DEFAULT_DEBRID_PROVIDER: Final = "none"
 NUVIO_ACTIVITY: Final = "com.nuvio.tv.MainActivity"
 NUVIO_WEBOS_APP_ID: Final = "space.nuvio.webos"
 
@@ -46,3 +49,4 @@ ATTR_MIME_TYPE: Final = "mime_type"
 
 DATA_API: Final = "api"
 DATA_ACCOUNT_API: Final = "account_api"
+DATA_DEBRID_RESOLVER: Final = "debrid_resolver"
