@@ -263,7 +263,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
         async def handle_play_source(call: ServiceCall) -> None:
             """Play one exact HTTP/HLS stream source on the selected device."""
             entity_ids = call.data[ATTR_ENTITY_ID]
-            stream_url = call.data[ATTR_STREAM_URL]
+            stream_url = str(call.data[ATTR_STREAM_URL])
             title = call.data.get(ATTR_STREAM_TITLE)
             mime_type = call.data.get(ATTR_MIME_TYPE)
             registry = async_get_entity_registry(hass)
