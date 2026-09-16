@@ -38,7 +38,7 @@ from .const import (
     SERVICE_OPEN,
     SERVICE_PLAY,
 )
-from .launcher import deep_link, stream_intent_command
+from .launcher import deep_link, stream_intent_command, webos_launch_payload
 from .frontend import async_register_frontend
 
 type NuvioConfigEntry = ConfigEntry[dict[str, Any]]
@@ -108,53 +108,119 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
     if not hass.services.has_service(DOMAIN, SERVICE_OPEN):
 
         async def handle_open(call: ServiceCall) -> None:
-            uri = deep_link(call.data[ATTR_MEDIA_TYPE], call.data[ATTR_CONTENT_ID])
-            await hass.services.async_call(
-                "media_player",
-                "play_media",
-                {
-                    ATTR_ENTITY_ID: call.data[ATTR_ENTITY_ID],
-                    "media_content_id": uri,
-                    "media_content_type": "url",
-                },
-                blocking=True,
-            )
+            entity_ids = call.data[ATTR_ENTITY_ID]
+            registry = async_get_entity_registry(hass)
+            webos_ids: list[str] = []
+            generic_ids: list[str] = []
+            for entity_id in entity_ids:
+                registry_entry = registry.async_get(entity_id)
+                if registry_entry is not None and registry_entry.platform == "webostv":
+                    webos_ids.append(entity_id)
+                else:
+                    generic_ids.append(entity_id)
+
+            if generic_ids:
+                uri = deep_link(call.data[ATTR_MEDIA_TYPE], call.data[ATTR_CONTENT_ID])
+                await hass.services.async_call(
+                    "media_player",
+                    "play_media",
+                    {
+                        ATTR_ENTITY_ID: generic_ids,
+                        "media_content_id": uri,
+                        "media_content_type": "url",
+                    },
+                    blocking=True,
+                )
+
+            if webos_ids:
+                payload = webos_launch_payload(
+                    media_type=call.data[ATTR_MEDIA_TYPE],
+                    content_id=call.data[ATTR_CONTENT_ID],
+                    launch_mode="details",
+                )
+                await hass.services.async_call(
+                    "webostv",
+                    "command",
+                    {
+                        ATTR_ENTITY_ID: webos_ids,
+                        "command": "system.launcher/launch",
+                        "payload": payload,
+                    },
+                    blocking=True,
+                )
 
         async def handle_play(call: ServiceCall) -> None:
             entity_ids = call.data[ATTR_ENTITY_ID]
             registry = async_get_entity_registry(hass)
-            invalid = []
+            android_ids: list[str] = []
+            webos_ids: list[str] = []
+            invalid: list[str] = []
+
             for entity_id in entity_ids:
                 registry_entry = registry.async_get(entity_id)
-                if registry_entry is None or registry_entry.platform != "androidtv":
+                if registry_entry is None:
                     invalid.append(entity_id)
+                elif registry_entry.platform == "androidtv":
+                    android_ids.append(entity_id)
+                elif registry_entry.platform == "webostv":
+                    webos_ids.append(entity_id)
+                else:
+                    invalid.append(entity_id)
+
             if invalid:
                 raise HomeAssistantError(
-                    "Direct Nuvio playback requires media_player entities from the "
-                    f"ADB-based Android TV integration: {', '.join(invalid)}"
+                    "Nuvio playback supports ADB-based Android TV and LG webOS "
+                    f"media_player entities: {', '.join(invalid)}"
                 )
-            loaded_entry = hass.config_entries.async_loaded_entries(DOMAIN)[0]
-            command = stream_intent_command(
-                package_name=loaded_entry.data.get(
-                    CONF_PACKAGE_NAME, DEFAULT_PACKAGE_NAME
-                ),
-                media_type=call.data[ATTR_MEDIA_TYPE],
-                content_id=call.data[ATTR_CONTENT_ID],
-                title=call.data[ATTR_TITLE],
-                video_id=call.data.get(ATTR_VIDEO_ID),
-                poster=call.data.get(ATTR_POSTER),
-                backdrop=call.data.get(ATTR_BACKDROP),
-                logo=call.data.get(ATTR_LOGO),
-                season=call.data.get(ATTR_SEASON),
-                episode=call.data.get(ATTR_EPISODE),
-                episode_title=call.data.get(ATTR_EPISODE_TITLE),
-            )
-            await hass.services.async_call(
-                "androidtv",
-                "adb_command",
-                {ATTR_ENTITY_ID: entity_ids, "command": command},
-                blocking=True,
-            )
+
+            if android_ids:
+                loaded_entry = hass.config_entries.async_loaded_entries(DOMAIN)[0]
+                command = stream_intent_command(
+                    package_name=loaded_entry.data.get(
+                        CONF_PACKAGE_NAME, DEFAULT_PACKAGE_NAME
+                    ),
+                    media_type=call.data[ATTR_MEDIA_TYPE],
+                    content_id=call.data[ATTR_CONTENT_ID],
+                    title=call.data[ATTR_TITLE],
+                    video_id=call.data.get(ATTR_VIDEO_ID),
+                    poster=call.data.get(ATTR_POSTER),
+                    backdrop=call.data.get(ATTR_BACKDROP),
+                    logo=call.data.get(ATTR_LOGO),
+                    season=call.data.get(ATTR_SEASON),
+                    episode=call.data.get(ATTR_EPISODE),
+                    episode_title=call.data.get(ATTR_EPISODE_TITLE),
+                )
+                await hass.services.async_call(
+                    "androidtv",
+                    "adb_command",
+                    {ATTR_ENTITY_ID: android_ids, "command": command},
+                    blocking=True,
+                )
+
+            if webos_ids:
+                payload = webos_launch_payload(
+                    media_type=call.data[ATTR_MEDIA_TYPE],
+                    content_id=call.data[ATTR_CONTENT_ID],
+                    title=call.data[ATTR_TITLE],
+                    video_id=call.data.get(ATTR_VIDEO_ID),
+                    poster=call.data.get(ATTR_POSTER),
+                    backdrop=call.data.get(ATTR_BACKDROP),
+                    logo=call.data.get(ATTR_LOGO),
+                    season=call.data.get(ATTR_SEASON),
+                    episode=call.data.get(ATTR_EPISODE),
+                    episode_title=call.data.get(ATTR_EPISODE_TITLE),
+                    launch_mode="stream",
+                )
+                await hass.services.async_call(
+                    "webostv",
+                    "command",
+                    {
+                        ATTR_ENTITY_ID: webos_ids,
+                        "command": "system.launcher/launch",
+                        "payload": payload,
+                    },
+                    blocking=True,
+                )
 
         hass.services.async_register(
             DOMAIN, SERVICE_OPEN, handle_open, schema=OPEN_SCHEMA
