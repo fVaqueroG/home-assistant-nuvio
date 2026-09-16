@@ -115,3 +115,19 @@ def webos_launch_payload(
     }
     params.update({key: value for key, value in optional.items() if value is not None})
     return {"id": NUVIO_WEBOS_APP_ID, "params": params}
+
+
+def direct_stream_command(url: str, *, mime_type: str | None = None) -> str:
+    """Open an exact stream URL with Android's media handler."""
+    parts = [
+        "am",
+        "start",
+        "-W",
+        "-a",
+        "android.intent.action.VIEW",
+        "-d",
+        _arg(url),
+    ]
+    if mime_type:
+        parts.extend(("-t", _arg(mime_type)))
+    return " ".join(parts)
