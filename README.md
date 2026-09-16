@@ -139,7 +139,7 @@ addon's ID is not exactly `content_id:season:episode`.
 
 The card offers both playback paths on the **Sources** screen:
 
-- **Play in Nuvio** opens Nuvio's stream screen for the selected movie/episode.
+- **Open in Nuvio** opens Nuvio's stream screen for the selected movie/episode.
   Nuvio then uses its own synced addon/debrid configuration. Current Nuvio TV
   launch intents can target the movie/episode stream screen, but do not accept
   an individual preselected stream row, so the exact source is still selected
@@ -148,6 +148,7 @@ The card offers both playback paths on the **Sources** screen:
   Home Assistant can resolve the URL with credentials synchronized to the Nuvio
   account through Nuvio's provider-credential sync endpoint. The credential is
   kept server-side/in memory and is never returned to the Lovelace card.
+  Raw signed stream URLs are intentionally hidden from the card layout.
 
 A locally entered debrid token in Nuvio's Home Assistant reconfigure screen is
 only an optional override/fallback; it is not required when the linked Nuvio
