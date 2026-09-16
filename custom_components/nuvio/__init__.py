@@ -31,12 +31,15 @@ from .const import (
     ATTR_TITLE,
     ATTR_VIDEO_ID,
     CONF_ACCESS_TOKEN,
+    CONF_DEBRID_API_KEY,
+    CONF_DEBRID_PROVIDER,
     CONF_MANIFEST_URLS,
     CONF_PACKAGE_NAME,
     CONF_PROFILE_ID,
     CONF_REFRESH_TOKEN,
     DATA_ACCOUNT_API,
     DATA_API,
+    DATA_DEBRID_RESOLVER,
     DEFAULT_PACKAGE_NAME,
     DOMAIN,
     SERVICE_OPEN,
@@ -45,6 +48,7 @@ from .const import (
 )
 from .launcher import deep_link, direct_stream_command, stream_intent_command, webos_launch_payload
 from .frontend import async_register_frontend
+from .debrid import DebridResolver
 
 type NuvioConfigEntry = ConfigEntry[dict[str, Any]]
 
@@ -122,6 +126,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
     entry.runtime_data = {
         DATA_API: NuvioApi(session, manifest_urls),
         DATA_ACCOUNT_API: account_api,
+        DATA_DEBRID_RESOLVER: DebridResolver(
+            session,
+            provider=entry.data.get(CONF_DEBRID_PROVIDER),
+            api_key=entry.data.get(CONF_DEBRID_API_KEY),
+        ),
     }
 
     if not hass.services.has_service(DOMAIN, SERVICE_OPEN):
