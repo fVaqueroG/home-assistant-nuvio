@@ -91,3 +91,24 @@ play_source:
     mime_type:
       selector:
         text:
+
+remote_key:
+  name: Remote key
+  description: Send a navigation key to the selected Android TV or LG webOS media player.
+  target:
+    entity:
+      domain: media_player
+  fields:
+    key:
+      required: true
+      selector:
+        select:
+          options:
+            - up
+            - down
+            - left
+            - right
+            - ok
+            - back
+            - home
+            - wake
