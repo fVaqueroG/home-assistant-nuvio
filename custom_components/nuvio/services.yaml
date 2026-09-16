@@ -1,6 +1,6 @@
 open:
   name: Open title
-  description: Open a movie or series details page in Nuvio.
+  description: Open Nuvio for a movie or series on Android TV or LG webOS.
   target:
     entity:
       domain: media_player
@@ -20,11 +20,10 @@ open:
 
 play:
   name: Play title
-  description: Start Nuvio's stream flow through an ADB-based Android TV entity.
+  description: Start Nuvio on ADB-based Android TV or LG webOS. Android supports direct stream launch; webOS receives launch metadata for compatible Nuvio TV builds.
   target:
     entity:
       domain: media_player
-      integration: androidtv
   fields:
     media_type:
       required: true
