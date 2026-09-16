@@ -12,6 +12,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
+from homeassistant.helpers.typing import ConfigType
 
 from .account import NuvioAccountApi, NuvioAuthError
 from .api import NuvioApi
@@ -43,6 +44,12 @@ from .frontend import async_register_frontend
 
 type NuvioConfigEntry = ConfigEntry[dict[str, Any]]
 
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up Nuvio frontend resources before config entries do network I/O."""
+    await async_register_frontend(hass)
+    return True
+
+
 BASE_SCHEMA = {
     probatio.Required(ATTR_ENTITY_ID): cv.entity_ids,
     probatio.Required(ATTR_MEDIA_TYPE): probatio.In(["movie", "series"]),
@@ -67,6 +74,7 @@ PLAY_SCHEMA = probatio.Schema(
 
 async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> bool:
     """Set up Nuvio from a config entry."""
+    await async_register_frontend(hass)
     session = async_get_clientsession(hass)
     manifest_urls = list(entry.data[CONF_MANIFEST_URLS])
     account_api: NuvioAccountApi | None = None
@@ -102,8 +110,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
         DATA_API: NuvioApi(session, manifest_urls),
         DATA_ACCOUNT_API: account_api,
     }
-
-    await async_register_frontend(hass)
 
     if not hass.services.has_service(DOMAIN, SERVICE_OPEN):
 
