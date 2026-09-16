@@ -1,4 +1,4 @@
-"""Build Nuvio deep links and Android launch commands."""
+"""Build Nuvio deep links and TV launch commands."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import shlex
 from typing import Any
 from urllib.parse import quote
 
-from .const import NUVIO_ACTIVITY
+from .const import NUVIO_ACTIVITY, NUVIO_WEBOS_APP_ID
 
 
 def deep_link(media_type: str, content_id: str) -> str:
