@@ -28,6 +28,7 @@ NUVIO_API_KEY: Final = (
 
 SERVICE_OPEN: Final = "open"
 SERVICE_PLAY: Final = "play"
+SERVICE_PLAY_SOURCE: Final = "play_source"
 
 ATTR_CONTENT_ID: Final = "content_id"
 ATTR_MEDIA_TYPE: Final = "media_type"
@@ -39,6 +40,9 @@ ATTR_LOGO: Final = "logo"
 ATTR_SEASON: Final = "season"
 ATTR_EPISODE: Final = "episode"
 ATTR_EPISODE_TITLE: Final = "episode_title"
+ATTR_STREAM_URL: Final = "stream_url"
+ATTR_STREAM_TITLE: Final = "stream_title"
+ATTR_MIME_TYPE: Final = "mime_type"
 
 DATA_API: Final = "api"
 DATA_ACCOUNT_API: Final = "account_api"
