@@ -46,6 +46,26 @@ For direct **Play**, also configure the ADB-based **Android TV** integration for
 the device. The `nuvio.play` action sends Nuvio's explicit Android intent through
 `androidtv.adb_command`.
 
+
+## Lovelace card
+
+Version 0.3.0 adds a bundled dashboard card. After updating the integration and
+restarting Home Assistant, add it from the dashboard card picker as **Nuvio** or
+use YAML:
+
+```yaml
+type: custom:nuvio-card
+title: Nuvio
+default_player: media_player.living_room_android_tv
+columns: 6
+show_search: true
+```
+
+The card provides horizontal catalog rows, search, title details, seasons and
+episodes, a media-player selector, **Open in Nuvio**, and direct **Play** for
+ADB-based Android TV entities. The frontend is served by the integration itself,
+so no separate Lovelace resource or frontend HACS repository is required.
+
 ## Actions
 
 Open a details page (movie):
