@@ -414,9 +414,9 @@ class DebridResolver:
 
         headers = {"Authorization": f"Bearer {self.api_key}"}
         form = FormData()
-        form.add_field("magnet", magnet)
-        form.add_field("add_only_if_cached", "true")
-        form.add_field("allow_zip", "false")
+        form.add_field("magnet", magnet, content_type="text/plain")
+        form.add_field("add_only_if_cached", "true", content_type="text/plain")
+        form.add_field("allow_zip", "false", content_type="text/plain")
         status, created = await self._json(
             "POST",
             f"{TORBOX_BASE}/v1/api/torrents/createtorrent",
