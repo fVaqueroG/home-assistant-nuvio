@@ -26,7 +26,7 @@ from .debrid import DebridNotCached, DebridNotConfigured, DebridResolveError
 from .const import CONF_PROFILE_ID, DATA_ACCOUNT_API, DATA_API, DATA_DEBRID_RESOLVER, DOMAIN
 
 CARD_URL = "/nuvio/nuvio-card.js"
-CARD_VERSION = "0.4.2"
+CARD_VERSION = "0.4.3"
 CARD_RESOURCE_URL = f"{CARD_URL}?v={CARD_VERSION}"
 CARD_FILE = Path(__file__).parent / "frontend" / "nuvio-card.js"
 DATA_FRONTEND_REGISTERED = "frontend_registered"
