@@ -9,12 +9,16 @@
           "manifest_urls": "Addon manifest URLs",
           "package_name": "Nuvio Android package",
           "profile_id": "Nuvio profile number",
-          "connect_account": "Connect Nuvio account"
+          "connect_account": "Connect Nuvio account",
+          "debrid_provider": "Debrid provider",
+          "debrid_api_key": "Debrid API key / token"
         },
         "data_description": {
           "package_name": "Use com.nuvio.app for Play Store builds or com.nuvio.tv for most GitHub/sideload builds.",
           "profile_id": "Profile 1 is the primary profile. Use 2–5 for another profile.",
-          "connect_account": "Adds Continue Watching, My Library, profiles, and synchronized addons."
+          "connect_account": "Adds Continue Watching, My Library, profiles, and synchronized addons.",
+          "debrid_provider": "Used to turn torrent/debrid results into directly playable HTTP file links.",
+          "debrid_api_key": "Stored locally in Home Assistant's config entry. Nuvio does not sync debrid credentials with your account."
         }
       },
       "reconfigure": {
@@ -22,11 +26,15 @@
         "description": "Connect, reconnect, or disconnect your Nuvio account and select the profile used by Home Assistant.",
         "data": {
           "profile_id": "Nuvio profile number",
-          "connect_account": "Connect Nuvio account"
+          "connect_account": "Connect Nuvio account",
+          "debrid_provider": "Debrid provider",
+          "debrid_api_key": "Debrid API key / token"
         },
         "data_description": {
           "profile_id": "Profile 1 is the primary profile. Use 2–5 for another profile.",
-          "connect_account": "Turn this off to disconnect the currently linked Nuvio account."
+          "connect_account": "Turn this off to disconnect the currently linked Nuvio account.",
+          "debrid_provider": "Select the provider Home Assistant should use when resolving file links.",
+          "debrid_api_key": "Leave blank to keep the current key when the provider is unchanged. Nuvio does not sync these credentials."
         }
       },
       "device": {
@@ -43,7 +51,8 @@
       "invalid_url": "Enter at least one valid http or https manifest URL",
       "login_start_failed": "Could not start Nuvio account authorization",
       "login_pending": "Nuvio has not approved this code yet. Authorize it and try Continue again.",
-      "login_connection_failed": "Could not check the Nuvio authorization. Check the connection and try again."
+      "login_connection_failed": "Could not check the Nuvio authorization. Check the connection and try again.",
+      "debrid_key_required": "Enter an API key/token for the selected debrid provider."
     },
     "abort": {
       "single_instance_allowed": "Nuvio is already configured",
