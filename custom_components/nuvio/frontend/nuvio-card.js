@@ -131,18 +131,44 @@ class NuvioCard extends HTMLElement {
     var candidates=this._streams.map((s,i)=>({s,i})).filter(x=>!x.s.direct&&x.s.resolvable&&!x.s.requires_headers&&(x.s.info_hash||x.s.magnet_uri)).slice(0,6);
     for(var item of candidates)await this.resolveSource(item.i);
   }
-  async playSource(stream){
-    var p=this.player();if(!p){this._error="Select a media player first.";this.render();return;}
-    if(!stream||!stream.url){this._error="This source needs Nuvio's internal torrent/debrid resolver and cannot be sent as a direct URL.";this.render();return;}
-    try{
-      await this._hass.callService("nuvio","play_source",{
-        stream_url:stream.url,
-        stream_title:stream.name||stream.title||stream.description||this._item.name||"Nuvio stream",
-        mime_type:this.inferMime(stream.url)
-      },{entity_id:p});
-    }catch(e){this._error=e.message||"Direct source playback failed.";this.render();}
+  sourcePlaybackData(stream,inNuvio=false){
+    var ep=this._streamContext||null;
+    var data=this.playData(ep);
+    data.stream_url=stream.url;
+    data.stream_title=stream.name||stream.title||stream.description||data.title||"Nuvio stream";
+    data.mime_type=this.inferMime(stream.url);
+    data.in_nuvio=!!inNuvio;
+    if(stream.filename)data.filename=stream.filename;
+    if(stream.size_bytes)data.video_size=Number(stream.size_bytes);
+    if(stream.addon)data.addon_name=stream.addon;
+    if(stream.addon_logo)data.addon_logo=stream.addon_logo;
+    if(stream.description)data.stream_description=stream.description;
+    if(stream.info_hash)data.info_hash=stream.info_hash;
+    if(stream.file_idx!=null)data.file_idx=Number(stream.file_idx);
+    return data;
   }
-  async playInNuvio(){
+  async playSource(stream,inNuvio=false){
+    var p=this.player();if(!p){this._error="Select a media player first.";this.render();return;}
+    if(!stream||!stream.url){this._error="This source does not have a playable URL yet.";this.render();return;}
+    try{
+      await this._hass.callService(
+        "nuvio",
+        "play_source",
+        this.sourcePlaybackData(stream,inNuvio),
+        {entity_id:p}
+      );
+    }catch(e){this._error=e.message||(inNuvio?"Nuvio internal playback failed.":"Direct source playback failed.");this.render();}
+  }
+  async playInNuvioIndex(index){
+    var s=this._streams[index];if(!s)return;
+    if(s.direct&&s.url){await this.playSource(s,true);return;}
+    if(s.resolvable){
+      var resolved=await this.resolveSource(index,false);
+      if(resolved&&resolved.url){await this.playSource(resolved,true);return;}
+      return;
+    }
+    // No exact URL is available to Home Assistant for this row. Keep the
+    // legacy behavior as a fallback: open Nuvio's source screen for the title.
     await this.play(false,this._streamContext||null);
   }
   async playDirectIndex(index){
@@ -380,7 +406,7 @@ class NuvioCard extends HTMLElement {
         var linkHtml="";
         var canResolve=!!s.resolvable&&!s.requires_headers&&(s.info_hash||s.magnet_uri);
         var resolving=this._resolving.has(n);
-        var nuvioButton='<button class="action nuvioplay" data-source-index="'+n+'">Open in Nuvio</button>';
+        var nuvioButton='<button class="action nuvioplay" data-source-index="'+n+'">'+((s.direct||canResolve)?"▶ Play in Nuvio":"Open in Nuvio")+'</button>';
         var actionHtml=s.direct
           ? '<button class="action primary playsource" data-source-index="'+n+'">▶ Play on TV</button>'+nuvioButton+'<button class="action copylink" data-source-index="'+n+'">Copy link</button>'
           : canResolve
@@ -433,7 +459,7 @@ class NuvioCard extends HTMLElement {
     r.querySelectorAll(".playep").forEach(b=>b.addEventListener("click",()=>{var eps=(this._details.videos||[]).filter(v=>Number(v.season)===Number(this._season)).sort((a,c)=>(Number(a.episode)||0)-(Number(c.episode)||0));this.play(false,eps[Number(b.dataset.ep)]);}));
     r.querySelectorAll(".sourceep").forEach(b=>b.addEventListener("click",()=>{var eps=(this._details.videos||[]).filter(v=>Number(v.season)===Number(this._season)).sort((a,c)=>(Number(a.episode)||0)-(Number(c.episode)||0));this.showSources(eps[Number(b.dataset.ep)]);}));
     r.querySelectorAll(".playsource").forEach(b=>b.addEventListener("click",()=>this.playSource(this._streams[Number(b.dataset.sourceIndex)])));
-    r.querySelectorAll(".nuvioplay").forEach(b=>b.addEventListener("click",()=>this.playInNuvio()));
+    r.querySelectorAll(".nuvioplay").forEach(b=>b.addEventListener("click",()=>this.playInNuvioIndex(Number(b.dataset.sourceIndex))));
     r.querySelectorAll(".playdirect").forEach(b=>b.addEventListener("click",()=>this.playDirectIndex(Number(b.dataset.sourceIndex))));
     r.querySelectorAll(".resolvesource").forEach(b=>b.addEventListener("click",()=>this.resolveSource(Number(b.dataset.sourceIndex))));
     r.querySelector("#resolveAll")?.addEventListener("click",()=>this.resolveVisibleSources());
@@ -456,4 +482,4 @@ class NuvioCard extends HTMLElement {
 if(!customElements.get("nuvio-card"))customElements.define("nuvio-card",NuvioCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==="nuvio-card"))window.customCards.push({type:"nuvio-card",name:"Nuvio",description:"Browse, search and play your Nuvio catalog.",preview:true});
-console.info("NUVIO-CARD v0.4.11");
+console.info("NUVIO-CARD v0.4.12");
