@@ -113,6 +113,38 @@ class NuvioApi:
         self._catalog_cache[cache_key] = (now, metas)
         return metas
 
+    async def async_streams(
+        self, addon: Addon, media_type: str, video_id: str
+    ) -> list[dict[str, Any]]:
+        """Return stream sources for a video from one addon."""
+        url = (
+            f"{addon.base_url}/stream/{quote(media_type, safe='')}/"
+            f"{quote(video_id, safe=':')}.json"
+        )
+        data = await self._get_json(url)
+        streams = data.get("streams", [])
+        return [stream for stream in streams if isinstance(stream, dict)]
+
+    async def async_all_streams(
+        self, media_type: str, video_id: str
+    ) -> list[tuple[Addon, dict[str, Any]]]:
+        """Return streams from all configured addons concurrently."""
+
+        async def load(addon: Addon) -> tuple[Addon, list[dict[str, Any]]]:
+            try:
+                return addon, await self.async_streams(addon, media_type, video_id)
+            except NuvioApiError:
+                return addon, []
+
+        batches = await asyncio.gather(
+            *(load(addon) for addon in await self.async_addons())
+        )
+        return [
+            (addon, stream)
+            for addon, streams in batches
+            for stream in streams
+        ]
+
     async def async_meta(
         self, addon: Addon, media_type: str, content_id: str
     ) -> dict[str, Any]:
