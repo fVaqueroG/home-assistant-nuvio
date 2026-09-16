@@ -18,6 +18,15 @@ from .account import NuvioAccountApi, NuvioAuthError
 from .api import NuvioApi
 from .const import (
     ATTR_BACKDROP,
+    ATTR_VIDEO_SIZE,
+    ATTR_STREAM_DESCRIPTION,
+    ATTR_IN_NUVIO,
+    ATTR_INFO_HASH,
+    ATTR_FILENAME,
+    ATTR_FILE_IDX,
+    ATTR_CONTENT_LANGUAGE,
+    ATTR_ADDON_NAME,
+    ATTR_ADDON_LOGO,
     ATTR_CONTENT_ID,
     ATTR_EPISODE,
     ATTR_EPISODE_TITLE,
@@ -48,7 +57,13 @@ from .const import (
     SERVICE_PLAY_SOURCE,
     SERVICE_REMOTE_KEY,
 )
-from .launcher import deep_link, direct_stream_command, stream_intent_command, webos_launch_payload
+from .launcher import (
+    deep_link,
+    direct_stream_command,
+    player_intent_command,
+    stream_intent_command,
+    webos_launch_payload,
+)
 from .frontend import async_register_frontend
 from .debrid import DebridResolver
 
@@ -73,6 +88,25 @@ PLAY_SOURCE_SCHEMA = probatio.Schema(
         probatio.Required(ATTR_STREAM_URL): cv.url,
         probatio.Optional(ATTR_STREAM_TITLE): cv.string,
         probatio.Optional(ATTR_MIME_TYPE): cv.string,
+        probatio.Optional(ATTR_IN_NUVIO, default=False): cv.boolean,
+        probatio.Optional(ATTR_MEDIA_TYPE): probatio.In(["movie", "series"]),
+        probatio.Optional(ATTR_CONTENT_ID): cv.string,
+        probatio.Optional(ATTR_VIDEO_ID): cv.string,
+        probatio.Optional(ATTR_TITLE): cv.string,
+        probatio.Optional(ATTR_POSTER): cv.url,
+        probatio.Optional(ATTR_BACKDROP): cv.url,
+        probatio.Optional(ATTR_LOGO): cv.url,
+        probatio.Optional(ATTR_SEASON): probatio.Coerce(int),
+        probatio.Optional(ATTR_EPISODE): probatio.Coerce(int),
+        probatio.Optional(ATTR_EPISODE_TITLE): cv.string,
+        probatio.Optional(ATTR_FILENAME): cv.string,
+        probatio.Optional(ATTR_VIDEO_SIZE): probatio.Coerce(int),
+        probatio.Optional(ATTR_ADDON_NAME): cv.string,
+        probatio.Optional(ATTR_ADDON_LOGO): cv.url,
+        probatio.Optional(ATTR_STREAM_DESCRIPTION): cv.string,
+        probatio.Optional(ATTR_INFO_HASH): cv.string,
+        probatio.Optional(ATTR_FILE_IDX): probatio.Coerce(int),
+        probatio.Optional(ATTR_CONTENT_LANGUAGE): cv.string,
     }
 )
 
@@ -318,6 +352,115 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
                     "Direct source playback supports Android TV, Android TV Remote, "
                     f"and LG webOS media players: {', '.join(invalid)}"
                 )
+
+            if call.data.get(ATTR_IN_NUVIO):
+                loaded_entry = hass.config_entries.async_loaded_entries(DOMAIN)[0]
+                profile_id = int(loaded_entry.data.get(CONF_PROFILE_ID, 1))
+                source_title = (
+                    call.data.get(ATTR_STREAM_TITLE)
+                    or call.data.get(ATTR_TITLE)
+                    or "Nuvio"
+                )
+
+                if android_ids:
+                    command = player_intent_command(
+                        package_name=loaded_entry.data.get(
+                            CONF_PACKAGE_NAME, DEFAULT_PACKAGE_NAME
+                        ),
+                        stream_url=stream_url,
+                        stream_title=source_title,
+                        media_type=call.data.get(ATTR_MEDIA_TYPE),
+                        content_id=call.data.get(ATTR_CONTENT_ID),
+                        video_id=call.data.get(ATTR_VIDEO_ID),
+                        title=call.data.get(ATTR_TITLE),
+                        poster=call.data.get(ATTR_POSTER),
+                        backdrop=call.data.get(ATTR_BACKDROP),
+                        logo=call.data.get(ATTR_LOGO),
+                        season=call.data.get(ATTR_SEASON),
+                        episode=call.data.get(ATTR_EPISODE),
+                        episode_title=call.data.get(ATTR_EPISODE_TITLE),
+                        filename=call.data.get(ATTR_FILENAME),
+                        video_size=call.data.get(ATTR_VIDEO_SIZE),
+                        addon_name=call.data.get(ATTR_ADDON_NAME),
+                        addon_logo=call.data.get(ATTR_ADDON_LOGO),
+                        stream_description=call.data.get(ATTR_STREAM_DESCRIPTION),
+                        info_hash=call.data.get(ATTR_INFO_HASH),
+                        file_idx=call.data.get(ATTR_FILE_IDX),
+                        content_language=call.data.get(ATTR_CONTENT_LANGUAGE),
+                        profile_id=profile_id,
+                    )
+                    await hass.services.async_call(
+                        "androidtv",
+                        "adb_command",
+                        {ATTR_ENTITY_ID: android_ids, "command": command},
+                        blocking=True,
+                    )
+
+                if android_remote_ids:
+                    # Android TV Remote cannot send arbitrary intent extras.
+                    # Fall back to Nuvio's title/episode stream screen.
+                    if (
+                        call.data.get(ATTR_MEDIA_TYPE)
+                        and call.data.get(ATTR_CONTENT_ID)
+                    ):
+                        uri = deep_link(
+                            call.data[ATTR_MEDIA_TYPE],
+                            call.data[ATTR_CONTENT_ID],
+                        )
+                        await hass.services.async_call(
+                            "media_player",
+                            "play_media",
+                            {
+                                ATTR_ENTITY_ID: android_remote_ids,
+                                "media_content_id": uri,
+                                "media_content_type": "url",
+                            },
+                            blocking=True,
+                        )
+                    else:
+                        raise HomeAssistantError(
+                            "Exact Nuvio internal-player launch on Android requires "
+                            "the ADB-based Android TV entity."
+                        )
+
+                if webos_ids:
+                    payload = webos_launch_payload(
+                        media_type=call.data.get(ATTR_MEDIA_TYPE) or "movie",
+                        content_id=call.data.get(ATTR_CONTENT_ID)
+                        or call.data.get(ATTR_VIDEO_ID)
+                        or "external",
+                        title=call.data.get(ATTR_TITLE),
+                        video_id=call.data.get(ATTR_VIDEO_ID),
+                        poster=call.data.get(ATTR_POSTER),
+                        backdrop=call.data.get(ATTR_BACKDROP),
+                        logo=call.data.get(ATTR_LOGO),
+                        season=call.data.get(ATTR_SEASON),
+                        episode=call.data.get(ATTR_EPISODE),
+                        episode_title=call.data.get(ATTR_EPISODE_TITLE),
+                        launch_mode="player",
+                        stream_url=stream_url,
+                        stream_title=source_title,
+                        filename=call.data.get(ATTR_FILENAME),
+                        video_size=call.data.get(ATTR_VIDEO_SIZE),
+                        addon_name=call.data.get(ATTR_ADDON_NAME),
+                        addon_logo=call.data.get(ATTR_ADDON_LOGO),
+                        stream_description=call.data.get(ATTR_STREAM_DESCRIPTION),
+                        info_hash=call.data.get(ATTR_INFO_HASH),
+                        file_idx=call.data.get(ATTR_FILE_IDX),
+                        content_language=call.data.get(ATTR_CONTENT_LANGUAGE),
+                        profile_id=profile_id,
+                    )
+                    await hass.services.async_call(
+                        "webostv",
+                        "command",
+                        {
+                            ATTR_ENTITY_ID: webos_ids,
+                            "command": "system.launcher/launch",
+                            "payload": payload,
+                        },
+                        blocking=True,
+                    )
+                return
 
             if android_ids:
                 command = direct_stream_command(
