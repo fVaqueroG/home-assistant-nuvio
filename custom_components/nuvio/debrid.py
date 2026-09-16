@@ -194,26 +194,71 @@ class DebridResolver:
         *,
         provider: str | None,
         api_key: str | None,
+        credentials: dict[str, str] | None = None,
     ) -> None:
         self._session = session
         self.provider = normalize_provider(provider)
         self.api_key = str(api_key or "").strip()
+        self._credentials: dict[str, str] = {}
+        for provider_id, credential in (credentials or {}).items():
+            normalized = normalize_provider(provider_id)
+            value = str(credential or "").strip()
+            if normalized in SUPPORTED_PROVIDERS and value:
+                self._credentials[normalized] = value
+        if self.provider in SUPPORTED_PROVIDERS and self.api_key:
+            self._credentials[self.provider] = self.api_key
         self._cache: dict[str, tuple[float, ResolvedStream]] = {}
         self._locks: dict[str, asyncio.Lock] = {}
 
     @property
     def configured(self) -> bool:
-        return self.provider in SUPPORTED_PROVIDERS and bool(self.api_key)
+        return bool(self._credentials)
+
+    @property
+    def providers(self) -> list[str]:
+        """Return configured provider IDs without exposing credentials."""
+        return list(self._credentials)
+
+    def can_resolve(self, source: dict[str, Any]) -> bool:
+        """Return whether a credential is available for this source."""
+        try:
+            self._credential_for(source)
+        except DebridNotConfigured:
+            return False
+        return True
+
+    def _credential_for(self, source: dict[str, Any]) -> tuple[str, str]:
+        requested = normalize_provider(source.get("resolver_service"))
+        if requested:
+            api_key = self._credentials.get(requested)
+            if api_key:
+                return requested, api_key
+            raise DebridNotConfigured(
+                f"This source expects {requested}, but that credential is not available."
+            )
+
+        if self.provider in self._credentials:
+            return self.provider, self._credentials[self.provider]
+
+        for candidate in (TORBOX, PREMIUMIZE, REAL_DEBRID):
+            api_key = self._credentials.get(candidate)
+            if api_key:
+                return candidate, api_key
+
+        raise DebridNotConfigured(
+            "No debrid credential is available for this source."
+        )
 
     def _cache_key(
         self,
         source: dict[str, Any],
         season: int | None,
         episode: int | None,
+        provider: str,
     ) -> str:
         return "|".join(
             (
-                self.provider,
+                provider,
                 str(source.get("info_hash") or source.get("magnet_uri") or "").lower(),
                 str(source.get("file_idx") if source.get("file_idx") is not None else ""),
                 str(source.get("filename") or "").lower(),
@@ -262,18 +307,9 @@ class DebridResolver:
         episode: int | None = None,
     ) -> ResolvedStream:
         """Resolve one Nuvio source to a direct URL."""
-        if not self.configured:
-            raise DebridNotConfigured(
-                "Configure a debrid provider and API key in the Nuvio integration."
-            )
+        provider, api_key = self._credential_for(source)
 
-        requested = normalize_provider(source.get("resolver_service"))
-        if requested and requested != self.provider:
-            raise DebridNotConfigured(
-                f"This source expects {requested}, but {self.provider} is configured."
-            )
-
-        cache_key = self._cache_key(source, season, episode)
+        cache_key = self._cache_key(source, season, episode, provider)
         cached = self._cache.get(cache_key)
         now = time.monotonic()
         if cached and now - cached[0] < CACHE_TTL:
@@ -286,12 +322,12 @@ class DebridResolver:
             if cached and now - cached[0] < CACHE_TTL:
                 return cached[1]
 
-            if self.provider == REAL_DEBRID:
-                result = await self._resolve_real_debrid(source, season, episode)
-            elif self.provider == TORBOX:
-                result = await self._resolve_torbox(source, season, episode)
-            elif self.provider == PREMIUMIZE:
-                result = await self._resolve_premiumize(source, season, episode)
+            if provider == REAL_DEBRID:
+                result = await self._resolve_real_debrid(source, season, episode, api_key)
+            elif provider == TORBOX:
+                result = await self._resolve_torbox(source, season, episode, api_key)
+            elif provider == PREMIUMIZE:
+                result = await self._resolve_premiumize(source, season, episode, api_key)
             else:
                 raise DebridNotConfigured("Unsupported debrid provider.")
 
@@ -303,12 +339,13 @@ class DebridResolver:
         source: dict[str, Any],
         season: int | None,
         episode: int | None,
+        api_key: str,
     ) -> ResolvedStream:
         magnet = _magnet_uri(source)
         if not magnet:
             raise DebridResolveError("This source does not contain a torrent hash or magnet link.")
 
-        headers = {"Authorization": f"Bearer {self.api_key}"}
+        headers = {"Authorization": f"Bearer {api_key}"}
         status, add = await self._json(
             "POST",
             f"{REAL_DEBRID_BASE}/torrents/addMagnet",
@@ -407,12 +444,13 @@ class DebridResolver:
         source: dict[str, Any],
         season: int | None,
         episode: int | None,
+        api_key: str,
     ) -> ResolvedStream:
         magnet = _magnet_uri(source)
         if not magnet:
             raise DebridResolveError("This source does not contain a torrent hash or magnet link.")
 
-        headers = {"Authorization": f"Bearer {self.api_key}"}
+        headers = {"Authorization": f"Bearer {api_key}"}
         form = FormData()
         form.add_field("magnet", magnet, content_type="text/plain")
         form.add_field("add_only_if_cached", "true", content_type="text/plain")
@@ -468,7 +506,7 @@ class DebridResolver:
             f"{TORBOX_BASE}/v1/api/torrents/requestdl",
             headers=headers,
             params={
-                "token": self.api_key,
+                "token": api_key,
                 "torrent_id": torrent_id_int,
                 "file_id": file_id,
                 "zip_link": "false",
@@ -492,12 +530,13 @@ class DebridResolver:
         source: dict[str, Any],
         season: int | None,
         episode: int | None,
+        api_key: str,
     ) -> ResolvedStream:
         magnet = _magnet_uri(source)
         if not magnet:
             raise DebridResolveError("This source does not contain a torrent hash or magnet link.")
 
-        headers = {"Authorization": f"Bearer {self.api_key}"}
+        headers = {"Authorization": f"Bearer {api_key}"}
         status, body = await self._json(
             "POST",
             f"{PREMIUMIZE_BASE}/api/transfer/directdl",
