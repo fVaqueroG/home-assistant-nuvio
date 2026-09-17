@@ -172,7 +172,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
             )
         except NuvioAuthError:
             synced_debrid_credentials = {}
-        manifest_urls = list(dict.fromkeys([*account_manifest_urls, *manifest_urls]))
+        if account_manifest_urls:
+            # Match Nuvio itself: the selected profile's enabled/sorted addon
+            # list is authoritative. Configured manifests remain a fallback if
+            # account sync fails or returns nothing.
+            manifest_urls = list(dict.fromkeys(account_manifest_urls))
 
     entry.runtime_data = {
         DATA_API: NuvioApi(session, manifest_urls),
