@@ -231,6 +231,56 @@ class NuvioAccountApi:
         return [item for item in data or [] if isinstance(item, dict)]
 
 
+    async def async_home_catalog_settings(self, profile_id: int) -> dict[str, Any]:
+        """Return the shared Nuvio Home catalog ordering/settings for a profile."""
+        data = await self._request(
+            "POST",
+            "/rest/v1/rpc/sync_pull_home_catalog_settings",
+            json={
+                "p_profile_id": profile_id,
+                "p_platform": "home_catalog_shared",
+            },
+            authenticated=True,
+        )
+        payload = data[0] if isinstance(data, list) and data else data
+        if not isinstance(payload, dict):
+            return {}
+        settings = payload.get("settings_json") or payload.get("settingsJson") or payload
+        return settings if isinstance(settings, dict) else {}
+
+    async def async_profile_settings_blob(self, profile_id: int) -> dict[str, Any]:
+        """Return Nuvio's synced TV profile settings blob."""
+        data = await self._request(
+            "POST",
+            "/rest/v1/rpc/sync_pull_profile_settings_blob",
+            json={
+                "p_profile_id": profile_id,
+                "p_platform": "tv",
+            },
+            authenticated=True,
+        )
+        payload = data[0] if isinstance(data, list) and data else data
+        if not isinstance(payload, dict):
+            return {}
+        settings = payload.get("settings_json") or payload.get("settingsJson")
+        return settings if isinstance(settings, dict) else {}
+
+    async def async_collections(self, profile_id: int) -> list[dict[str, Any]]:
+        """Return synced Nuvio Home collections for a profile."""
+        data = await self._request(
+            "POST",
+            "/rest/v1/rpc/sync_pull_collections",
+            json={"p_profile_id": profile_id},
+            authenticated=True,
+        )
+        payload = data[0] if isinstance(data, list) and data else data
+        if not isinstance(payload, dict):
+            return []
+        raw = payload.get("collections_json") or payload.get("collectionsJson") or []
+        if isinstance(raw, list):
+            return [item for item in raw if isinstance(item, dict)]
+        return []
+
     async def async_provider_credentials(self, profile_id: int) -> dict[str, str]:
         """Return synced debrid credentials for a Nuvio profile.
 
