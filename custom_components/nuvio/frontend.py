@@ -114,7 +114,7 @@ def _layout_settings(blob: dict[str, Any]) -> dict[str, Any]:
     return {str(key): _decode_synced_value(value) for key, value in raw.items()}
 
 
-def _string_list(value: Any) -> list[str]:
+def _home_string_list(value: Any) -> list[str]:
     value = _decode_synced_value(value)
     if isinstance(value, list):
         return [str(item).strip() for item in value if str(item).strip()]
@@ -192,7 +192,7 @@ def _home_catalog_preferences(settings: dict[str, Any]) -> dict[str, Any]:
             "catalog_order",
             "order",
         ):
-            order = _string_list(settings.get(key))
+            order = _home_string_list(settings.get(key))
             if order:
                 break
         disabled_list: list[str] = []
@@ -203,7 +203,7 @@ def _home_catalog_preferences(settings: dict[str, Any]) -> dict[str, Any]:
             "home_catalog_disabled",
             "disabled",
         ):
-            disabled_list = _string_list(settings.get(key))
+            disabled_list = _home_string_list(settings.get(key))
             if disabled_list:
                 break
         disabled = set(disabled_list)
@@ -407,7 +407,11 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
             if not media_type or not catalog_id:
                 continue
             key = _catalog_key(addon, media_type, catalog_id)
-            if key in home_prefs["disabled"]:
+            disable_key = (
+                f"{addon.base_url}_{media_type}_{catalog_id}_"
+                f"{str(catalog.get('name') or catalog_id)}"
+            )
+            if key in home_prefs["disabled"] or disable_key in home_prefs["disabled"]:
                 continue
             catalog_specs.append(
                 (addon, catalog, media_type, catalog_id, key, manifest_index)
