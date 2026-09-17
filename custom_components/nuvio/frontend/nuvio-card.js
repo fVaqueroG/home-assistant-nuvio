@@ -2,7 +2,7 @@ class NuvioCard extends HTMLElement {
   constructor(){
     super(); this.attachShadow({mode:"open"});
     this._config={}; this._hass=null; this._loaded=false; this._loading=false;
-    this._sections=[]; this._results=[]; this._playersMeta=[]; this._playerId=""; this._streams=[]; this._streamLoading=false; this._streamContext=null; this._debridMeta={configured:false,provider:""}; this._resolving=new Set(); this._remoteExpanded=false; this._view="home"; this._item=null; this._details=null; this._season=null; this._query=""; this._error="";
+    this._sections=[]; this._homePrefs={}; this._results=[]; this._playersMeta=[]; this._playerId=""; this._streams=[]; this._streamLoading=false; this._streamContext=null; this._debridMeta={configured:false,provider:""}; this._resolving=new Set(); this._remoteExpanded=false; this._view="home"; this._item=null; this._details=null; this._season=null; this._query=""; this._error="";
   }
   static getStubConfig(){ return {title:"Nuvio",columns:6,show_remote:true,remote_side:"left"}; }
   setConfig(c){ this._config=Object.assign({title:"Nuvio",columns:6,show_search:true,show_remote:true,remote_side:"left"},c||{}); this.render(); }
@@ -15,7 +15,7 @@ class NuvioCard extends HTMLElement {
   player(){ var s=this.shadowRoot&&this.shadowRoot.querySelector("#player"); return this._playerId||(s&&s.value)||this._config.default_player||this._config.entity||this.players()[0]||""; }
   async loadHome(refresh=false){
     if(!this._hass)return; this._loading=true; this._error=""; this.render();
-    try{ var r=await this.ws({type:"nuvio/home",refresh:refresh}); this._sections=r.sections||[]; this._playersMeta=r.players||[]; if(!this._playerId)this._playerId=this._config.default_player||this._config.entity||this.players()[0]||""; this._loaded=true; }
+    try{ var r=await this.ws({type:"nuvio/home",refresh:refresh}); this._sections=r.sections||[]; this._homePrefs=r.preferences||{}; this._playersMeta=r.players||[]; if(!this._playerId)this._playerId=this._config.default_player||this._config.entity||this.players()[0]||""; this._loaded=true; }
     catch(e){ this._error=e.message||"Could not load Nuvio."; }
     this._loading=false; this.render();
   }
@@ -185,10 +185,33 @@ class NuvioCard extends HTMLElement {
     var u=i.poster||i.background;
     return u?'<img loading="lazy" src="'+this.esc(u)+'" alt="">':'<div class="ph"><ha-icon icon="mdi:movie-open"></ha-icon></div>';
   }
-  card(i,source,index){
+  homeTypeLabel(type){
+    var t=String(type||"movie").trim().toLowerCase();
+    if(t==="movie"||t==="movies")return "Movie";
+    if(t==="series"||t==="tv"||t==="shows")return "Series";
+    if(t==="channel"||t==="channels"||t==="live"||t==="tvchannel"||t==="tvchannels")return "Channels";
+    if(t==="anime")return "Anime";
+    return t?t.charAt(0).toUpperCase()+t.slice(1):"Movie";
+  }
+  homeRowTitle(section){
+    var raw=String(section&&section.name||"").trim();
+    if(!section||section.kind!=="catalog")return raw;
+    var base=raw?raw.charAt(0).toUpperCase()+raw.slice(1):"";
+    var typeLabel=this.homeTypeLabel(section.media_type);
+    if(!base)return typeLabel;
+    if(this._homePrefs.show_catalog_type_suffix===false)return base;
+    var rawType=String(section.media_type||"movie").trim();
+    var rawLabel=rawType?rawType.charAt(0).toUpperCase()+rawType.slice(1):"Movie";
+    var lower=base.toLowerCase();
+    if(lower.endsWith(typeLabel.toLowerCase())||lower.endsWith(rawLabel.toLowerCase()))return base;
+    return base+" - "+typeLabel;
+  }
+  card(i,source,index,options={}){
     var progress=i.duration>0?Math.min(100,Math.max(0,(i.position/i.duration)*100)):0;
     var ep=(i.season!=null&&i.episode!=null)?'<span>S'+this.esc(i.season)+' E'+this.esc(i.episode)+'</span>':"";
-    return '<button class="pc" data-source="'+source+'" data-index="'+index+'"><div class="poster">'+this.poster(i)+(progress?'<div class="prog"><i style="width:'+progress+'%"></i></div>':"")+'</div><div class="pt">'+this.esc(i.name)+'</div><div class="meta">'+this.esc(i.releaseInfo||"")+ep+'</div></button>';
+    var showLabels=options.showLabels!==false;
+    var labelHtml=showLabels?'<div class="pt">'+this.esc(i.name)+'</div><div class="meta">'+this.esc(i.releaseInfo||"")+ep+'</div>':"";
+    return '<button class="pc" data-source="'+source+'" data-index="'+index+'"><div class="poster">'+this.poster(i)+(progress?'<div class="prog"><i style="width:'+progress+'%"></i></div>':"")+'</div>'+labelHtml+'</button>';
   }
   header(){
     var s=this._config.show_search===false?"":'<div class="search"><ha-icon icon="mdi:magnify"></ha-icon><input id="search" value="'+this.esc(this._query)+'" placeholder="Search Nuvio…"></div>';
@@ -197,8 +220,15 @@ class NuvioCard extends HTMLElement {
   }
   home(){
     if(this._loading&&!this._loaded)return '<div class="status">Loading Nuvio…</div>';
-    if(!this._sections.length)return '<div class="status">No Nuvio catalogs were returned.</div>';
-    return this._sections.map((s,si)=>'<section><h3>'+this.esc(s.name)+(s.addon?' <small>· '+this.esc(s.addon)+'</small>':"")+'</h3><div class="rail">'+(s.items||[]).map((x,i)=>this.card(x,"s"+si,i)).join("")+'</div></section>').join("");
+    if(!this._sections.length)return '<div class="status">No Nuvio Home catalogs were returned.</div>';
+    return this._sections.map((s,si)=>{
+      var title=this.homeRowTitle(s);
+      var addon=(s.kind==="catalog"&&this._homePrefs.show_catalog_addon_name!==false&&s.addon)
+        ? '<small>from '+this.esc(s.addon)+'</small>'
+        : "";
+      var showLabels=s.kind!=="catalog"||this._homePrefs.show_poster_labels!==false;
+      return '<section><h3>'+this.esc(title)+(addon?' '+addon:"")+'</h3><div class="rail">'+(s.items||[]).map((x,i)=>this.card(x,"s"+si,i,{showLabels:showLabels})).join("")+'</div></section>';
+    }).join("");
   }
   searchView(){
     var cols=Number(this._config.columns)||6;
@@ -482,4 +512,4 @@ class NuvioCard extends HTMLElement {
 if(!customElements.get("nuvio-card"))customElements.define("nuvio-card",NuvioCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==="nuvio-card"))window.customCards.push({type:"nuvio-card",name:"Nuvio",description:"Browse, search and play your Nuvio catalog.",preview:true});
-console.info("NUVIO-CARD v0.4.12");
+console.info("NUVIO-CARD v0.4.13");
