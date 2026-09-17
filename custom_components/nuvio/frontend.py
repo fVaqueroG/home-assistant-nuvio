@@ -264,8 +264,12 @@ def _dedupe_catalog_items(
     seen: set[str] = set()
     now = datetime.now(UTC)
     for meta in metas:
-        content_id = str(meta.get("id") or "").strip()
-        name = str(meta.get("name") or "").strip()
+        raw_id = meta.get("id")
+        raw_name = meta.get("name")
+        if not isinstance(raw_id, str) or not isinstance(raw_name, str):
+            continue
+        content_id = raw_id.strip()
+        name = raw_name.strip()
         if not content_id or not name or content_id in seen:
             continue
         if hide_unreleased and _is_unreleased(meta, now):
@@ -317,9 +321,10 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
 
     layout = _layout_settings(profile_settings)
     home_prefs = _home_catalog_preferences(home_settings)
-    hide_unreleased = bool(
-        home_prefs["hide_unreleased_content"]
-        or layout.get("hide_unreleased_content", False)
+    hide_unreleased = (
+        bool(home_settings.get("hide_unreleased_content"))
+        if "hide_unreleased_content" in home_settings
+        else bool(layout.get("hide_unreleased_content", False))
     )
 
     # Nuvio renders Continue Watching independently before catalog rows. It
