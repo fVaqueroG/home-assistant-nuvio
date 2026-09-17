@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 from pathlib import Path
 import re
 import time
@@ -42,94 +43,386 @@ def _entry(hass: HomeAssistant):
 
 
 def _item(meta: dict[str, Any], media_type: str, manifest_url: str | None = None) -> dict[str, Any]:
-    result = {
+    """Map addon/account metadata using the same Home fields Nuvio renders."""
+    return {
         "id": str(meta.get("id") or meta.get("content_id") or ""),
         "type": str(meta.get("type") or meta.get("content_type") or media_type),
         "name": str(meta.get("name") or meta.get("title") or meta.get("content_id") or ""),
         "poster": meta.get("poster"),
+        "posterShape": meta.get("posterShape") or meta.get("poster_shape"),
+        "landscapePoster": meta.get("landscapePoster") or meta.get("landscape_poster"),
         "background": meta.get("background") or meta.get("backdrop"),
         "logo": meta.get("logo"),
         "description": meta.get("description"),
         "releaseInfo": meta.get("releaseInfo") or meta.get("release_info"),
+        "released": meta.get("released") or meta.get("release_date"),
+        "imdbRating": meta.get("imdbRating") or meta.get("imdb_rating"),
+        "runtime": meta.get("runtime"),
         "genres": meta.get("genres") or [],
         "manifest_url": manifest_url,
     }
+
+
+def _addon_id(addon: Addon) -> str:
+    return str(addon.manifest.get("id") or addon.base_url).strip()
+
+
+def _catalog_key(addon: Addon, media_type: str, catalog_id: str) -> str:
+    return f"{_addon_id(addon)}_{media_type}_{catalog_id}"
+
+
+def _truthy_required(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return str(value or "").strip().casefold() == "true"
+
+
+def _catalog_should_show_on_home(catalog: dict[str, Any]) -> bool:
+    """Mirror Nuvio's catalogShouldShowOnHome()."""
+    if "showInHome" in catalog and catalog.get("showInHome") is not True:
+        return False
+    for extra in catalog.get("extra") or []:
+        if not isinstance(extra, dict):
+            continue
+        if (
+            str(extra.get("name") or "").strip().casefold() == "search"
+            and _truthy_required(extra.get("isRequired"))
+        ):
+            return False
+    return True
+
+
+def _decode_synced_value(value: Any) -> Any:
+    if (
+        isinstance(value, dict)
+        and isinstance(value.get("type"), str)
+        and "value" in value
+    ):
+        return value.get("value")
+    return value
+
+
+def _layout_settings(blob: dict[str, Any]) -> dict[str, Any]:
+    features = blob.get("features")
+    if not isinstance(features, dict):
+        return {}
+    raw = features.get("layout_settings")
+    if not isinstance(raw, dict):
+        return {}
+    return {str(key): _decode_synced_value(value) for key, value in raw.items()}
+
+
+def _string_list(value: Any) -> list[str]:
+    value = _decode_synced_value(value)
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str) and value.strip():
+        text = value.strip()
+        if text.startswith("[") and text.endswith("]"):
+            try:
+                import json
+                parsed = json.loads(text)
+                if isinstance(parsed, list):
+                    return [str(item).strip() for item in parsed if str(item).strip()]
+            except (TypeError, ValueError):
+                pass
+        return [text]
+    return []
+
+
+def _home_catalog_preferences(settings: dict[str, Any]) -> dict[str, Any]:
+    """Normalize current and legacy Nuvio Home catalog settings."""
+    items = settings.get("items")
+    normalized_items: list[dict[str, Any]] = []
+    if isinstance(items, list):
+        for fallback_order, item in enumerate(items):
+            if not isinstance(item, dict):
+                continue
+            is_collection = bool(item.get("is_collection") or item.get("isCollection"))
+            if is_collection:
+                collection_id = str(
+                    item.get("collection_id") or item.get("collectionId") or ""
+                ).strip()
+                key = f"collection_{collection_id}" if collection_id else ""
+            else:
+                addon_id = str(item.get("addon_id") or item.get("addonId") or "").strip()
+                media_type = str(item.get("type") or "").strip()
+                catalog_id = str(
+                    item.get("catalog_id") or item.get("catalogId") or ""
+                ).strip()
+                key = (
+                    f"{addon_id}_{media_type}_{catalog_id}"
+                    if addon_id and media_type and catalog_id
+                    else ""
+                )
+            if not key:
+                continue
+            try:
+                order = int(item.get("order", fallback_order))
+            except (TypeError, ValueError):
+                order = fallback_order
+            normalized_items.append(
+                {
+                    "key": key,
+                    "enabled": item.get("enabled") is not False,
+                    "order": order,
+                    "custom_title": str(
+                        item.get("custom_title") or item.get("customTitle") or ""
+                    ).strip(),
+                    "is_collection": is_collection,
+                }
+            )
+        normalized_items.sort(key=lambda item: item["order"])
+
+    if normalized_items:
+        order = [item["key"] for item in normalized_items]
+        disabled = {item["key"] for item in normalized_items if not item["enabled"]}
+        custom_titles = {
+            item["key"]: item["custom_title"]
+            for item in normalized_items
+            if item["custom_title"]
+        }
+    else:
+        order = []
+        for key in (
+            "catalog_order_keys",
+            "home_catalog_order",
+            "catalog_order",
+            "order",
+        ):
+            order = _string_list(settings.get(key))
+            if order:
+                break
+        disabled_list: list[str] = []
+        for key in (
+            "disabled_catalog_keys",
+            "hidden_catalog_keys",
+            "catalog_disabled_keys",
+            "home_catalog_disabled",
+            "disabled",
+        ):
+            disabled_list = _string_list(settings.get(key))
+            if disabled_list:
+                break
+        disabled = set(disabled_list)
+        custom_titles = {}
+
+    return {
+        "order": order,
+        "disabled": disabled,
+        "custom_titles": custom_titles,
+        "hide_unreleased_content": bool(settings.get("hide_unreleased_content", False)),
+    }
+
+
+def _parse_release_instant(value: Any) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    candidate = text
+    if len(candidate) >= 10 and candidate[4:5] == "-" and candidate[7:8] == "-":
+        # Nuvio treats plain release dates as midnight and timestamps as their
+        # actual instant. UTC is sufficient for Home's release-date filtering.
+        if len(candidate) == 10:
+            candidate += "T00:00:00+00:00"
+        elif candidate.endswith("Z"):
+            candidate = candidate[:-1] + "+00:00"
+        try:
+            parsed = datetime.fromisoformat(candidate)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+            return parsed.astimezone(UTC)
+        except ValueError:
+            return None
+    return None
+
+
+def _is_unreleased(meta: dict[str, Any], now: datetime | None = None) -> bool:
+    """Mirror Nuvio Home's release filtering."""
+    now = now or datetime.now(UTC)
+    for value in (meta.get("released"), meta.get("releaseInfo"), meta.get("release_info")):
+        parsed = _parse_release_instant(value)
+        if parsed is not None:
+            return parsed > now
+    release_info = str(meta.get("releaseInfo") or meta.get("release_info") or "")
+    match = re.search(r"\\b(19|20)\\d{2}\\b", release_info)
+    return bool(match and int(match.group(0)) > now.year)
+
+
+def _dedupe_catalog_items(
+    metas: list[dict[str, Any]],
+    media_type: str,
+    manifest_url: str,
+    *,
+    hide_unreleased: bool,
+    limit: int = 15,
+) -> list[dict[str, Any]]:
+    """Match Nuvio's Home mapper: require id/name and keep first duplicate id."""
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    now = datetime.now(UTC)
+    for meta in metas:
+        content_id = str(meta.get("id") or "").strip()
+        name = str(meta.get("name") or "").strip()
+        if not content_id or not name or content_id in seen:
+            continue
+        if hide_unreleased and _is_unreleased(meta, now):
+            continue
+        seen.add(content_id)
+        result.append(_item(meta, media_type, manifest_url))
+        if len(result) >= limit:
+            break
     return result
 
 
 async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]:
     domain_data = hass.data.setdefault(DOMAIN, {})
     cached = domain_data.get(DATA_HOME_CACHE)
-    now = time.monotonic()
-    if not refresh and cached is not None and now - cached[0] < HOME_CACHE_TTL:
+    now_monotonic = time.monotonic()
+    if not refresh and cached is not None and now_monotonic - cached[0] < HOME_CACHE_TTL:
         return cached[1]
 
     entry = _entry(hass)
     api = entry.runtime_data[DATA_API]
     account = entry.runtime_data.get(DATA_ACCOUNT_API)
     sections: list[dict[str, Any]] = []
+    home_settings: dict[str, Any] = {}
+    profile_settings: dict[str, Any] = {}
+    collections: list[dict[str, Any]] = []
+    profile_id = int(entry.data.get(CONF_PROFILE_ID, 1))
 
+    library: list[dict[str, Any]] = []
+    progress: list[dict[str, Any]] = []
     if account is not None:
-        profile_id = int(entry.data.get(CONF_PROFILE_ID, 1))
-        try:
-            library, progress = await asyncio.gather(
-                account.async_library(profile_id),
-                account.async_watch_progress(profile_id),
-            )
-            lib_index = {
-                (str(x.get("content_type")), str(x.get("content_id"))): x for x in library
-            }
-            active = [
-                p for p in progress
-                if int(p.get("duration") or 0) > 0
-                and int(p.get("position") or 0) < int(p.get("duration") or 0) * 0.95
-            ]
-            active.sort(key=lambda x: int(x.get("last_watched") or 0), reverse=True)
-            continue_items = []
-            for p in active[:20]:
-                media_type = str(p.get("content_type") or "movie")
-                content_id = str(p.get("content_id") or "")
-                meta = lib_index.get((media_type, content_id), {})
-                addon_base = meta.get("addon_base_url")
-                item = _item(
-                    {**meta, "id": content_id, "type": media_type},
-                    media_type,
-                    f"{str(addon_base).rstrip('/')}/manifest.json" if addon_base else None,
-                )
-                item.update({
-                    "season": p.get("season"),
-                    "episode": p.get("episode"),
-                    "video_id": p.get("video_id"),
-                    "position": p.get("position"),
-                    "duration": p.get("duration"),
-                })
-                continue_items.append(item)
-            if continue_items:
-                sections.append({"id": "continue", "name": "Continue Watching", "items": continue_items})
+        results = await asyncio.gather(
+            account.async_library(profile_id),
+            account.async_watch_progress(profile_id),
+            account.async_home_catalog_settings(profile_id),
+            account.async_profile_settings_blob(profile_id),
+            account.async_collections(profile_id),
+            return_exceptions=True,
+        )
+        if not isinstance(results[0], Exception):
+            library = results[0]
+        if not isinstance(results[1], Exception):
+            progress = results[1]
+        if not isinstance(results[2], Exception):
+            home_settings = results[2]
+        if not isinstance(results[3], Exception):
+            profile_settings = results[3]
+        if not isinstance(results[4], Exception):
+            collections = results[4]
 
-            library_items = []
-            for meta in sorted(library, key=lambda x: int(x.get("added_at") or 0), reverse=True)[:30]:
-                media_type = str(meta.get("content_type") or "movie")
-                addon_base = meta.get("addon_base_url")
-                library_items.append(_item(
-                    meta,
-                    media_type,
-                    f"{str(addon_base).rstrip('/')}/manifest.json" if addon_base else None,
-                ))
-            if library_items:
-                sections.append({"id": "library", "name": "My Library", "items": library_items})
-        except NuvioAuthError:
-            pass
+    layout = _layout_settings(profile_settings)
+    home_prefs = _home_catalog_preferences(home_settings)
+    hide_unreleased = bool(
+        home_prefs["hide_unreleased_content"]
+        or layout.get("hide_unreleased_content", False)
+    )
 
-    catalog_specs: list[tuple[Addon, dict[str, Any], str, str]] = []
-    for addon in await api.async_addons():
-        for catalog in addon.manifest.get("catalogs", []):
-            if not isinstance(catalog, dict):
+    # Nuvio renders Continue Watching independently before catalog rows. It
+    # does not inject "My Library" as a Home row.
+    if progress:
+        lib_index = {
+            (str(x.get("content_type")), str(x.get("content_id"))): x for x in library
+        }
+        active = []
+        for item in progress:
+            try:
+                duration = int(item.get("duration") or item.get("duration_ms") or 0)
+                position = int(item.get("position") or item.get("position_ms") or 0)
+            except (TypeError, ValueError):
                 continue
-            media_type = str(catalog.get("type") or "")
-            catalog_id = str(catalog.get("id") or "")
-            if media_type in {"movie", "series"} and catalog_id:
-                catalog_specs.append((addon, catalog, media_type, catalog_id))
+            if duration <= 0 or position <= 0 or position >= duration * 0.95:
+                continue
+            active.append(item)
+        active.sort(
+            key=lambda item: int(
+                item.get("last_watched")
+                or item.get("updated_at")
+                or item.get("updatedAt")
+                or 0
+            ),
+            reverse=True,
+        )
+        continue_items: list[dict[str, Any]] = []
+        for progress_item in active[:30]:
+            media_type = str(progress_item.get("content_type") or "movie")
+            content_id = str(progress_item.get("content_id") or "")
+            meta = lib_index.get((media_type, content_id), {})
+            addon_base = meta.get("addon_base_url") or progress_item.get("addon_base_url")
+            item = _item(
+                {
+                    **meta,
+                    "id": content_id,
+                    "type": media_type,
+                    "name": (
+                        meta.get("name")
+                        or meta.get("title")
+                        or progress_item.get("title")
+                        or content_id
+                    ),
+                    "poster": meta.get("poster") or progress_item.get("poster"),
+                    "background": (
+                        meta.get("background")
+                        or progress_item.get("background")
+                        or progress_item.get("backdrop")
+                    ),
+                },
+                media_type,
+                f"{str(addon_base).rstrip('/')}/manifest.json" if addon_base else None,
+            )
+            item.update(
+                {
+                    "season": progress_item.get("season"),
+                    "episode": progress_item.get("episode"),
+                    "video_id": progress_item.get("video_id"),
+                    "position": progress_item.get("position")
+                    or progress_item.get("position_ms"),
+                    "duration": progress_item.get("duration")
+                    or progress_item.get("duration_ms"),
+                }
+            )
+            continue_items.append(item)
+        if continue_items:
+            sections.append(
+                {
+                    "id": "continue",
+                    "kind": "continue",
+                    "name": "Continue Watching",
+                    "items": continue_items,
+                }
+            )
+
+    catalog_specs: list[tuple[Addon, dict[str, Any], str, str, str, int]] = []
+    manifest_index = 0
+    for addon in await api.async_addons(refresh=refresh):
+        for catalog in addon.manifest.get("catalogs", []):
+            if not isinstance(catalog, dict) or not _catalog_should_show_on_home(catalog):
+                continue
+            media_type = str(catalog.get("type") or "").strip()
+            catalog_id = str(catalog.get("id") or "").strip()
+            if not media_type or not catalog_id:
+                continue
+            key = _catalog_key(addon, media_type, catalog_id)
+            if key in home_prefs["disabled"]:
+                continue
+            catalog_specs.append(
+                (addon, catalog, media_type, catalog_id, key, manifest_index)
+            )
+            manifest_index += 1
+
+    order_index = {
+        key: index for index, key in enumerate(home_prefs["order"])
+    }
+    catalog_specs.sort(
+        key=lambda spec: (
+            order_index.get(spec[4], len(order_index) + spec[5]),
+            spec[5],
+        )
+    )
 
     semaphore = asyncio.Semaphore(8)
 
@@ -138,34 +431,47 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
         catalog: dict[str, Any],
         media_type: str,
         catalog_id: str,
+        key: str,
+        _manifest_index: int,
     ) -> dict[str, Any] | None:
         try:
             async with semaphore:
                 metas = await api.async_catalog(addon, media_type, catalog_id)
         except NuvioApiError:
             return None
-        items = [_item(meta, media_type, addon.manifest_url) for meta in metas[:20]]
+        items = _dedupe_catalog_items(
+            metas,
+            media_type,
+            addon.manifest_url,
+            hide_unreleased=hide_unreleased,
+            limit=15,
+        )
         if not items:
             return None
         return {
-            "id": f"{addon.name}:{media_type}:{catalog_id}",
-            "name": str(catalog.get("name") or catalog_id),
+            "id": key,
+            "kind": "catalog",
+            "name": home_prefs["custom_titles"].get(key)
+            or str(catalog.get("name") or catalog_id),
             "addon": addon.name,
+            "addon_id": _addon_id(addon),
             "media_type": media_type,
+            "catalog_id": catalog_id,
             "items": items,
         }
 
     catalog_sections = await asyncio.gather(
-        *(
-            load_section(addon, catalog, media_type, catalog_id)
-            for addon, catalog, media_type, catalog_id in catalog_specs
-        )
+        *(load_section(*spec) for spec in catalog_specs)
     )
     sections.extend(section for section in catalog_sections if section is not None)
+
     registry = async_get_entity_registry(hass)
     players: list[dict[str, Any]] = []
     for entity in registry.entities.values():
-        if entity.domain != "media_player" or entity.platform not in {"androidtv", "androidtv_remote", "webostv"}:
+        if (
+            entity.domain != "media_player"
+            or entity.platform not in {"androidtv", "androidtv_remote", "webostv"}
+        ):
             continue
         state = hass.states.get(entity.entity_id)
         if state is None:
@@ -178,8 +484,24 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
             }
         )
     players.sort(key=lambda value: value["name"].casefold())
-    result = {"sections": sections, "players": players}
-    domain_data[DATA_HOME_CACHE] = (now, result)
+
+    selected_layout = str(layout.get("selected_layout") or "MODERN").strip().casefold()
+    preferences = {
+        "layout": selected_layout,
+        "show_poster_labels": layout.get("poster_labels_enabled", True) is not False,
+        "show_catalog_addon_name": (
+            selected_layout == "classic"
+            and layout.get("catalog_addon_name_enabled", True) is not False
+        ),
+        "show_catalog_type_suffix": layout.get("catalog_type_suffix_enabled", True) is not False,
+        "hide_unreleased_content": hide_unreleased,
+        "synced_home_settings": bool(home_settings),
+        # Exposed so the frontend can be explicit about app-only collection
+        # rows until their provider-specific drill-down is mirrored as well.
+        "collection_count": len(collections),
+    }
+    result = {"sections": sections, "players": players, "preferences": preferences}
+    domain_data[DATA_HOME_CACHE] = (now_monotonic, result)
     return result
 
 
