@@ -31,8 +31,8 @@ an Android TV / Google TV device.
    code, and return to Home Assistant to select **Submit**.
 6. Pick the Nuvio package installed on the TV. Play Store builds normally use
    `com.nuvio.app`; standard GitHub/release builds use `com.nuvio.tv`. The
-   HA-compatible fullDebug APK built by `fVaqueroG/NuvioTV` uses
-   `com.nuviodebug.com`, allowing it to coexist with the normal app.
+   HA-compatible Android build published by `fVaqueroG/NuvioTV` uses
+   `com.nuvio.tv.ha`, allowing it to coexist with the official app.
 
 ### HACS custom repository
 
@@ -59,12 +59,14 @@ player for the exact source selected in the card.
 
 For exact **Play in Nuvio** behavior, install the matching fork build:
 
-- Android TV: `fVaqueroG/NuvioTV` → **HA Direct Play Test Build** artifact
-  `nuvio-ha-direct-play-android`. The fullDebug APK package is
-  `com.nuviodebug.com`; set this value in **Nuvio → Reconfigure → Package name**.
+- Android TV: `fVaqueroG/NuvioTV` → **HA Direct Play Android Build**. The
+  Obtainium-compatible APK package is `com.nuvio.tv.ha`; set this value in
+  **Nuvio → Reconfigure → Package name**. The workflow publishes normal GitHub
+  Releases when the persistent signing-key secret is configured, so Obtainium
+  can install and update the fork directly from the repository.
 - LG webOS: `fVaqueroG/NuvioTVSmart` → **HA Direct Play webOS Build** artifact
   `nuvio-ha-direct-play-webos`. Its application id remains
-  `space.nuvio.webos`.
+  `space.nuvio.webos` and the fork also publishes a Homebrew Channel feed.
 
 These builds accept `launchMode=player` and the exact resolved `streamUrl`.
 Android also receives the selected HA profile id and stream metadata. webOS
