@@ -30,7 +30,9 @@ an Android TV / Google TV device.
    the displayed Nuvio authorization URL (or scan its QR code), approve the
    code, and return to Home Assistant to select **Submit**.
 6. Pick the Nuvio package installed on the TV. Play Store builds normally use
-   `com.nuvio.app`; GitHub/sideload builds normally use `com.nuvio.tv`.
+   `com.nuvio.app`; standard GitHub/release builds use `com.nuvio.tv`. The
+   HA-compatible fullDebug APK built by `fVaqueroG/NuvioTV` uses
+   `com.nuviodebug.com`, allowing it to coexist with the normal app.
 
 ### HACS custom repository
 
@@ -47,15 +49,27 @@ the device. The `nuvio.play` action sends Nuvio's explicit Android intent throug
 `androidtv.adb_command`.
 
 For **LG webOS**, configure Home Assistant's **LG webOS TV** integration and install
-Nuvio TV (`space.nuvio.webos`) on the television. The Nuvio card detects webOS
-players and launches Nuvio TV through `webostv.command` using
-`system.launcher/launch`. Home Assistant sends the selected title/episode metadata
-as webOS launch parameters. The current upstream Nuvio TV webOS build does not yet
-consume those parameters for automatic detail-page or stream navigation, so today
-LG support launches Nuvio TV rather than jumping directly into the selected title.
-The integration is already structured for that behavior to become direct once the
-webOS app implements launch-parameter routing.
+Nuvio TV (`space.nuvio.webos`) on the television. HA-compatible
+`NuvioTVSmart` builds consume `launchMode=player` plus the resolved
+`streamUrl`, so **Play in Nuvio** can jump directly into Nuvio's internal
+player for the exact source selected in the card.
 
+
+### HA-compatible Nuvio app builds
+
+For exact **Play in Nuvio** behavior, install the matching fork build:
+
+- Android TV: `fVaqueroG/NuvioTV` → **HA Direct Play Test Build** artifact
+  `nuvio-ha-direct-play-android`. The fullDebug APK package is
+  `com.nuviodebug.com`; set this value in **Nuvio → Reconfigure → Package name**.
+- LG webOS: `fVaqueroG/NuvioTVSmart` → **HA Direct Play webOS Build** artifact
+  `nuvio-ha-direct-play-webos`. Its application id remains
+  `space.nuvio.webos`.
+
+These builds accept `launchMode=player` and the exact resolved `streamUrl`.
+Android also receives the selected HA profile id and stream metadata. webOS
+queues the launch through profile/PIN selection when necessary, then enters the
+player after the profile is activated.
 
 ## Lovelace card
 
@@ -141,16 +155,19 @@ addon's ID is not exactly `content_id:season:episode`.
 
 The card offers both playback paths on the **Sources** screen:
 
-- **Open in Nuvio** opens Nuvio's stream screen for the selected movie/episode.
-  Nuvio then uses its own synced addon/debrid configuration. Current Nuvio TV
-  launch intents can target the movie/episode stream screen, but do not accept
-  an individual preselected stream row, so the exact source is still selected
-  inside Nuvio.
-- **Play direct** uses the exact HTTP/HLS file URL. For torrent/debrid sources,
-  Home Assistant can resolve the URL with credentials synchronized to the Nuvio
-  account through Nuvio's provider-credential sync endpoint. The credential is
-  kept server-side/in memory and is never returned to the Lovelace card.
-  Raw signed stream URLs are intentionally hidden from the card layout.
+- **Play in Nuvio** resolves the exact selected source and sends it to a
+  compatible Nuvio app using `launchMode=player`. On Android this requires
+  the ADB-based Android TV entity; on LG webOS it uses
+  `system.launcher/launch`. The modified Nuvio apps then route the supplied
+  `streamUrl` directly into their internal player.
+- **Play on TV** sends the exact HTTP/HLS file URL to the television outside
+  Nuvio. For torrent/debrid sources, Home Assistant can resolve the URL with
+  credentials synchronized to the Nuvio account through Nuvio's
+  provider-credential sync endpoint.
+- If a source cannot be resolved to a URL, the Nuvio action falls back to
+  opening that title/episode's source picker.
+
+Raw signed stream URLs are intentionally hidden from the card layout.
 
 A locally entered debrid token in Nuvio's Home Assistant reconfigure screen is
 only an optional override/fallback; it is not required when the linked Nuvio
@@ -199,7 +216,8 @@ resolves URLs; it cannot attach arbitrary Android intent extras. Use
   desired profile uses another index.
 - Addon servers must be reachable from Home Assistant.
 - Only `http` and `https` manifest URLs are accepted.
-- LG webOS app launching is supported. Direct title/episode routing depends on the upstream Nuvio TV webOS app adding launch-parameter handling.
+- Exact internal-player launch is supported by the HA-compatible Android and
+  NuvioTVSmart fork builds. Older/unmodified app builds may only open Nuvio.
 
 ### Side remote
 
