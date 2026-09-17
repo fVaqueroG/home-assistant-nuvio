@@ -174,9 +174,9 @@ def webos_launch_payload(
 ) -> dict[str, Any]:
     """Build webOS Application Manager payload for Nuvio TV.
 
-    Nuvio TV for webOS currently launches correctly with these parameters but
-    does not yet consume them for route navigation. Keeping the Android-compatible
-    field names makes the integration ready when the app adds launch-param routing.
+    HA-compatible NuvioTVSmart builds consume launchMode="player" plus streamUrl
+    and route the exact selected source into Nuvio's internal player. The same
+    payload remains backward-compatible with builds that only launch the app.
     """
     normalized_type = "series" if media_type in {"series", "show", "tv"} else "movie"
     effective_video_id = video_id or (
