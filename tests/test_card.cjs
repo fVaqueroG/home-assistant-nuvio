@@ -25,7 +25,6 @@ assert.match(cardSource,/grid\.insertAdjacentHTML\("beforeend",html\)/);
 assert.doesNotMatch(cardSource,/grid\.innerHTML=visible\.map/);
 assert.match(cardSource,/nuvioScrollTrack/);
 assert.match(cardSource,/catalog-sentinel\{overflow-anchor:none\}/);
-assert.match(cardSource,/grid\.innerHTML=visible\.map/);
 assert.doesNotMatch(cardSource,/this\._catalogVisibleCount=Math\.min\(this\._catalogItems\.length,this\._catalogVisibleCount\+chunk\);\s*this\.render\(\)/);
 assert.match(cardSource,/scroller\.scrollTop=this\._catalogScrollTop/);
 assert.match(cardSource,/catalog-sentinel/);
