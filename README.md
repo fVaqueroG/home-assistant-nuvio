@@ -188,6 +188,12 @@ A locally entered debrid token in Nuvio's Home Assistant reconfigure screen is
 only an optional override/fallback; it is not required when the linked Nuvio
 profile already has a supported synced credential.
 
+## Source loading and addon filters
+
+The Sources screen loads **WatchHub first** and renders those provider links before querying the remaining addons. Other addon groups then appear progressively below it.
+
+The card header is persistent on every screen and keeps the card name visible. **Refresh** and **Control** remain at the top, and Sources adds an **Addons** button. The Addons button expands an **All + one chip per returned addon** filter row, matching the source-filter behavior used by the webOS app. Refreshing Sources repeats the WatchHub-first load.
+
 ## Streaming provider filtering
 
 WatchHub provider links can be filtered from **Settings → Devices & services → Nuvio → Reconfigure** with two controls:
