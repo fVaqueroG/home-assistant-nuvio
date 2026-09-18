@@ -11,6 +11,8 @@
   "integration_type": "service",
   "documentation": "https://github.com/fVaqueroG/home-assistant-nuvio",
   "iot_class": "cloud_polling",
-  "requirements": [],
-  "version": "0.4.28"
+  "requirements": [
+    "pycountry>=23.12.11"
+  ],
+  "version": "0.4.29"
 }
