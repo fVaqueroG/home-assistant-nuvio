@@ -18,7 +18,13 @@ assert.match(cardSource,/mdi:chevron-right/);
 assert.doesNotMatch(cardSource,/data-remote-key="up"[^\n]*⌃/);
 assert.match(cardSource,/nuvio-ring-up ha-icon\{transform:translateY\(-6px\)\}/);
 assert.match(cardSource,/ring-btn\.right ha-icon\{transform:translateX\(6px\)\}/);
-assert.equal((cardSource.match(/paginate:true/g)||[]).length,2);
+assert.equal((cardSource.match(/paginate:true/g)||[]).length,0);
+assert.match(cardSource,/async loadMoreCatalog\(\)/);
+assert.match(cardSource,/catalog-sentinel/);
+assert.match(cardSource,/IntersectionObserver/);
+assert.match(cardSource,/skip:this\._catalogPaging\.nextSkip/);
+assert.match(cardSource,/\.catalog-scroll\{height:clamp/);
+assert.match(cardSource,/\.catalog-fixed\{/);
 assert.match(cardSource,/async loadLazyCatalog[\s\S]*?type:"nuvio\/catalog"[\s\S]*?hide_unreleased:[^\n]+\n\s*\}\);/);
 const flush=()=>new Promise(r=>setImmediate(r));
 (async()=>{

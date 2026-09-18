@@ -1335,11 +1335,11 @@ async def ws_home(hass, connection, msg) -> None:
     probatio.Required("catalog_id"): str,
     probatio.Optional("genre", default=""): str,
     probatio.Optional("hide_unreleased", default=False): bool,
-    probatio.Optional("paginate", default=False): bool,
+    probatio.Optional("skip", default=0): int,
 })
 @websocket_api.async_response
 async def ws_catalog(hass, connection, msg) -> None:
-    """Return one catalog, optionally following Nuvio-compatible skip pages."""
+    """Return one Nuvio/Stremio catalog page and pagination metadata."""
     try:
         api = _entry(hass).runtime_data[DATA_API]
         addon: Addon | None = None
@@ -1371,7 +1371,7 @@ async def ws_catalog(hass, connection, msg) -> None:
         media_type = str(msg["media_type"])
         catalog_id = str(msg["catalog_id"])
         genre = str(msg.get("genre") or "").strip()
-        paginate = bool(msg.get("paginate", False))
+        skip = max(0, int(msg.get("skip", 0)))
 
         descriptor = next(
             (
@@ -1389,62 +1389,19 @@ async def ws_catalog(hass, connection, msg) -> None:
             for extra in descriptor.get("extra") or []
         )
 
-        async def load_page(skip: int = 0) -> list[dict[str, Any]]:
-            extra_args: dict[str, str] = {}
-            if genre.casefold() not in {"", "none", "all"}:
-                extra_args["genre"] = genre
-            if skip > 0:
-                extra_args["skip"] = str(skip)
-            return await api.async_catalog(
-                addon,
-                media_type,
-                catalog_id,
-                extra=urlencode(extra_args) if extra_args else None,
-            )
+        extra_args: dict[str, str] = {}
+        if genre.casefold() not in {"", "none", "all"}:
+            extra_args["genre"] = genre
+        if skip > 0:
+            extra_args["skip"] = str(skip)
 
-        metas = await load_page()
-        page_count = 1
-        next_skip = len(metas)
-        duplicate_pages = 0
-        seen_raw_ids = {
-            str(meta.get("id") or "").strip()
-            for meta in metas
-            if str(meta.get("id") or "").strip()
-        }
-
-        # NuvioTV advances skip by the number of raw items returned, not by a
-        # guessed page size. Follow that behavior, including a small duplicate-
-        # page tolerance for addons that repeat boundary results.
-        while (
-            paginate
-            and supports_skip
-            and metas
-            and next_skip > 0
-            and page_count < 15
-            and len(seen_raw_ids) < 300
-        ):
-            page = await load_page(next_skip)
-            page_count += 1
-            if not page:
-                break
-
-            page_ids = [
-                str(meta.get("id") or "").strip()
-                for meta in page
-                if str(meta.get("id") or "").strip()
-            ]
-            new_ids = [item_id for item_id in page_ids if item_id not in seen_raw_ids]
-            if new_ids:
-                duplicate_pages = 0
-                seen_raw_ids.update(new_ids)
-            else:
-                duplicate_pages += 1
-
-            metas.extend(page)
-            next_skip += len(page)
-            if duplicate_pages >= 3:
-                break
-
+        metas = await api.async_catalog(
+            addon,
+            media_type,
+            catalog_id,
+            extra=urlencode(extra_args) if extra_args else None,
+        )
+        raw_count = len(metas)
         items = _dedupe_catalog_items(
             metas,
             media_type,
@@ -1452,6 +1409,9 @@ async def ws_catalog(hass, connection, msg) -> None:
             hide_unreleased=bool(msg.get("hide_unreleased", False)),
             limit=300,
         )
+        has_more = supports_skip and raw_count > 0
+        next_skip = skip + raw_count if has_more else skip
+
         connection.send_result(
             msg["id"],
             {
@@ -1460,7 +1420,9 @@ async def ws_catalog(hass, connection, msg) -> None:
                 "catalog_id": catalog_id,
                 "media_type": media_type,
                 "supports_skip": supports_skip,
-                "pages_loaded": page_count,
+                "has_more": has_more,
+                "next_skip": next_skip,
+                "raw_count": raw_count,
             },
         )
     except (NuvioApiError, NuvioAuthError) as err:
