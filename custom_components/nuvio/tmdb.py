@@ -124,6 +124,51 @@ class TmdbWatchApi:
         self._store(key, tmdb_id or 0)
         return tmdb_id
 
+    async def async_external_ids(
+        self,
+        *,
+        media_type: str,
+        content_id: str,
+        season: int | None = None,
+        episode: int | None = None,
+    ) -> dict[str, Any]:
+        """Return TMDB and external IDs for the exact movie/show/episode."""
+        tmdb_id = await self.async_tmdb_id(media_type, content_id)
+        result: dict[str, Any] = {
+            "tmdb_id": tmdb_id,
+            "imdb_id": None,
+            "tvdb_id": None,
+            "wikidata_id": None,
+            "scope": media_type,
+        }
+        if tmdb_id is None:
+            return result
+
+        if media_type == "series" and season is not None and episode is not None:
+            path = (
+                f"tv/{tmdb_id}/season/{int(season)}/"
+                f"episode/{int(episode)}/external_ids"
+            )
+            result["scope"] = "episode"
+        elif media_type == "series":
+            path = f"tv/{tmdb_id}/external_ids"
+            result["scope"] = "series"
+        else:
+            path = f"movie/{tmdb_id}/external_ids"
+            result["scope"] = "movie"
+
+        key = ("external-ids", path)
+        cached = self._cached(key)
+        if cached is not None:
+            return dict(cached)
+
+        data = await self._get_json(path)
+        for field in ("imdb_id", "tvdb_id", "wikidata_id"):
+            value = data.get(field)
+            if value not in (None, ""):
+                result[field] = value
+        return self._store(key, result)
+
     @staticmethod
     def _provider_rows(region_blob: dict[str, Any]) -> list[dict[str, Any]]:
         """Flatten subscription/free/ad-supported groups and dedupe providers."""
