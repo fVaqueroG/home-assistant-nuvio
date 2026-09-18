@@ -188,6 +188,16 @@ A locally entered debrid token in Nuvio's Home Assistant reconfigure screen is
 only an optional override/fallback; it is not required when the linked Nuvio
 profile already has a supported synced credential.
 
+## WatchHub provider launching
+
+WatchHub provider links are launched in the installed streaming app rather than the TV/browser URL handler. Netflix keeps its proven title-id launch path. Prime Video, Disney+, Apple TV, Max, Crunchyroll, and Paramount+ now use provider-specific Android TV packages and LG webOS application launch parameters.
+
+For Android TV, Nuvio explicitly targets the provider package so an HTTPS WatchHub link cannot be claimed by the browser. Prime Video GTI links are normalized to the Prime Video app-link format, and Max supports both current Android TV package variants.
+
+For LG webOS, Nuvio sends provider-specific application-manager launch parameters (content target plus extracted provider title/entity ids) to the known provider app id. If a regional/legacy app id is unavailable, the integration tries the next known id and finally falls back to Home Assistant's installed-app source match.
+
+When an episode-specific WatchHub request returns no results, Nuvio retries the series-level WatchHub id and labels those rows **Series-level**. This improves provider discovery for services whose WatchHub availability is exposed at show level while keeping true episode-level results authoritative when available.
+
 ## Source loading and addon filters
 
 The Sources screen loads **WatchHub first** and renders those provider links before querying the remaining addons. Other addon groups then appear progressively below it.
