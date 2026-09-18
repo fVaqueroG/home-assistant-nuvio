@@ -78,6 +78,7 @@ from .launcher import (
     provider_source_match,
     stream_intent_command,
     webos_launch_payload,
+    webos_discovered_app_id,
     webos_provider_launch_requests,
     webos_provider_prefers_native_search,
     webos_provider_search_query,
@@ -622,6 +623,43 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
                 return False
             return True
 
+        async def _async_discover_webos_app_id(
+            entity_id: str,
+            provider: str | None,
+        ) -> str | None:
+            """Return the installed LG app id that best matches a provider."""
+            if not provider or provider in {"netflix", "prime", "disney", "apple"}:
+                return None
+
+            try:
+                response = await hass.services.async_call(
+                    "webostv",
+                    "command",
+                    {
+                        ATTR_ENTITY_ID: [entity_id],
+                        "command": "com.webos.applicationManager/listApps",
+                    },
+                    blocking=True,
+                    return_response=True,
+                )
+            except HomeAssistantError:
+                return None
+
+            if not isinstance(response, dict):
+                return None
+
+            payload: Any = response.get(entity_id)
+            if not isinstance(payload, dict) and isinstance(response.get("apps"), list):
+                payload = response
+            if not isinstance(payload, dict):
+                return None
+
+            apps = payload.get("apps")
+            if not isinstance(apps, list):
+                return None
+
+            return webos_discovered_app_id(provider, apps)
+
         async def handle_play_provider(call: ServiceCall) -> None:
             """Open an external streaming-provider source in that provider's app."""
             entity_ids = call.data[ATTR_ENTITY_ID]
@@ -690,6 +728,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
                 )
 
             for entity_id in webos_ids:
+                discovered_app_id = await _async_discover_webos_app_id(
+                    entity_id,
+                    provider,
+                )
+
                 if webos_provider_prefers_native_search(
                     provider,
                     external_url,
@@ -712,6 +755,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
                         season=call.data.get(ATTR_SEASON),
                         episode=call.data.get(ATTR_EPISODE),
                         episode_title=call.data.get(ATTR_EPISODE_TITLE),
+                        discovered_app_id=discovered_app_id,
                     )
                     if provider
                     else []
