@@ -194,6 +194,21 @@ WatchHub currently exposes streaming-provider availability for series at the **s
 
 Nuvio still sends the selected `video_id`, season, episode, and episode title to provider launchers as contextual hints. WatchHub series-provider rows are labeled **Series-level** so the UI does not imply that the returned provider URL is episode-specific.
 
+## TMDB / JustWatch availability row
+
+Optionally configure a **TMDB API Read Access Token** from **Settings → Devices & services → Nuvio → Reconfigure** to add an **Available on** provider-logo row above Sources.
+
+This row deliberately reuses the integration's existing filters instead of introducing separate TMDB settings:
+
+- **WatchHub country** is used as the TMDB/JustWatch country/region.
+- **Streaming providers** is used as the provider allow-list. Leaving it empty shows every streaming provider TMDB reports for the configured country.
+- Movies use TMDB movie watch-provider availability.
+- Series episodes use TMDB's **season-level** watch-provider availability for the selected season.
+
+TMDB/JustWatch availability does **not** include full provider deep links. Nuvio therefore matches each TMDB provider to the corresponding WatchHub source. A provider icon is clickable only when WatchHub returned a matching external provider URL; otherwise the icon remains visible as availability information but is disabled rather than falsely opening the provider home screen.
+
+Availability data is supplied by **JustWatch via TMDB**. This product uses the TMDB API but is not endorsed or certified by TMDB.
+
 ## WatchHub provider launching
 
 WatchHub provider links are launched in the installed streaming app rather than the TV/browser URL handler. Netflix keeps its proven title-id launch path. Prime Video, Disney+, Apple TV, Max, Crunchyroll, and Paramount+ now use provider-specific Android TV packages and LG webOS application launch parameters.
