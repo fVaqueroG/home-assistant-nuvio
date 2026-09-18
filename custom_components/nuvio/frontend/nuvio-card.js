@@ -547,6 +547,7 @@ class NuvioCard extends HTMLElement {
           external_url:stream.external_url,
           provider_name:stream.name||stream.title||stream.addon||"",
           media_type:context.media_type,
+          title:context.title,
           content_id:context.content_id,
           video_id:context.video_id,
           season:context.season,
