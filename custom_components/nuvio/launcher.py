@@ -493,6 +493,69 @@ def _webos_provider_params(
     return params
 
 
+def webos_provider_search_query(
+    title: str | None,
+    *,
+    media_type: str | None = None,
+    season: int | None = None,
+    episode: int | None = None,
+    episode_title: str | None = None,
+) -> str:
+    """Build the title text handed to LG's native content search."""
+    clean_title = " ".join(str(title or "").split())
+    if not clean_title:
+        return ""
+
+    if media_type == "series" and episode is not None:
+        parts = [clean_title]
+        if season is not None:
+            parts.append(f"S{int(season):02d}E{int(episode):02d}")
+        else:
+            parts.append(f"E{int(episode):02d}")
+        clean_episode_title = " ".join(str(episode_title or "").split())
+        if clean_episode_title:
+            parts.append(clean_episode_title)
+        return " ".join(parts)
+
+    return clean_title
+
+
+def webos_provider_prefers_native_search(
+    provider: str | None,
+    external_url: str | None,
+    *,
+    title: str | None = None,
+    media_type: str | None = None,
+    season: int | None = None,
+    episode: int | None = None,
+    episode_title: str | None = None,
+) -> bool:
+    """Return whether real-TV behavior makes native LG search more reliable."""
+    if not webos_provider_search_query(
+        title,
+        media_type=media_type,
+        season=season,
+        episode=episode,
+        episode_title=episode_title,
+    ):
+        return False
+
+    if provider in {"prime", "disney", "max", "crunchyroll", "paramount"}:
+        return True
+
+    if (
+        provider == "netflix"
+        and media_type == "series"
+        and episode is not None
+    ):
+        # Exact JustWatch Netflix episode offers often use /watch/<playable-id>.
+        # Keep that direct route; a show-level /title/<id> cannot identify the
+        # requested episode, so use LG's native search instead.
+        return "/watch/" not in str(external_url or "").casefold()
+
+    return False
+
+
 def webos_provider_launch_requests(
     provider: str,
     external_url: str,
