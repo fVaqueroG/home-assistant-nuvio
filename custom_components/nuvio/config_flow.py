@@ -21,10 +21,12 @@ from .const import (
     CONF_PACKAGE_NAME,
     CONF_PROFILE_ID,
     CONF_REFRESH_TOKEN,
+    CONF_STREAMING_PROVIDERS,
     CONF_USER_ID,
     DEFAULT_MANIFEST_URL,
     DEFAULT_DEBRID_PROVIDER,
     DEFAULT_PACKAGE_NAME,
+    DEFAULT_STREAMING_PROVIDERS,
     DEFAULT_PROFILE_ID,
     DOMAIN,
 )
@@ -45,6 +47,27 @@ DEBRID_OPTIONS = [
     selector.SelectOptionDict(value="premiumize", label="Premiumize"),
     selector.SelectOptionDict(value="realdebrid", label="Real-Debrid"),
 ]
+
+STREAMING_PROVIDER_OPTIONS = [
+    selector.SelectOptionDict(value="netflix", label="Netflix"),
+    selector.SelectOptionDict(value="prime", label="Prime Video"),
+    selector.SelectOptionDict(value="disney", label="Disney+"),
+    selector.SelectOptionDict(value="max", label="Max"),
+    selector.SelectOptionDict(value="apple", label="Apple TV+"),
+    selector.SelectOptionDict(value="paramount", label="Paramount+"),
+    selector.SelectOptionDict(value="peacock", label="Peacock"),
+    selector.SelectOptionDict(value="hulu", label="Hulu"),
+    selector.SelectOptionDict(value="crunchyroll", label="Crunchyroll"),
+]
+
+
+def _streaming_provider_selector() -> selector.SelectSelector:
+    return selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=STREAMING_PROVIDER_OPTIONS,
+            multiple=True,
+        )
+    )
 
 
 def _debrid_key_selector() -> selector.TextSelector:
@@ -87,6 +110,12 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_PROFILE_ID,
                     default=values.get(CONF_PROFILE_ID, DEFAULT_PROFILE_ID),
                 ): probatio.All(probatio.Coerce(int), probatio.Range(min=1, max=5)),
+                probatio.Required(
+                    CONF_STREAMING_PROVIDERS,
+                    default=values.get(
+                        CONF_STREAMING_PROVIDERS, list(DEFAULT_STREAMING_PROVIDERS)
+                    ),
+                ): _streaming_provider_selector(),
                 probatio.Required(
                     CONF_DEBRID_PROVIDER,
                     default=values.get(CONF_DEBRID_PROVIDER, DEFAULT_DEBRID_PROVIDER),
@@ -138,6 +167,9 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_MANIFEST_URLS: urls,
                     CONF_PACKAGE_NAME: user_input[CONF_PACKAGE_NAME].strip(),
                     CONF_PROFILE_ID: user_input[CONF_PROFILE_ID],
+                    CONF_STREAMING_PROVIDERS: list(
+                        dict.fromkeys(user_input.get(CONF_STREAMING_PROVIDERS, []))
+                    ),
                     CONF_DEBRID_PROVIDER: provider,
                 }
                 if provider != "none":
@@ -179,6 +211,16 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                         entry.data.get(CONF_PROFILE_ID, DEFAULT_PROFILE_ID),
                     ),
                 ): probatio.All(probatio.Coerce(int), probatio.Range(min=1, max=5)),
+                probatio.Required(
+                    CONF_STREAMING_PROVIDERS,
+                    default=values.get(
+                        CONF_STREAMING_PROVIDERS,
+                        entry.data.get(
+                            CONF_STREAMING_PROVIDERS,
+                            list(DEFAULT_STREAMING_PROVIDERS),
+                        ),
+                    ),
+                ): _streaming_provider_selector(),
                 probatio.Required(
                     CONF_DEBRID_PROVIDER,
                     default=values.get(
@@ -225,6 +267,9 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                     **entry.data,
                     CONF_PACKAGE_NAME: str(user_input[CONF_PACKAGE_NAME]).strip(),
                     CONF_PROFILE_ID: user_input[CONF_PROFILE_ID],
+                    CONF_STREAMING_PROVIDERS: list(
+                        dict.fromkeys(user_input.get(CONF_STREAMING_PROVIDERS, []))
+                    ),
                     CONF_DEBRID_PROVIDER: provider,
                 }
                 if provider == "none":
