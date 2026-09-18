@@ -13,6 +13,7 @@ from .account import NuvioAccountApi, NuvioAuthError, NuvioLoginExpired
 from .api import NuvioApi, NuvioApiError, normalize_manifest_url
 from .tmdb import TmdbApiError, TmdbWatchApi
 from .tvdb import TvdbApi, TvdbApiError
+from .justwatch import JustWatchAuthError, JustWatchGraphQLApi
 from .providers import (
     normalize_provider_text,
     normalize_selected_provider,
@@ -35,6 +36,11 @@ from .const import (
     CONF_TMDB_ACCESS_TOKEN,
     CONF_TVDB_API_KEY,
     CONF_TVDB_SUBSCRIBER_PIN,
+    CONF_CONNECT_JUSTWATCH_ACCOUNT,
+    CONF_JUSTWATCH_EMAIL,
+    CONF_JUSTWATCH_PASSWORD,
+    CONF_JUSTWATCH_ACCESS_TOKEN,
+    CONF_JUSTWATCH_REFRESH_TOKEN,
     CONF_USER_ID,
     DEFAULT_MANIFEST_URL,
     DEFAULT_DEBRID_PROVIDER,
@@ -152,6 +158,83 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
         self._login = await self._account_api.async_start_device_login()
         return await self.async_step_device()
 
+    async def _async_justwatch_auth(
+        self,
+        user_input: dict[str, Any],
+        existing_data: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Validate/connect a JustWatch account without persisting its password."""
+        if not bool(user_input.get(CONF_CONNECT_JUSTWATCH_ACCOUNT, False)):
+            return {}
+
+        existing = existing_data or {}
+        email = str(user_input.get(CONF_JUSTWATCH_EMAIL, "") or "").strip()
+        password = str(user_input.get(CONF_JUSTWATCH_PASSWORD, "") or "")
+        browser_token = str(
+            user_input.get(CONF_JUSTWATCH_ACCESS_TOKEN, "") or ""
+        ).strip()
+
+        session = async_get_clientsession(self.hass)
+
+        # Preferred path: sign in once with email/password, then persist only
+        # Firebase renewable tokens. The password is never written to entry.data.
+        if email or password:
+            if not email or not password:
+                raise JustWatchAuthError(
+                    "Enter both JustWatch email and password"
+                )
+            api = JustWatchGraphQLApi(session)
+            auth = await api.async_sign_in(email, password)
+            return {
+                CONF_CONNECT_JUSTWATCH_ACCOUNT: True,
+                CONF_JUSTWATCH_EMAIL: auth.get("email") or email,
+                CONF_JUSTWATCH_ACCESS_TOKEN: auth["access_token"],
+                CONF_JUSTWATCH_REFRESH_TOKEN: auth["refresh_token"],
+            }
+
+        # Advanced fallback for Google/Apple/social-login accounts: accept the
+        # browser's current access_token cookie. It can be used immediately but
+        # is not renewable unless a refresh token already exists.
+        if browser_token:
+            api = JustWatchGraphQLApi(session, access_token=browser_token)
+            identity = await api.async_validate_auth()
+            data = {
+                CONF_CONNECT_JUSTWATCH_ACCOUNT: True,
+                CONF_JUSTWATCH_ACCESS_TOKEN: browser_token,
+                CONF_JUSTWATCH_EMAIL: identity.get("email")
+                or str(existing.get(CONF_JUSTWATCH_EMAIL, "") or ""),
+            }
+            if existing.get(CONF_JUSTWATCH_REFRESH_TOKEN):
+                data[CONF_JUSTWATCH_REFRESH_TOKEN] = existing[
+                    CONF_JUSTWATCH_REFRESH_TOKEN
+                ]
+            return data
+
+        existing_refresh = str(
+            existing.get(CONF_JUSTWATCH_REFRESH_TOKEN, "") or ""
+        ).strip()
+        existing_access = str(
+            existing.get(CONF_JUSTWATCH_ACCESS_TOKEN, "") or ""
+        ).strip()
+        if existing_refresh or existing_access:
+            api = JustWatchGraphQLApi(
+                session,
+                access_token=existing_access,
+                refresh_token=existing_refresh,
+            )
+            identity = await api.async_validate_auth()
+            return {
+                CONF_CONNECT_JUSTWATCH_ACCOUNT: True,
+                CONF_JUSTWATCH_EMAIL: identity.get("email")
+                or str(existing.get(CONF_JUSTWATCH_EMAIL, "") or ""),
+                CONF_JUSTWATCH_ACCESS_TOKEN: api._access_token,
+                CONF_JUSTWATCH_REFRESH_TOKEN: api._refresh_token,
+            }
+
+        raise JustWatchAuthError(
+            "Enter JustWatch email/password or a browser access token"
+        )
+
     def _user_schema(self, user_input: dict[str, Any] | None = None) -> probatio.Schema:
         values = user_input or {}
         return probatio.Schema(
@@ -184,6 +267,22 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                         ).upper(),
                     ),
                 ): selector.CountrySelector(),
+                probatio.Required(
+                    CONF_CONNECT_JUSTWATCH_ACCOUNT,
+                    default=values.get(CONF_CONNECT_JUSTWATCH_ACCOUNT, False),
+                ): bool,
+                probatio.Optional(
+                    CONF_JUSTWATCH_EMAIL,
+                    default=values.get(CONF_JUSTWATCH_EMAIL, ""),
+                ): str,
+                probatio.Optional(
+                    CONF_JUSTWATCH_PASSWORD,
+                    default="",
+                ): _debrid_key_selector(),
+                probatio.Optional(
+                    CONF_JUSTWATCH_ACCESS_TOKEN,
+                    default=values.get(CONF_JUSTWATCH_ACCESS_TOKEN, ""),
+                ): _debrid_key_selector(),
                 probatio.Optional(
                     CONF_TMDB_ACCESS_TOKEN,
                     default=values.get(CONF_TMDB_ACCESS_TOKEN, ""),
@@ -266,6 +365,16 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                             errors=errors,
                         )
 
+                try:
+                    justwatch_data = await self._async_justwatch_auth(user_input)
+                except JustWatchAuthError:
+                    errors[CONF_JUSTWATCH_PASSWORD] = "justwatch_credentials_invalid"
+                    return self.async_show_form(
+                        step_id="user",
+                        data_schema=self._user_schema(user_input),
+                        errors=errors,
+                    )
+
                 provider = str(
                     user_input.get(CONF_DEBRID_PROVIDER, DEFAULT_DEBRID_PROVIDER)
                 )
@@ -300,6 +409,7 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_TVDB_API_KEY: tvdb_key,
                     CONF_TVDB_SUBSCRIBER_PIN: tvdb_pin,
                     CONF_DEBRID_PROVIDER: provider,
+                    **justwatch_data,
                 }
                 if provider != "none":
                     self._pending_data[CONF_DEBRID_API_KEY] = api_key
@@ -363,6 +473,25 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                         ),
                     ),
                 ): selector.CountrySelector(),
+                probatio.Required(
+                    CONF_CONNECT_JUSTWATCH_ACCOUNT,
+                    default=values.get(
+                        CONF_CONNECT_JUSTWATCH_ACCOUNT,
+                        bool(
+                            entry.data.get(CONF_JUSTWATCH_REFRESH_TOKEN)
+                            or entry.data.get(CONF_JUSTWATCH_ACCESS_TOKEN)
+                        ),
+                    ),
+                ): bool,
+                probatio.Optional(
+                    CONF_JUSTWATCH_EMAIL,
+                    default=values.get(
+                        CONF_JUSTWATCH_EMAIL,
+                        entry.data.get(CONF_JUSTWATCH_EMAIL, ""),
+                    ),
+                ): str,
+                probatio.Optional(CONF_JUSTWATCH_PASSWORD, default=""): _debrid_key_selector(),
+                probatio.Optional(CONF_JUSTWATCH_ACCESS_TOKEN, default=""): _debrid_key_selector(),
                 probatio.Optional(CONF_TMDB_ACCESS_TOKEN, default=""): _debrid_key_selector(),
                 probatio.Optional(CONF_TVDB_API_KEY, default=""): _debrid_key_selector(),
                 probatio.Optional(CONF_TVDB_SUBSCRIBER_PIN, default=""): _debrid_key_selector(),
@@ -433,6 +562,15 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                     except TvdbApiError:
                         errors[CONF_TVDB_API_KEY] = "tvdb_credentials_invalid"
 
+            try:
+                justwatch_data = await self._async_justwatch_auth(
+                    user_input,
+                    existing_data=entry.data,
+                )
+            except JustWatchAuthError:
+                errors[CONF_JUSTWATCH_PASSWORD] = "justwatch_credentials_invalid"
+                justwatch_data = {}
+
             provider = str(
                 user_input.get(
                     CONF_DEBRID_PROVIDER,
@@ -476,6 +614,16 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_TVDB_SUBSCRIBER_PIN: tvdb_pin,
                     CONF_DEBRID_PROVIDER: provider,
                 }
+
+                for key in (
+                    CONF_CONNECT_JUSTWATCH_ACCOUNT,
+                    CONF_JUSTWATCH_EMAIL,
+                    CONF_JUSTWATCH_ACCESS_TOKEN,
+                    CONF_JUSTWATCH_REFRESH_TOKEN,
+                ):
+                    self._pending_data.pop(key, None)
+                self._pending_data.update(justwatch_data)
+
                 if provider == "none":
                     self._pending_data.pop(CONF_DEBRID_API_KEY, None)
                 else:
