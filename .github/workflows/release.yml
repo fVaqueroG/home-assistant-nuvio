@@ -46,6 +46,12 @@ jobs:
         shell: bash
         run: node --check custom_components/nuvio/frontend/nuvio-card.js
 
+      - name: Run Lovelace card regression tests
+        shell: bash
+        run: |
+          npm ci --prefix tests
+          node tests/test_card.cjs
+
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
