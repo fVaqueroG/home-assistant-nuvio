@@ -502,8 +502,9 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
 
         def suggested(key: str, default: str = "") -> str:
             """Keep stored credentials visible/persistent in masked fields."""
-            if key in values:
-                return str(values.get(key) or "")
+            entered = str(values.get(key) or "").strip()
+            if entered:
+                return entered
             return str(entry.data.get(key, default) or "")
 
         selected_provider = str(
