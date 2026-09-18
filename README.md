@@ -188,6 +188,12 @@ A locally entered debrid token in Nuvio's Home Assistant reconfigure screen is
 only an optional override/fallback; it is not required when the linked Nuvio
 profile already has a supported synced credential.
 
+## WatchHub series-link limitation
+
+WatchHub currently exposes streaming-provider availability for series at the **show level**, not at a reliable season/episode level. Its episode requests can return the same provider URL for every episode of a series (for example, the same Netflix `/title/<series-id>` URL), so Home Assistant cannot derive a provider-specific Netflix episode id from WatchHub alone.
+
+Nuvio still sends the selected `video_id`, season, episode, and episode title to provider launchers as contextual hints. WatchHub series-provider rows are labeled **Series-level** so the UI does not imply that the returned provider URL is episode-specific.
+
 ## WatchHub provider launching
 
 WatchHub provider links are launched in the installed streaming app rather than the TV/browser URL handler. Netflix keeps its proven title-id launch path. Prime Video, Disney+, Apple TV, Max, Crunchyroll, and Paramount+ now use provider-specific Android TV packages and LG webOS application launch parameters.
