@@ -257,8 +257,9 @@ For Netflix, Prime Video, Disney+, Max, Crunchyroll, and Paramount+, Nuvio now a
 - Nuvio does **not** close or restart provider apps. If the app is already running, the content launch/deeplink is sent directly to the existing app session; if it is not running, webOS launches it normally.
 - The first LG request mirrors `aiowebostv.launch_app_with_content_id()`: `system.launcher/launch` with only `id` and `contentId`.
 - Netflix uses `m=https://www.netflix.com/watch/<videoId>&source_type=4` when a numeric Netflix ID is available.
-- Prime Video, Disney+, Max, Crunchyroll, and Paramount+ receive the resolved provider URL itself as `contentId`.
-- The older Nuvio provider-specific parameter bundle remains a service-level fallback only if the minimal request is rejected by webOS.
+- Prime Video, Max, Crunchyroll, and Paramount+ receive the resolved provider URL itself as `contentId`.
+- **Disney+** uses the LG Application Manager deep-link contract directly. Nuvio first tries app id `cdp-uwp-native` with `params.contentTarget=https://www.disneyplus.com/video/<UUID>` when a Disney UUID can be extracted, then retries the original JustWatch Disney URL and the installed `com.disney.disneyplus-prod` app-id variant.
+- The older Nuvio provider-specific parameter bundle remains a service-level fallback for providers that still use the generic launcher path.
 - LG native content search remains the final fallback when direct launch requests are rejected.
 
 For Netflix episodes, an episode-specific JustWatch `/watch/<id>` offer can therefore be handed directly to Netflix as its own video ID. A show-level `/title/<id>` episode offer is still treated as insufficiently specific and uses the native-search fallback rather than pretending it identifies the requested episode.
