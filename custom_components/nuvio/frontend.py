@@ -1982,6 +1982,10 @@ async def ws_watch_providers(hass, connection, msg) -> None:
         external_ids = ids_result
 
     async def _load_tvdb_links() -> list[dict[str, Any]]:
+        # When a signed-in JustWatch account is configured, it is authoritative
+        # for provider playback. Do not silently substitute another resolver.
+        if justwatch_authenticated:
+            return []
         if not tvdb_configured or not external_ids:
             return []
         if (
@@ -2076,11 +2080,13 @@ async def ws_watch_providers(hass, connection, msg) -> None:
                 "pre_affiliated_url"
             )
             provider["justwatch_stream_url"] = justwatch.get("stream_url")
-        elif tvdb:
+        elif not justwatch_authenticated and tvdb:
             provider["deep_link"] = tvdb.get("url")
             provider["deep_link_source"] = "thetvdb"
             provider["remote_id"] = tvdb.get("remote_id")
             provider["tvdb_source_name"] = tvdb.get("provider_name")
+
+        provider["justwatch_account_authoritative"] = justwatch_authenticated
 
         providers.append(provider)
 
@@ -2089,8 +2095,10 @@ async def ws_watch_providers(hass, connection, msg) -> None:
         attribution_parts.append("Offer links via your JustWatch account")
     elif justwatch_enabled:
         attribution_parts.append("Offer links via unofficial JustWatch GraphQL")
-    if tvdb_configured:
+    if tvdb_configured and not justwatch_authenticated:
         attribution_parts.append("Fallback exact links via TheTVDB")
+    if justwatch_authenticated:
+        attribution_parts.append("No provider-link fallback while account is connected")
 
     connection.send_result(
         msg["id"],
