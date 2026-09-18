@@ -61,6 +61,19 @@ const flush=()=>new Promise(r=>setImmediate(r));
  onePlay._streams=[{addon:'Direct',name:'HTTP',url:'https://cdn.example/video.mp4',direct:true,resolvable:false,badges:[]},{addon:'Debrid',name:'Torrent',info_hash:'abc',direct:false,resolvable:true,badges:[]}];onePlay._debridMeta={configured:true,providers:['Test']};onePlay.render();
  const playLabels=[...onePlay.shadowRoot.querySelectorAll('.nuvioplay')].map(b=>b.textContent.trim());assert.deepEqual(playLabels,['▶ Play','▶ Play']);assert.equal(onePlay.shadowRoot.querySelectorAll('.playsource,.playdirect').length,0);
  onePlay.remove();
+ // Movies with no episodes skip Details and open Sources immediately.
+ const movieAuto=window.document.createElement('nuvio-card');movieAuto.setConfig({show_remote:false});movieAuto._loaded=true;movieAuto._view='catalog';
+ const movieCalls=[];movieAuto.ws=async m=>{movieCalls.push(m);if(m.type==='nuvio/details')return {id:m.content_id,type:'movie',name:'Movie details',videos:[]};if(m.type==='nuvio/streams')return {streams:[{addon:'Direct',name:'Movie stream',url:'https://cdn.example/movie.mp4',direct:true,badges:[]}],debrid:{configured:false}};throw new Error('Unexpected '+m.type);};
+ await movieAuto.selectItem({id:'movie1',type:'movie',name:'Movie',manifest_url:'https://example.test/manifest.json'});
+ assert.equal(movieAuto._view,'sources');assert.equal(movieAuto._sourcesBackView,'catalog');assert.equal(movieCalls.filter(x=>x.type==='nuvio/streams').length,1);assert.equal(movieCalls.find(x=>x.type==='nuvio/streams').video_id,'movie1');
+ movieAuto.shadowRoot.querySelector('#backDetails').click();assert.equal(movieAuto._view,'catalog');movieAuto.remove();
+ // Series still opens its episode list; selecting an episode opens that episode's Sources directly.
+ const seriesAuto=window.document.createElement('nuvio-card');seriesAuto.setConfig({show_remote:false});seriesAuto._loaded=true;seriesAuto._view='catalog';
+ const seriesCalls=[];seriesAuto.ws=async m=>{seriesCalls.push(m);if(m.type==='nuvio/details')return {id:m.content_id,type:'series',name:'Series details',videos:[{id:'series1:1:1',season:1,episode:1,title:'Pilot',thumbnail:''},{id:'series1:1:2',season:1,episode:2,title:'Second',thumbnail:''}]};if(m.type==='nuvio/streams')return {streams:[{addon:'Direct',name:'Episode stream',url:'https://cdn.example/episode.mp4',direct:true,badges:[]}],debrid:{configured:false}};throw new Error('Unexpected '+m.type);};
+ await seriesAuto.selectItem({id:'series1',type:'series',name:'Series',manifest_url:'https://example.test/manifest.json'});
+ assert.equal(seriesAuto._view,'details');assert.equal(seriesAuto.shadowRoot.querySelectorAll('.sourceep').length,2);assert.equal(seriesAuto.shadowRoot.querySelectorAll('.playep').length,0);assert.doesNotMatch(seriesAuto.shadowRoot.innerHTML,/>Sources<\/button>/);
+ seriesAuto.shadowRoot.querySelector('.sourceep').click();await flush();assert.equal(seriesAuto._view,'sources');assert.equal(seriesAuto._streamContext.id,'series1:1:1');assert.equal(seriesAuto._sourcesBackView,'details');assert.equal(seriesCalls.find(x=>x.type==='nuvio/streams').video_id,'series1:1:1');
+ seriesAuto.shadowRoot.querySelector('#backDetails').click();assert.equal(seriesAuto._view,'details');seriesAuto.remove();
  // Empty cold-start responses recover without a browser reload.
  const cold=window.document.createElement('nuvio-card');window.document.body.append(cold);cold.setConfig({show_remote:false});
  const recovered={sections:[{kind:'collection',name:'Streaming',items:[]}],hero:{items:[]}};
@@ -82,5 +95,5 @@ const flush=()=>new Promise(r=>setImmediate(r));
  const empty=window.document.createElement('nuvio-card');window.document.body.append(empty);empty.setConfig({show_remote:false});empty.ws=async()=>({sections:[]});empty.hass={states:{}};await flush();
  for(let i=0;i<3;i++){let id=empty._homeRetryTimer,fn=timeouts.get(id);timeouts.delete(id);fn();await flush();}
  assert.equal(empty._homeRetryTimer,null);assert.equal(empty._homeRetryCount,3);empty.remove();assert.equal(timeouts.size,0);
- console.log('PASS: single Nuvio Play action, external provider-link safety, lazy Home catalogs, seven-item Hero cap, progressive recovery, cached automatic retries, retained content, plus collection rows, source tabs, details/back, regular catalogs, stable HA updates, hero controls, partial failures, request races, timer cleanup');
+ console.log('PASS: direct movie and episode Sources, single Nuvio Play action, external provider-link safety, lazy Home catalogs, seven-item Hero cap, progressive recovery, cached automatic retries, retained content, plus collection rows, source tabs, details/back, regular catalogs, stable HA updates, hero controls, partial failures, request races, timer cleanup');
 })().catch(e=>{console.error(e);process.exitCode=1;});
