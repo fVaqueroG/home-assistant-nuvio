@@ -21,7 +21,7 @@
           "connect_account": "Agrega Continuar viendo, Mi biblioteca, perfiles y addons sincronizados.",
           "debrid_provider": "Opcional. Si conectas tu cuenta de Nuvio, Home Assistant usa automáticamente las credenciales de debrid sincronizadas del perfil. Selecciona un proveedor aquí solo como reemplazo local.",
           "debrid_api_key": "Opcional cuando la cuenta de Nuvio ya tiene debrid sincronizado. Se guarda solo en Home Assistant si se proporciona.",
-          "streaming_providers": "Solo estos proveedores aparecen en la colección Streaming sincronizada y en los resultados de WatchHub. Déjalo vacío para mostrar todos los proveedores de WatchHub.",
+          "streaming_providers": "Elige los proveedores de WatchHub que quieres mostrar. La lista incluye un catálogo amplio de servicios, proveedores detectados en tu colección Streaming sincronizada de Nuvio y también permite escribir un proveedor que no aparezca. Déjalo vacío para mostrar todos.",
           "watchhub_country": "Filtra la disponibilidad de WatchHub al país seleccionado. De forma predeterminada usa el país configurado en Home Assistant."
         }
       },
@@ -43,7 +43,7 @@
           "debrid_provider": "Opcional: usa las credenciales sincronizadas de tu cuenta de Nuvio automáticamente, o selecciona un proveedor como reemplazo local.",
           "debrid_api_key": "Déjalo vacío para usar la credencial sincronizada de Nuvio o conservar un reemplazo local existente.",
           "package_name": "Usa com.nuvio.tv para la app completa oficial o com.nuviodebug.com para la compilación de prueba del fork compatible con reproducción directa desde Home Assistant.",
-          "streaming_providers": "Solo estos proveedores aparecen en la colección Streaming sincronizada y en los resultados de WatchHub. Déjalo vacío para mostrar todos los proveedores de WatchHub.",
+          "streaming_providers": "Elige los proveedores de WatchHub que quieres mostrar. La lista incluye un catálogo amplio de servicios, proveedores detectados en tu colección Streaming sincronizada de Nuvio y también permite escribir un proveedor que no aparezca. Déjalo vacío para mostrar todos.",
           "watchhub_country": "Filtra la disponibilidad de WatchHub al país seleccionado. De forma predeterminada usa el país configurado en Home Assistant."
         }
       },
