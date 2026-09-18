@@ -22,11 +22,13 @@ from .const import (
     CONF_PROFILE_ID,
     CONF_REFRESH_TOKEN,
     CONF_STREAMING_PROVIDERS,
+    CONF_WATCHHUB_COUNTRY,
     CONF_USER_ID,
     DEFAULT_MANIFEST_URL,
     DEFAULT_DEBRID_PROVIDER,
     DEFAULT_PACKAGE_NAME,
     DEFAULT_STREAMING_PROVIDERS,
+    DEFAULT_WATCHHUB_COUNTRY,
     DEFAULT_PROFILE_ID,
     DOMAIN,
 )
@@ -117,6 +119,16 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                     ),
                 ): _streaming_provider_selector(),
                 probatio.Required(
+                    CONF_WATCHHUB_COUNTRY,
+                    default=values.get(
+                        CONF_WATCHHUB_COUNTRY,
+                        str(
+                            getattr(self.hass.config, "country", None)
+                            or DEFAULT_WATCHHUB_COUNTRY
+                        ).upper(),
+                    ),
+                ): selector.CountrySelector(),
+                probatio.Required(
                     CONF_DEBRID_PROVIDER,
                     default=values.get(CONF_DEBRID_PROVIDER, DEFAULT_DEBRID_PROVIDER),
                 ): selector.SelectSelector(
@@ -170,6 +182,13 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_STREAMING_PROVIDERS: list(
                         dict.fromkeys(user_input.get(CONF_STREAMING_PROVIDERS, []))
                     ),
+                    CONF_WATCHHUB_COUNTRY: str(
+                        user_input.get(
+                            CONF_WATCHHUB_COUNTRY,
+                            getattr(self.hass.config, "country", None)
+                            or DEFAULT_WATCHHUB_COUNTRY,
+                        )
+                    ).upper(),
                     CONF_DEBRID_PROVIDER: provider,
                 }
                 if provider != "none":
@@ -222,6 +241,19 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                     ),
                 ): _streaming_provider_selector(),
                 probatio.Required(
+                    CONF_WATCHHUB_COUNTRY,
+                    default=values.get(
+                        CONF_WATCHHUB_COUNTRY,
+                        entry.data.get(
+                            CONF_WATCHHUB_COUNTRY,
+                            str(
+                                getattr(self.hass.config, "country", None)
+                                or DEFAULT_WATCHHUB_COUNTRY
+                            ).upper(),
+                        ),
+                    ),
+                ): selector.CountrySelector(),
+                probatio.Required(
                     CONF_DEBRID_PROVIDER,
                     default=values.get(
                         CONF_DEBRID_PROVIDER,
@@ -270,6 +302,16 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_STREAMING_PROVIDERS: list(
                         dict.fromkeys(user_input.get(CONF_STREAMING_PROVIDERS, []))
                     ),
+                    CONF_WATCHHUB_COUNTRY: str(
+                        user_input.get(
+                            CONF_WATCHHUB_COUNTRY,
+                            entry.data.get(
+                                CONF_WATCHHUB_COUNTRY,
+                                getattr(self.hass.config, "country", None)
+                                or DEFAULT_WATCHHUB_COUNTRY,
+                            ),
+                        )
+                    ).upper(),
                     CONF_DEBRID_PROVIDER: provider,
                 }
                 if provider == "none":
