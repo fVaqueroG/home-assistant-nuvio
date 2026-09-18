@@ -27,7 +27,6 @@ from .account import NuvioAuthError
 from .api import Addon, NuvioApiError
 from .debrid import DebridNotCached, DebridNotConfigured, DebridResolveError
 from .tvdb import TvdbApiError
-from .justwatch import JustWatchApiError
 from .providers import (
     normalize_provider_text,
     normalize_selected_provider,
