@@ -1,18 +1,18 @@
 {
-  "domain": "nuvio",
-  "name": "Nuvio",
-  "codeowners": [],
-  "config_flow": true,
-  "dependencies": [
-    "media_source",
-    "frontend",
-    "lovelace"
-  ],
-  "integration_type": "service",
-  "documentation": "https://github.com/fVaqueroG/home-assistant-nuvio",
-  "iot_class": "cloud_polling",
-  "requirements": [
-    "pycountry>=23.12.11"
-  ],
-  "version": "0.4.40"
+    "domain": "nuvio",
+    "name": "Nuvio",
+    "codeowners": [],
+    "config_flow": true,
+    "dependencies": [
+        "media_source",
+        "frontend",
+        "lovelace"
+    ],
+    "integration_type": "service",
+    "documentation": "https://github.com/fVaqueroG/home-assistant-nuvio",
+    "iot_class": "cloud_polling",
+    "requirements": [
+        "pycountry>=23.12.11"
+    ],
+    "version": "0.4.40"
 }
