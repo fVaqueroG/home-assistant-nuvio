@@ -33,7 +33,8 @@ class NuvioCard extends HTMLElement {
     this._loading=false;
     if(needsRetry&&(this._homeRetryCount||0)<3&&this.isConnected){
       this._homeRetryCount=(this._homeRetryCount||0)+1;
-      this._homeRetryTimer=setTimeout(()=>{this._homeRetryTimer=null;this.loadHome(true,true);},3000*this._homeRetryCount);
+      var delay=[1500,3000,5000][this._homeRetryCount-1]||5000;
+      this._homeRetryTimer=setTimeout(()=>{this._homeRetryTimer=null;this.loadHome(false,true);},delay);
     }else if(!needsRetry){this._homeRetryCount=0;}
     this.render();
   }
@@ -681,4 +682,4 @@ class NuvioCard extends HTMLElement {
 if(!customElements.get("nuvio-card"))customElements.define("nuvio-card",NuvioCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==="nuvio-card"))window.customCards.push({type:"nuvio-card",name:"Nuvio",description:"Browse, search and play your Nuvio catalog.",preview:true});
-console.info("NUVIO-CARD v0.4.19");
+console.info("NUVIO-CARD v0.4.20");
