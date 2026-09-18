@@ -69,13 +69,18 @@ class NuvioCard extends HTMLElement {
     }catch(e){this._error=e.message||"Could not load stream sources.";}
     this._streamLoading=false;this.render();
   }
-  inferMime(url){
-    var u=String(url||"").toLowerCase();
+  inferMime(url,filename,declared){
+    var d=String(declared||"").trim().toLowerCase();
+    if(d&&d.includes("/")&&d!=="video/*"&&d!=="application/octet-stream")return d;
+    var u=(String(filename||"")+" "+String(url||"")).toLowerCase();
     if(u.includes(".m3u8")||u.includes("m3u8"))return "application/vnd.apple.mpegurl";
     if(u.includes(".mpd"))return "application/dash+xml";
-    if(u.includes(".mp4"))return "video/mp4";
     if(u.includes(".mkv"))return "video/x-matroska";
-    return "video/*";
+    if(u.includes(".webm"))return "video/webm";
+    if(u.includes(".mov"))return "video/quicktime";
+    if(u.includes(".m2ts")||u.includes(".ts"))return "video/mp2t";
+    if(u.includes(".mp4")||u.includes(".m4v"))return "video/mp4";
+    return d||"video/*";
   }
   formatBytes(value){
     var n=Number(value||0);if(!Number.isFinite(n)||n<=0)return "";
@@ -136,7 +141,7 @@ class NuvioCard extends HTMLElement {
     var data=this.playData(ep);
     data.stream_url=stream.url;
     data.stream_title=stream.name||stream.title||stream.description||data.title||"Nuvio stream";
-    data.mime_type=this.inferMime(stream.url);
+    data.mime_type=this.inferMime(stream.url,stream.filename,stream.mime_type||stream.source_type);
     data.in_nuvio=!!inNuvio;
     if(stream.filename)data.filename=stream.filename;
     var videoSize=Number(stream.size_bytes);if(Number.isFinite(videoSize)&&videoSize>0)data.video_size=Math.round(videoSize);
