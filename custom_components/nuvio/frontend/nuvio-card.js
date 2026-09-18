@@ -438,13 +438,20 @@ class NuvioCard extends HTMLElement {
   async playProviderSource(stream){
     var p=this.player();if(!p){this._error="Select a media player first.";this.render();return;}
     if(!stream||!stream.external_url){this._error="This streaming source does not include a provider link.";this.render();return;}
+    var context=this.playData(this._streamContext||null);
     try{
       await this._hass.callService(
         "nuvio",
         "play_provider",
         {
           external_url:stream.external_url,
-          provider_name:stream.name||stream.title||stream.addon||""
+          provider_name:stream.name||stream.title||stream.addon||"",
+          media_type:context.media_type,
+          content_id:context.content_id,
+          video_id:context.video_id,
+          season:context.season,
+          episode:context.episode,
+          episode_title:context.episode_title
         },
         {entity_id:p}
       );
