@@ -569,6 +569,7 @@ class NuvioCard extends HTMLElement {
           border-radius:24px;padding:12px;background:rgba(28,28,30,.98);color:#fff;
           box-shadow:0 18px 50px rgba(0,0,0,.42);backdrop-filter:blur(18px);
           pointer-events:auto;font-family:Roboto,Arial,sans-serif;
+          max-height:calc(100vh - 196px);overflow-y:auto;overscroll-behavior:contain;
         }
         #nuvio-remote-portal .nuvio-remote-head{
           display:flex;align-items:center;justify-content:space-between;
@@ -604,6 +605,17 @@ class NuvioCard extends HTMLElement {
           background:#03a9d9;border:0;color:white;font-size:11px;font-weight:800;
           box-shadow:0 3px 10px rgba(0,0,0,.25);
         }
+        #nuvio-remote-portal .nuvio-number-pad{
+          display:grid;grid-template-columns:repeat(3,1fr);gap:7px;
+          margin:0 0 12px;padding-top:2px;
+        }
+        #nuvio-remote-portal .nuvio-number-pad button{
+          height:36px;border:0;border-radius:12px;background:#303033;color:white;
+          display:grid;place-items:center;font-size:16px;font-weight:700;
+          cursor:pointer;padding:0;
+          box-shadow:inset 0 0 0 1px rgba(255,255,255,.035);
+        }
+        #nuvio-remote-portal .nuvio-number-pad .nuvio-digit-zero{grid-column:2}
         #nuvio-remote-portal .nuvio-remote-footer{
           display:grid;grid-template-columns:1fr 1fr;gap:8px;
         }
@@ -636,6 +648,18 @@ class NuvioCard extends HTMLElement {
           <button class="nuvio-ring-ok" data-remote-key="ok" title="OK">OK</button>
           <button class="nuvio-ring-btn nuvio-ring-right" data-remote-key="right" title="Right"><span>›</span></button>
           <button class="nuvio-ring-btn nuvio-ring-down" data-remote-key="down" title="Down"><span>⌄</span></button>
+        </div>
+        <div class="nuvio-number-pad" role="group" aria-label="Number pad">
+          <button data-remote-key="1" title="1" aria-label="1">1</button>
+          <button data-remote-key="2" title="2" aria-label="2">2</button>
+          <button data-remote-key="3" title="3" aria-label="3">3</button>
+          <button data-remote-key="4" title="4" aria-label="4">4</button>
+          <button data-remote-key="5" title="5" aria-label="5">5</button>
+          <button data-remote-key="6" title="6" aria-label="6">6</button>
+          <button data-remote-key="7" title="7" aria-label="7">7</button>
+          <button data-remote-key="8" title="8" aria-label="8">8</button>
+          <button data-remote-key="9" title="9" aria-label="9">9</button>
+          <button class="nuvio-digit-zero" data-remote-key="0" title="0" aria-label="0">0</button>
         </div>
         <div class="nuvio-remote-footer">
           <button data-remote-key="back"><span>←</span><span>Back</span></button>
@@ -838,4 +862,4 @@ class NuvioCard extends HTMLElement {
 if(!customElements.get("nuvio-card"))customElements.define("nuvio-card",NuvioCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==="nuvio-card"))window.customCards.push({type:"nuvio-card",name:"Nuvio",description:"Browse, search and play your Nuvio catalog.",preview:true});
-console.info("NUVIO-CARD v0.4.26");
+console.info("NUVIO-CARD v0.4.27");

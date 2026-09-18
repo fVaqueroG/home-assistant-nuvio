@@ -185,7 +185,7 @@ play_provider:
 
 remote_key:
   name: Remote key
-  description: Send a navigation key to the selected Android TV or LG webOS media player.
+  description: Send a navigation or numeric key to the selected Android TV or LG webOS media player.
   target:
     entity:
       domain: media_player
@@ -203,3 +203,13 @@ remote_key:
             - back
             - home
             - wake
+            - "0"
+            - "1"
+            - "2"
+            - "3"
+            - "4"
+            - "5"
+            - "6"
+            - "7"
+            - "8"
+            - "9"
