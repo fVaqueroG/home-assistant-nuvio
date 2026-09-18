@@ -660,21 +660,20 @@ class NuvioCard extends HTMLElement {
         var secondary=s.description&&s.description!==label?s.description:"";
         var filename=s.filename&&s.filename!==label?s.filename:"";
         var unavailable=s.requires_headers?"Custom headers required":"Nuvio resolver required";
-        var directUrl=s.url||"";
         var externalUrl=s.external_url||"";
         var torrentLink=s.magnet_uri||"";
         var linkHtml="";
         var canResolve=!!s.resolvable&&!s.requires_headers&&(s.info_hash||s.magnet_uri);
         var resolving=this._resolving.has(n);
         var externalOnly=!!externalUrl&&!s.direct&&!canResolve;
-        var nuvioButton='<button class="action nuvioplay" data-source-index="'+n+'">'+((s.direct||canResolve)?"▶ Play in Nuvio":"Open in Nuvio")+'</button>';
+        var playButton='<button class="action primary nuvioplay" data-source-index="'+n+'">▶ Play</button>';
         var actionHtml=externalOnly
-          ? '<button class="action nuvioplay" data-source-index="'+n+'">Open title in Nuvio</button><button class="action copyexternal" data-source-index="'+n+'">Copy provider link</button><span class="resolver">External provider link</span>'
+          ? playButton+'<button class="action copyexternal" data-source-index="'+n+'">Copy provider link</button><span class="resolver">External provider link</span>'
           : s.direct
-            ? '<button class="action primary playsource" data-source-index="'+n+'">▶ Play on TV</button>'+nuvioButton+'<button class="action copylink" data-source-index="'+n+'">Copy stream link</button>'
+            ? playButton+'<button class="action copylink" data-source-index="'+n+'">Copy stream link</button>'
             : canResolve
-              ? '<button class="action primary playdirect" data-source-index="'+n+'" '+(resolving?"disabled":"")+'>'+(resolving?"Resolving…":"▶ Play on TV")+'</button>'+nuvioButton+'<button class="action resolvesource" data-source-index="'+n+'" '+(resolving?"disabled":"")+'">Resolve only</button>'+(torrentLink?'<button class="action copytorrent" data-source-index="'+n+'">Copy magnet</button>':"")
-              : nuvioButton+'<span class="resolver">'+this.esc(unavailable)+'</span>'+(torrentLink?'<button class="action copytorrent" data-source-index="'+n+'">Copy magnet</button>':"");
+              ? playButton+'<button class="action resolvesource" data-source-index="'+n+'" '+(resolving?"disabled":"")+'">Resolve only</button>'+(torrentLink?'<button class="action copytorrent" data-source-index="'+n+'">Copy magnet</button>':"")
+              : playButton+'<span class="resolver">'+this.esc(unavailable)+'</span>'+(torrentLink?'<button class="action copytorrent" data-source-index="'+n+'">Copy magnet</button>':"");
         return '<div class="source-row">'+
           '<div class="source-main">'+
             '<div class="source-label">'+this.esc(label)+'</div>'+
@@ -698,7 +697,7 @@ class NuvioCard extends HTMLElement {
     var debridControls=unresolved
       ? (this._debridMeta.configured
           ? '<button class="action resolveall" id="resolveAll">Resolve up to 6 links · '+this.esc((this._debridMeta.providers||[]).join(", ")||this._debridMeta.provider||"Nuvio debrid")+'</button>'
-          : '<span class="debrid-note">Open in Nuvio opens Nuvio\'s source picker for this title/episode. Play direct plays the exact source selected here.</span>')
+          : '<span class="debrid-note">Play uses Nuvio for the selected source or opens Nuvio\'s source picker when the source cannot be resolved here.</span>')
       : "";
     var remoteButton=this._config.show_remote===false?"":'<button class="ib remote-toggle-button '+(this._remoteExpanded?"remote-active":"")+'" title="Remote"><ha-icon icon="mdi:remote-tv"></ha-icon></button>';
     return '<div class="top source-top"><button class="back" id="backDetails">← '+this.esc(title)+'</button><div class="source-title-row"><h3>Sources · '+this.esc(sub)+'</h3>'+remoteButton+'</div><div class="controls">'+this.playerSelect()+debridControls+'</div><div class="source-summary">'+this._streams.length+' source'+(this._streams.length===1?"":"s")+' from '+groups.size+' addon'+(groups.size===1?"":"s")+(unresolved?' · '+unresolved+' resolvable':"")+'</div></div>'+
@@ -752,4 +751,4 @@ class NuvioCard extends HTMLElement {
 if(!customElements.get("nuvio-card"))customElements.define("nuvio-card",NuvioCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==="nuvio-card"))window.customCards.push({type:"nuvio-card",name:"Nuvio",description:"Browse, search and play your Nuvio catalog.",preview:true});
-console.info("NUVIO-CARD v0.4.22");
+console.info("NUVIO-CARD v0.4.23");
