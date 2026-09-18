@@ -215,14 +215,24 @@ class NuvioApi:
         streams = data.get("streams", [])
         return [stream for stream in streams if isinstance(stream, dict)]
 
+    @staticmethod
+    def is_watchhub_addon(addon: Addon) -> bool:
+        """Return whether an addon is Stremio WatchHub."""
+        addon_id = str(addon.manifest.get("id") or "").strip().casefold()
+        return (
+            addon_id == "org.stremio.watchhub"
+            or "watchhub" in addon.name.casefold()
+        )
+
     async def async_all_streams(
         self,
         media_type: str,
         video_id: str,
         *,
         watchhub_country: str | None = None,
+        addon_scope: str = "all",
     ) -> list[tuple[Addon, dict[str, Any]]]:
-        """Return streams from all configured addons concurrently."""
+        """Return streams from configured addons for the requested source scope."""
 
         async def load(addon: Addon) -> tuple[Addon, list[dict[str, Any]]]:
             try:
@@ -235,9 +245,14 @@ class NuvioApi:
             except NuvioApiError:
                 return addon, []
 
-        batches = await asyncio.gather(
-            *(load(addon) for addon in await self.async_addons())
-        )
+        addons = await self.async_addons()
+        scope = str(addon_scope or "all").strip().casefold()
+        if scope == "watchhub":
+            addons = [addon for addon in addons if self.is_watchhub_addon(addon)]
+        elif scope == "other":
+            addons = [addon for addon in addons if not self.is_watchhub_addon(addon)]
+
+        batches = await asyncio.gather(*(load(addon) for addon in addons))
         return [
             (addon, stream)
             for addon, streams in batches
