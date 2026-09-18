@@ -56,7 +56,9 @@ class NuvioApi:
         self.manifest_urls = [normalize_manifest_url(url) for url in manifest_urls]
         self._addons: list[Addon] | None = None
         self._catalog_cache: dict[tuple[str, str, str, str | None], tuple[float, list[dict[str, Any]]]] = {}
-        self._catalog_ttl = 60.0
+        self._meta_cache: dict[tuple[str, str, str], tuple[float, dict[str, Any]]] = {}
+        self._catalog_ttl = 300.0
+        self._meta_ttl = 300.0
 
     async def _get_json(self, url: str) -> dict[str, Any]:
         try:
@@ -71,9 +73,13 @@ class NuvioApi:
 
     async def async_addons(self, *, refresh: bool = False) -> list[Addon]:
         """Load configured addon manifests."""
-        if self._addons is not None and not refresh:
-            return self._addons
+        cached_by_url = {addon.manifest_url: addon for addon in self._addons or []}
+        if not refresh and all(url in cached_by_url for url in self.manifest_urls):
+            return [cached_by_url[url] for url in self.manifest_urls]
+
         async def load_manifest(manifest_url: str):
+            if not refresh and manifest_url in cached_by_url:
+                return cached_by_url[manifest_url], None
             try:
                 manifest = await self._get_json(manifest_url)
                 addon = Addon(manifest_url, addon_base_url(manifest_url), manifest)
@@ -108,12 +114,13 @@ class NuvioApi:
         catalog_id: str,
         *,
         extra: str | None = None,
+        refresh: bool = False,
     ) -> list[dict[str, Any]]:
         """Return catalog metas."""
         cache_key = (addon.manifest_url, media_type, catalog_id, extra)
         cached = self._catalog_cache.get(cache_key)
         now = time.monotonic()
-        if cached is not None and now - cached[0] < self._catalog_ttl:
+        if not refresh and cached is not None and now - cached[0] < self._catalog_ttl:
             return cached[1]
 
         path = f"catalog/{quote(media_type, safe='')}/{quote(catalog_id, safe='')}"
@@ -160,6 +167,12 @@ class NuvioApi:
         self, addon: Addon, media_type: str, content_id: str
     ) -> dict[str, Any]:
         """Return full metadata for a title."""
+        cache_key = (addon.manifest_url, media_type, content_id)
+        cached = self._meta_cache.get(cache_key)
+        now = time.monotonic()
+        if cached is not None and now - cached[0] < self._meta_ttl:
+            return cached[1]
+
         url = (
             f"{addon.base_url}/meta/{quote(media_type, safe='')}/"
             f"{quote(content_id, safe='')}.json"
@@ -168,6 +181,7 @@ class NuvioApi:
         meta = data.get("meta")
         if not isinstance(meta, dict):
             raise NuvioApiError("Addon returned no metadata")
+        self._meta_cache[cache_key] = (now, meta)
         return meta
 
     async def async_search(self, text: str) -> list[tuple[Addon, dict[str, Any]]]:
