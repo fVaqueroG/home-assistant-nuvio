@@ -344,8 +344,27 @@ class NuvioCard extends HTMLElement {
       );
     }catch(e){this._error=e.message||(inNuvio?"Nuvio internal playback failed.":"Direct source playback failed.");this.render();}
   }
+  async playProviderSource(stream){
+    var p=this.player();if(!p){this._error="Select a media player first.";this.render();return;}
+    if(!stream||!stream.external_url){this._error="This streaming source does not include a provider link.";this.render();return;}
+    try{
+      await this._hass.callService(
+        "nuvio",
+        "play_provider",
+        {
+          external_url:stream.external_url,
+          provider_name:stream.name||stream.title||stream.addon||""
+        },
+        {entity_id:p}
+      );
+    }catch(e){
+      this._error=e.message||"Could not open this title in the streaming app.";
+      this.render();
+    }
+  }
   async playInNuvioIndex(index){
     var s=this._streams[index];if(!s)return;
+    if(s.external_url){await this.playProviderSource(s);return;}
     if(s.direct&&s.url){await this.playSource(s,true);return;}
     if(s.resolvable){
       var resolved=await this.resolveSource(index,false);
@@ -697,7 +716,7 @@ class NuvioCard extends HTMLElement {
         var externalOnly=!!externalUrl&&!s.direct&&!canResolve;
         var playButton='<button class="action primary nuvioplay" data-source-index="'+n+'">▶ Play</button>';
         var actionHtml=externalOnly
-          ? playButton+'<button class="action copyexternal" data-source-index="'+n+'">Copy provider link</button><span class="resolver">External provider link</span>'
+          ? playButton+'<button class="action copyexternal" data-source-index="'+n+'">Copy provider link</button><span class="resolver">Streaming app</span>'
           : s.direct
             ? playButton+'<button class="action copylink" data-source-index="'+n+'">Copy stream link</button>'
             : canResolve
@@ -779,4 +798,4 @@ class NuvioCard extends HTMLElement {
 if(!customElements.get("nuvio-card"))customElements.define("nuvio-card",NuvioCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==="nuvio-card"))window.customCards.push({type:"nuvio-card",name:"Nuvio",description:"Browse, search and play your Nuvio catalog.",preview:true});
-console.info("NUVIO-CARD v0.4.24");
+console.info("NUVIO-CARD v0.4.25");

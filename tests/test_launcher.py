@@ -1,11 +1,17 @@
 """Tests for Nuvio launch contracts."""
 
 from custom_components.nuvio.launcher import (
+    android_provider_command,
+    android_provider_target,
     deep_link,
     direct_stream_command,
+    netflix_content_id,
+    provider_key,
+    provider_source_match,
     player_intent_command,
     stream_intent_command,
     webos_launch_payload,
+    webos_provider_launch_payload,
 )
 
 
@@ -125,3 +131,43 @@ def test_webos_player_launch_payload() -> None:
     assert params["infoHash"] == "abcdef"
     assert params["fileIdx"] == 2
     assert params["profileId"] == 1
+
+
+def test_provider_detection_and_source_matching() -> None:
+    assert provider_key("Amazon Video", "https://watch.amazon.com/detail?gti=abc") == "prime"
+    assert provider_key("Netflix", "https://www.netflix.com/watch/81234567") == "netflix"
+    assert provider_key("Disney Plus", "https://www.disneyplus.com/movies/test") == "disney"
+    assert provider_source_match("disney", ["Live TV", "Disney+", "HDMI 1"]) == "Disney+"
+    assert provider_source_match("max", ["Netflix", "Max", "Prime Video"]) == "Max"
+
+
+def test_netflix_provider_targets() -> None:
+    url = "https://www.netflix.com/watch/81234567"
+    assert netflix_content_id(url) == "81234567"
+    assert android_provider_target("netflix", url) == "netflix://title/81234567"
+    command = android_provider_command("netflix", url)
+    assert "com.netflix.ninja/.MainActivity" in command
+    assert "netflix://title/81234567" in command
+    payload = webos_provider_launch_payload("netflix", url)
+    assert payload is not None
+    assert payload["id"] == "netflix"
+    assert "81234567" in payload["contentId"]
+
+
+def test_prime_provider_targets() -> None:
+    url = "https://watch.amazon.com/detail?gti=amzn1.dv.gti.example"
+    command = android_provider_command("prime", url)
+    assert "android.intent.action.VIEW" in command
+    assert url in command
+    payload = webos_provider_launch_payload("prime", url)
+    assert payload == {
+        "id": "amazon",
+        "contentId": url,
+        "params": {"contentTarget": url},
+    }
+
+
+def test_generic_provider_has_no_hardcoded_webos_payload() -> None:
+    assert webos_provider_launch_payload(
+        "disney", "https://www.disneyplus.com/movies/example"
+    ) is None
