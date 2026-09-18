@@ -8,8 +8,8 @@
     "frontend",
     "lovelace"
   ],
-  "documentation": "https://github.com/fVaqueroG/home-assistant-nuvio",
   "integration_type": "service",
+  "documentation": "https://github.com/fVaqueroG/home-assistant-nuvio",
   "iot_class": "cloud_polling",
   "requirements": [],
   "version": "0.4.25"
