@@ -11,14 +11,16 @@
           "profile_id": "Número de perfil de Nuvio",
           "connect_account": "Conectar cuenta de Nuvio",
           "debrid_provider": "Proveedor de debrid",
-          "debrid_api_key": "Clave API / token de debrid"
+          "debrid_api_key": "Clave API / token de debrid",
+          "streaming_providers": "Proveedores de streaming"
         },
         "data_description": {
           "package_name": "Usa com.nuvio.app para la versión de Play Store o com.nuvio.tv para la mayoría de versiones de GitHub/sideload.",
           "profile_id": "El perfil 1 es el perfil principal. Usa 2–5 para otro perfil.",
           "connect_account": "Agrega Continuar viendo, Mi biblioteca, perfiles y addons sincronizados.",
           "debrid_provider": "Opcional. Si conectas tu cuenta de Nuvio, Home Assistant usa automáticamente las credenciales de debrid sincronizadas del perfil. Selecciona un proveedor aquí solo como reemplazo local.",
-          "debrid_api_key": "Opcional cuando la cuenta de Nuvio ya tiene debrid sincronizado. Se guarda solo en Home Assistant si se proporciona."
+          "debrid_api_key": "Opcional cuando la cuenta de Nuvio ya tiene debrid sincronizado. Se guarda solo en Home Assistant si se proporciona.",
+          "streaming_providers": "Solo estos proveedores aparecen en la colección Streaming sincronizada y en los resultados de WatchHub. Déjalo vacío para mostrar todos los proveedores de WatchHub."
         }
       },
       "reconfigure": {
@@ -29,14 +31,16 @@
           "connect_account": "Conectar cuenta de Nuvio",
           "debrid_provider": "Proveedor de debrid",
           "debrid_api_key": "Clave API / token de debrid",
-          "package_name": "Paquete de Nuvio para Android"
+          "package_name": "Paquete de Nuvio para Android",
+          "streaming_providers": "Proveedores de streaming"
         },
         "data_description": {
           "profile_id": "El perfil 1 es el perfil principal. Usa 2–5 para otro perfil.",
           "connect_account": "Desactiva esta opción para desconectar la cuenta de Nuvio vinculada.",
           "debrid_provider": "Opcional: usa las credenciales sincronizadas de tu cuenta de Nuvio automáticamente, o selecciona un proveedor como reemplazo local.",
           "debrid_api_key": "Déjalo vacío para usar la credencial sincronizada de Nuvio o conservar un reemplazo local existente.",
-          "package_name": "Usa com.nuvio.tv para la app completa oficial o com.nuviodebug.com para la compilación de prueba del fork compatible con reproducción directa desde Home Assistant."
+          "package_name": "Usa com.nuvio.tv para la app completa oficial o com.nuviodebug.com para la compilación de prueba del fork compatible con reproducción directa desde Home Assistant.",
+          "streaming_providers": "Solo estos proveedores aparecen en la colección Streaming sincronizada y en los resultados de WatchHub. Déjalo vacío para mostrar todos los proveedores de WatchHub."
         }
       },
       "device": {
