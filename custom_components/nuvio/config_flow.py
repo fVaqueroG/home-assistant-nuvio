@@ -11,6 +11,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .account import NuvioAccountApi, NuvioAuthError, NuvioLoginExpired
 from .api import NuvioApi, NuvioApiError, normalize_manifest_url
+from .tmdb import TmdbApiError, TmdbWatchApi
 from .providers import (
     normalize_provider_text,
     normalize_selected_provider,
@@ -30,6 +31,7 @@ from .const import (
     CONF_REFRESH_TOKEN,
     CONF_STREAMING_PROVIDERS,
     CONF_WATCHHUB_COUNTRY,
+    CONF_TMDB_ACCESS_TOKEN,
     CONF_USER_ID,
     DEFAULT_MANIFEST_URL,
     DEFAULT_DEBRID_PROVIDER,
@@ -179,6 +181,10 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                         ).upper(),
                     ),
                 ): selector.CountrySelector(),
+                probatio.Optional(
+                    CONF_TMDB_ACCESS_TOKEN,
+                    default=values.get(CONF_TMDB_ACCESS_TOKEN, ""),
+                ): _debrid_key_selector(),
                 probatio.Required(
                     CONF_DEBRID_PROVIDER,
                     default=values.get(CONF_DEBRID_PROVIDER, DEFAULT_DEBRID_PROVIDER),
@@ -214,6 +220,22 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
             except NuvioApiError:
                 errors[CONF_MANIFEST_URLS] = "cannot_connect"
             else:
+                tmdb_token = str(
+                    user_input.get(CONF_TMDB_ACCESS_TOKEN, "")
+                ).strip()
+                if tmdb_token:
+                    try:
+                        await TmdbWatchApi(
+                            async_get_clientsession(self.hass), tmdb_token
+                        ).async_validate()
+                    except TmdbApiError:
+                        errors[CONF_TMDB_ACCESS_TOKEN] = "tmdb_token_invalid"
+                        return self.async_show_form(
+                            step_id="user",
+                            data_schema=self._user_schema(user_input),
+                            errors=errors,
+                        )
+
                 provider = str(
                     user_input.get(CONF_DEBRID_PROVIDER, DEFAULT_DEBRID_PROVIDER)
                 )
@@ -244,6 +266,7 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                             or DEFAULT_WATCHHUB_COUNTRY,
                         )
                     ).upper(),
+                    CONF_TMDB_ACCESS_TOKEN: tmdb_token,
                     CONF_DEBRID_PROVIDER: provider,
                 }
                 if provider != "none":
@@ -308,6 +331,7 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                         ),
                     ),
                 ): selector.CountrySelector(),
+                probatio.Optional(CONF_TMDB_ACCESS_TOKEN, default=""): _debrid_key_selector(),
                 probatio.Required(
                     CONF_DEBRID_PROVIDER,
                     default=values.get(
@@ -335,6 +359,21 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
             await self._async_discover_streaming_providers(entry)
         errors: dict[str, str] = {}
         if user_input is not None:
+            entered_tmdb_token = str(
+                user_input.get(CONF_TMDB_ACCESS_TOKEN, "")
+            ).strip()
+            existing_tmdb_token = str(
+                entry.data.get(CONF_TMDB_ACCESS_TOKEN, "")
+            ).strip()
+            tmdb_token = entered_tmdb_token or existing_tmdb_token
+            if entered_tmdb_token:
+                try:
+                    await TmdbWatchApi(
+                        async_get_clientsession(self.hass), entered_tmdb_token
+                    ).async_validate()
+                except TmdbApiError:
+                    errors[CONF_TMDB_ACCESS_TOKEN] = "tmdb_token_invalid"
+
             provider = str(
                 user_input.get(
                     CONF_DEBRID_PROVIDER,
@@ -373,6 +412,7 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                             ),
                         )
                     ).upper(),
+                    CONF_TMDB_ACCESS_TOKEN: tmdb_token,
                     CONF_DEBRID_PROVIDER: provider,
                 }
                 if provider == "none":
