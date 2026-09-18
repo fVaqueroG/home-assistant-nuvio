@@ -292,12 +292,281 @@ def netflix_content_id(external_url: str) -> str | None:
 
 
 def provider_content_id(provider: str, external_url: str) -> str | None:
-    """Extract the provider's stable title/entity id from a WatchHub URL."""
+    """Extract the provider's stable title/entity id from a provider URL."""
     raw = _decoded_url(external_url)
     parsed = urlparse(raw)
     query = parse_qs(parsed.query)
     path = parsed.path or ""
 
+    if provider == "netflix":
+        return netflix_content_id(raw)
+
+    if provider == "prime":
+        for key in ("gti", "asin", "contentId", "contentid"):
+            values = query.get(key)
+            if values and values[0]:
+                return values[0]
+        for pattern in (
+            r"/detail/([^/?#]+)",
+            r"/gp/video/detail/([^/?#]+)",
+        ):
+            match = re.search(pattern, path, re.IGNORECASE)
+            if match:
+                return match.group(1)
+
+    if provider == "disney":
+        match = re.search(r"(?:entity-|/entity/)([a-z0-9-]{8,})", raw, re.IGNORECASE)
+        if match:
+            return match.group(1)
+        match = re.search(
+            r"/([a-f0-9]{8,}(?:-[a-f0-9]{4,}){2,})/?$",
+            path,
+            re.IGNORECASE,
+        )
+        if match:
+            return match.group(1)
+
+    if provider == "apple":
+        match = re.search(r"(umc\.cmc\.[a-z0-9.]+)", raw, re.IGNORECASE)
+        if match:
+            return match.group(1)
+
+    if provider == "max":
+        for key in ("id", "contentId", "contentid"):
+            values = query.get(key)
+            if values and values[0]:
+                return values[0]
+        match = re.search(
+            r"/(?:movie|show|video|watch)/([a-z0-9-]{8,})",
+            path,
+            re.IGNORECASE,
+        )
+        if match:
+            return match.group(1)
+
+    if provider == "crunchyroll":
+        match = re.search(r"/(?:watch|series)/([A-Z0-9]+)", path, re.IGNORECASE)
+        if match:
+            return match.group(1)
+
+    if provider == "paramount":
+        for key in ("id", "contentId", "contentid"):
+            values = query.get(key)
+            if values and values[0]:
+                return values[0]
+        for pattern in (
+            r"/(?:movies|shows)/video/([^/?#]+)",
+            r"/video/([^/?#]+)",
+            r"/(?:movies|shows)/([^/?#]+)/?$",
+        ):
+            match = re.search(pattern, path, re.IGNORECASE)
+            if match:
+                return match.group(1)
+
+    return None
+
+
+def android_provider_target(provider: str, external_url: str) -> str:
+    """Return the Android app/deep-link target for a provider source."""
+    if provider == "netflix":
+        content_id = netflix_content_id(external_url)
+        if content_id:
+            return f"netflix://title/{content_id}"
+
+    if provider == "prime":
+        content_id = provider_content_id(provider, external_url)
+        if content_id:
+            return (
+                "https://app.primevideo.com/detail?gti="
+                f"{quote(content_id, safe='.:_-')}"
+            )
+
+    return str(external_url or "").strip()
+
+
+def _android_view_command(target: str, package: str | None = None) -> str:
+    parts = [
+        "am",
+        "start",
+        "-W",
+        "-a",
+        "android.intent.action.VIEW",
+        "-d",
+        _arg(target),
+    ]
+    if package:
+        parts.extend(("-p", package))
+    return " ".join(parts)
+
+
+def android_provider_command(provider: str, external_url: str) -> str:
+    """Build an ADB command that hands a provider title to its Android TV app."""
+    target = android_provider_target(provider, external_url)
+    if provider == "netflix" and target.startswith("netflix://title/"):
+        return " ".join(
+            [
+                "am",
+                "start",
+                "-W",
+                "-n",
+                "com.netflix.ninja/.MainActivity",
+                "-a",
+                "android.intent.action.VIEW",
+                "-d",
+                _arg(target),
+                "-f",
+                "0x10000020",
+                "-e",
+                "source",
+                "30",
+            ]
+        )
+
+    packages = ANDROID_PROVIDER_PACKAGES.get(provider, ())
+    if not packages:
+        return _android_view_command(target)
+
+    if len(packages) == 1:
+        package = packages[0]
+        direct = _android_view_command(target, package)
+        fallback = _android_view_command(str(external_url or "").strip())
+        return (
+            f"if pm path {_arg(package)} >/dev/null 2>&1; "
+            f"then {direct}; else {fallback}; fi"
+        )
+
+    checks: list[str] = []
+    for index, package in enumerate(packages):
+        prefix = "if" if index == 0 else "elif"
+        checks.append(
+            f"{prefix} pm path {_arg(package)} >/dev/null 2>&1; "
+            f"then {_android_view_command(target, package)}"
+        )
+    checks.append(
+        f"else {_android_view_command(str(external_url or '').strip())}; fi"
+    )
+    return "; ".join(checks)
+
+
+def _webos_provider_params(
+    provider: str,
+    external_url: str,
+    *,
+    media_type: str | None = None,
+    content_id: str | None = None,
+    video_id: str | None = None,
+    season: int | None = None,
+    episode: int | None = None,
+    episode_title: str | None = None,
+) -> dict[str, Any]:
+    """Build a broad set of provider launch params accepted by LG TV apps."""
+    target = android_provider_target(provider, external_url)
+    provider_id = provider_content_id(provider, external_url)
+    params: dict[str, Any] = {
+        "contentTarget": target,
+        "target": target,
+        "uri": target,
+        "url": target,
+    }
+    if media_type:
+        params["mediaType"] = media_type
+    if content_id:
+        params["sourceContentId"] = content_id
+    if video_id:
+        params["sourceVideoId"] = video_id
+    if season is not None:
+        params["season"] = season
+    if episode is not None:
+        params["episode"] = episode
+    if episode_title:
+        params["episodeTitle"] = episode_title
+    if provider_id:
+        params["contentId"] = provider_id
+        if provider == "prime":
+            params["gti"] = provider_id
+        elif provider == "disney":
+            params["entityId"] = provider_id
+        elif provider == "apple":
+            params["adamId"] = provider_id
+        elif provider == "max":
+            params["videoId"] = provider_id
+        elif provider == "crunchyroll":
+            params["mediaId"] = provider_id
+    return params
+
+
+def webos_provider_search_query(
+    title: str | None,
+    *,
+    media_type: str | None = None,
+    season: int | None = None,
+    episode: int | None = None,
+    episode_title: str | None = None,
+) -> str:
+    """Build the title text handed to LG's native content search."""
+    clean_title = " ".join(str(title or "").split())
+    if not clean_title:
+        return ""
+
+    if media_type == "series" and episode is not None:
+        parts = [clean_title]
+        if season is not None:
+            parts.append(f"S{int(season):02d}E{int(episode):02d}")
+        else:
+            parts.append(f"E{int(episode):02d}")
+        clean_episode_title = " ".join(str(episode_title or "").split())
+        if clean_episode_title:
+            parts.append(clean_episode_title)
+        return " ".join(parts)
+
+    return clean_title
+
+
+def webos_provider_prefers_native_search(
+    provider: str | None,
+    external_url: str | None,
+    *,
+    title: str | None = None,
+    media_type: str | None = None,
+    season: int | None = None,
+    episode: int | None = None,
+    episode_title: str | None = None,
+) -> bool:
+    """Return whether real-TV behavior makes native LG search more reliable."""
+    if not webos_provider_search_query(
+        title,
+        media_type=media_type,
+        season=season,
+        episode=episode,
+        episode_title=episode_title,
+    ):
+        return False
+
+    if provider in {"prime", "disney", "max", "crunchyroll", "paramount"}:
+        return True
+
+    if (
+        provider == "netflix"
+        and media_type == "series"
+        and episode is not None
+    ):
+        return "/watch/" not in str(external_url or "").casefold()
+
+    return False
+
+
+def webos_provider_launch_requests(
+    provider: str,
+    external_url: str,
+    *,
+    media_type: str | None = None,
+    content_id: str | None = None,
+    video_id: str | None = None,
+    season: int | None = None,
+    episode: int | None = None,
+    episode_title: str | None = None,
+) -> list[tuple[str, dict[str, Any]]]:
+    """Return ordered LG webOS launch attempts for one provider title."""
     if provider == "netflix":
         provider_id = netflix_content_id(external_url)
         raw_url = str(external_url or "").strip()
@@ -310,8 +579,6 @@ def provider_content_id(provider: str, external_url: str) -> str | None:
                 f"{provider_id}&source_type=4"
             )
             legacy_payload["contentId"] = netflix_target
-            # ConnectSDK-compatible webOS launchers commonly duplicate the
-            # Netflix content id inside params as well as at the top level.
             legacy_payload["params"] = {"contentId": netflix_target}
         if media_type:
             legacy_payload["mediaType"] = media_type
@@ -326,11 +593,6 @@ def provider_content_id(provider: str, external_url: str) -> str | None:
         if episode_title:
             legacy_payload["episodeTitle"] = episode_title
 
-        # Exact Netflix /watch/<playable-id> links identify the individual
-        # episode. Give that URL the first launch attempt using the application
-        # manager contract seen in other webOS Netflix controllers. If webOS
-        # rejects that request, the caller falls back to Netflix's established
-        # legacy contentId contract below.
         if exact_watch_url and media_type == "series" and episode is not None:
             exact_params: dict[str, Any] = {
                 "contentTarget": raw_url,
@@ -374,14 +636,6 @@ def provider_content_id(provider: str, external_url: str) -> str | None:
     )
     requests: list[tuple[str, dict[str, Any]]] = []
     target = str(params.get("contentTarget") or external_url or "").strip()
-
-    # Netflix has its own special contentId format above. Apple TV is already
-    # confirmed working through applicationManager/launch on the user's TV, so
-    # preserve that path. For the providers below, prefer system.launcher/launch
-    # and send the exact title target in BOTH contentId and params.contentTarget.
-    # This matches the Prime Video launch contract used successfully by the
-    # companion Streaming Browser Card and gives older/newer webOS launchers
-    # both forms they are known to inspect.
     prefer_system_launcher = provider in {
         "prime",
         "disney",
@@ -399,8 +653,6 @@ def provider_content_id(provider: str, external_url: str) -> str | None:
             if target:
                 payload["contentId"] = target
             requests.append(("system.launcher/launch", payload))
-            # Keep applicationManager as a fallback for app-id / firmware
-            # combinations where system.launcher rejects the request entirely.
             requests.append(
                 (
                     "com.webos.applicationManager/launch",
@@ -430,6 +682,7 @@ def webos_provider_launch_payload(
     """Compatibility helper returning the first provider-specific webOS payload."""
     requests = webos_provider_launch_requests(provider, external_url)
     return requests[0][1] if requests else None
+
 
 def direct_stream_command(url: str, *, mime_type: str | None = None) -> str:
     """Open an exact stream URL with Android's media handler."""
