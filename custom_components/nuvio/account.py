@@ -231,6 +231,29 @@ class NuvioAccountApi:
         return [item for item in data or [] if isinstance(item, dict)]
 
 
+    async def async_watched_items(self, profile_id: int) -> list[dict[str, Any]]:
+        """Return watched movie/episode history used by Nuvio's Next Up pipeline."""
+        items: list[dict[str, Any]] = []
+        page = 1
+        page_size = 500
+        while True:
+            data = await self._request(
+                "POST",
+                "/rest/v1/rpc/sync_pull_watched_items",
+                json={
+                    "p_profile_id": profile_id,
+                    "p_page": page,
+                    "p_page_size": page_size,
+                },
+                authenticated=True,
+            )
+            batch = [item for item in data or [] if isinstance(item, dict)]
+            items.extend(batch)
+            if len(batch) < page_size:
+                return items
+            page += 1
+
+
     async def async_home_catalog_settings(self, profile_id: int) -> dict[str, Any]:
         """Return the shared Nuvio Home catalog ordering/settings for a profile."""
         data = await self._request(
