@@ -21,6 +21,8 @@ from .const import (
     ATTR_VIDEO_SIZE,
     ATTR_STREAM_DESCRIPTION,
     ATTR_IN_NUVIO,
+    ATTR_EXTERNAL_URL,
+    ATTR_PROVIDER_NAME,
     ATTR_INFO_HASH,
     ATTR_FILENAME,
     ATTR_FILE_IDX,
@@ -55,14 +57,20 @@ from .const import (
     SERVICE_OPEN,
     SERVICE_PLAY,
     SERVICE_PLAY_SOURCE,
+    SERVICE_PLAY_PROVIDER,
     SERVICE_REMOTE_KEY,
 )
 from .launcher import (
+    android_provider_command,
+    android_provider_target,
     deep_link,
     direct_stream_command,
     player_intent_command,
+    provider_key,
+    provider_source_match,
     stream_intent_command,
     webos_launch_payload,
+    webos_provider_launch_payload,
 )
 from .frontend import async_register_frontend
 from .debrid import DebridResolver
@@ -82,6 +90,14 @@ BASE_SCHEMA = {
 }
 
 OPEN_SCHEMA = probatio.Schema(BASE_SCHEMA)
+PLAY_PROVIDER_SCHEMA = probatio.Schema(
+    {
+        probatio.Required(ATTR_ENTITY_ID): cv.entity_ids,
+        probatio.Required(ATTR_EXTERNAL_URL): cv.url,
+        probatio.Optional(ATTR_PROVIDER_NAME): cv.string,
+    }
+)
+
 PLAY_SOURCE_SCHEMA = probatio.Schema(
     {
         probatio.Required(ATTR_ENTITY_ID): cv.entity_ids,
@@ -509,6 +525,115 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
                     blocking=True,
                 )
 
+        async def handle_play_provider(call: ServiceCall) -> None:
+            """Open an external streaming-provider source in that provider's app."""
+            entity_ids = call.data[ATTR_ENTITY_ID]
+            external_url = str(call.data[ATTR_EXTERNAL_URL])
+            provider_name = str(call.data.get(ATTR_PROVIDER_NAME) or "")
+            provider = provider_key(provider_name, external_url)
+            registry = async_get_entity_registry(hass)
+
+            android_ids: list[str] = []
+            android_remote_ids: list[str] = []
+            webos_ids: list[str] = []
+            invalid: list[str] = []
+
+            for entity_id in entity_ids:
+                registry_entry = registry.async_get(entity_id)
+                if registry_entry is None:
+                    invalid.append(entity_id)
+                elif registry_entry.platform == "androidtv":
+                    android_ids.append(entity_id)
+                elif registry_entry.platform == "androidtv_remote":
+                    android_remote_ids.append(entity_id)
+                elif registry_entry.platform == "webostv":
+                    webos_ids.append(entity_id)
+                else:
+                    invalid.append(entity_id)
+
+            if invalid:
+                raise HomeAssistantError(
+                    "Streaming provider playback supports Android TV, Android TV Remote, "
+                    f"and LG webOS media players: {', '.join(invalid)}"
+                )
+
+            if android_ids:
+                command = android_provider_command(provider or "", external_url)
+                await hass.services.async_call(
+                    "androidtv",
+                    "adb_command",
+                    {ATTR_ENTITY_ID: android_ids, "command": command},
+                    blocking=True,
+                )
+
+            for entity_id in android_remote_ids:
+                registry_entry = registry.async_get(entity_id)
+                remote_entity_id = next(
+                    (
+                        candidate.entity_id
+                        for candidate in registry.entities.values()
+                        if candidate.entity_id.startswith("remote.")
+                        and candidate.platform == "androidtv_remote"
+                        and candidate.config_entry_id == registry_entry.config_entry_id
+                    ),
+                    None,
+                )
+                if remote_entity_id is None:
+                    raise HomeAssistantError(
+                        f"No Android TV Remote remote entity is paired with {entity_id}"
+                    )
+                await hass.services.async_call(
+                    "remote",
+                    "turn_on",
+                    {
+                        ATTR_ENTITY_ID: [remote_entity_id],
+                        "activity": android_provider_target(provider or "", external_url),
+                    },
+                    blocking=True,
+                )
+
+            for entity_id in webos_ids:
+                exact_payload = (
+                    webos_provider_launch_payload(provider, external_url)
+                    if provider
+                    else None
+                )
+                if exact_payload is not None:
+                    await hass.services.async_call(
+                        "webostv",
+                        "command",
+                        {
+                            ATTR_ENTITY_ID: [entity_id],
+                            "command": "system.launcher/launch",
+                            "payload": exact_payload,
+                        },
+                        blocking=True,
+                    )
+                    continue
+
+                state = hass.states.get(entity_id)
+                source_list = (
+                    list(state.attributes.get("source_list", []))
+                    if state is not None
+                    and isinstance(state.attributes.get("source_list"), list)
+                    else []
+                )
+                source = provider_source_match(provider or provider_name, source_list)
+                if source is None:
+                    label = provider_name or provider or external_url
+                    raise HomeAssistantError(
+                        f"Could not match streaming provider {label!r} to an installed LG webOS app."
+                    )
+                await hass.services.async_call(
+                    "media_player",
+                    "select_source",
+                    {
+                        ATTR_ENTITY_ID: [entity_id],
+                        "source": source,
+                    },
+                    blocking=True,
+                )
+
         async def handle_remote_key(call: ServiceCall) -> None:
             """Send a navigation key to the selected TV."""
             entity_ids = call.data[ATTR_ENTITY_ID]
@@ -627,6 +752,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
             DOMAIN, SERVICE_PLAY_SOURCE, handle_play_source, schema=PLAY_SOURCE_SCHEMA
         )
         hass.services.async_register(
+            DOMAIN, SERVICE_PLAY_PROVIDER, handle_play_provider, schema=PLAY_PROVIDER_SCHEMA
+        )
+        hass.services.async_register(
             DOMAIN, SERVICE_REMOTE_KEY, handle_remote_key, schema=REMOTE_KEY_SCHEMA
         )
 
@@ -639,5 +767,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> bo
         hass.services.async_remove(DOMAIN, SERVICE_OPEN)
         hass.services.async_remove(DOMAIN, SERVICE_PLAY)
         hass.services.async_remove(DOMAIN, SERVICE_PLAY_SOURCE)
+        hass.services.async_remove(DOMAIN, SERVICE_PLAY_PROVIDER)
         hass.services.async_remove(DOMAIN, SERVICE_REMOTE_KEY)
     return True
