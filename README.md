@@ -240,7 +240,7 @@ Real-TV testing is authoritative for provider launch support. Apple TV direct ti
 
 Nuvio therefore uses two LG webOS paths:
 
-- **Direct provider launch** for Apple TV, Netflix movies, and Netflix episode offers whose JustWatch URL contains an episode-specific `/watch/<id>` playable ID.
+- **Direct provider launch** for Apple TV and Netflix movies. For Netflix episode offers whose JustWatch URL contains an episode-specific `/watch/<id>` playable ID, Nuvio first launches Netflix through `com.webos.applicationManager/launch` with the exact `/watch/<id>` URL as `params.contentTarget`. If webOS rejects that request, it falls back to Netflix's legacy `system.launcher/launch` content-id contract.
 - **LG native content search** for Prime Video, Disney+, Max, Crunchyroll, Paramount+, and Netflix episode offers that only contain a show-level `/title/<id>` URL. Episode searches include the series title, `SxxExx`, and episode title when available.
 
 The native-search path launches LG's built-in `com.webos.app.search` with the title already populated. If that search app is unavailable on a firmware version, Nuvio falls back to the provider-specific launch attempt and finally Home Assistant's installed-app source match.
