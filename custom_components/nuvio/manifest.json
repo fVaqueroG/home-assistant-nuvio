@@ -12,5 +12,5 @@
   "documentation": "https://github.com/fVaqueroG/home-assistant-nuvio",
   "iot_class": "cloud_polling",
   "requirements": [],
-  "version": "0.4.25"
+  "version": "0.4.26"
 }
