@@ -958,6 +958,27 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
                 if slot <= 0:
                     break
 
+    if hero_items:
+        addon_by_manifest = {addon.manifest_url: addon for addon in addons}
+
+        async def enrich_hero_item(item: dict[str, Any]) -> dict[str, Any]:
+            manifest_url = str(item.get("manifest_url") or "")
+            addon = addon_by_manifest.get(manifest_url)
+            content_id = str(item.get("id") or "")
+            media_type = str(item.get("type") or "movie")
+            if addon is None or not content_id:
+                return item
+            try:
+                async with semaphore:
+                    meta = await api.async_meta(addon, media_type, content_id)
+            except NuvioApiError:
+                return item
+            enriched = _item(meta, media_type, manifest_url)
+            # Preserve catalog-only fields if the full meta endpoint omits them.
+            return {**item, **{key: value for key, value in enriched.items() if value not in (None, "", [])}}
+
+        hero_items = list(await asyncio.gather(*(enrich_hero_item(item) for item in hero_items)))
+
     registry = async_get_entity_registry(hass)
     players: list[dict[str, Any]] = []
     for entity in registry.entities.values():
