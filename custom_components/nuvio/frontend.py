@@ -1222,6 +1222,42 @@ def _format_bytes(value: Any) -> str | None:
     return f"{amount:.0f} {unit}"
 
 
+def _infer_stream_mime(
+    stream: dict[str, Any],
+    behavior: dict[str, Any],
+    client_resolve: dict[str, Any],
+    filename: Any,
+    direct_url: Any,
+) -> str | None:
+    """Infer the same useful container hint Nuvio gives its player."""
+    for value in (
+        stream.get("mimeType"),
+        stream.get("mime_type"),
+        behavior.get("mimeType"),
+        behavior.get("mime_type"),
+        client_resolve.get("mimeType"),
+        client_resolve.get("mime_type"),
+    ):
+        text = str(value or "").strip()
+        if "/" in text and text not in {"video/*", "application/octet-stream"}:
+            return text
+
+    hint = f"{filename or ''} {direct_url or ''}".casefold()
+    mapping = (
+        ((".m3u8",), "application/vnd.apple.mpegurl"),
+        ((".mpd",), "application/dash+xml"),
+        ((".mkv",), "video/x-matroska"),
+        ((".webm",), "video/webm"),
+        ((".mov",), "video/quicktime"),
+        ((".m2ts", ".ts"), "video/mp2t"),
+        ((".mp4", ".m4v"), "video/mp4"),
+    )
+    for suffixes, mime_type in mapping:
+        if any(suffix in hint for suffix in suffixes):
+            return mime_type
+    return None
+
+
 def _stream_presentation(
     stream: dict[str, Any],
     behavior: dict[str, Any],
@@ -1456,6 +1492,13 @@ async def ws_streams(hass, connection, msg) -> None:
                     if stream.get("fileIdx") is not None
                     else client_resolve.get("fileIdx"),
                     "filename": presentation["filename"],
+                    "mime_type": _infer_stream_mime(
+                        stream,
+                        behavior,
+                        client_resolve,
+                        presentation["filename"],
+                        direct_url,
+                    ),
                     "binge_group": behavior.get("bingeGroup"),
                     "badges": presentation["badges"],
                     "size_bytes": presentation["size_bytes"],
