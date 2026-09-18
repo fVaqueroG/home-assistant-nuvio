@@ -163,6 +163,7 @@ def test_netflix_provider_targets() -> None:
     payload = requests[0][1]
     assert payload["id"] == "netflix"
     assert "81234567" in payload["contentId"]
+    assert payload["params"]["contentId"] == payload["contentId"]
 
 
 def test_prime_provider_targets() -> None:
