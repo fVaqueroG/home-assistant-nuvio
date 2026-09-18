@@ -446,33 +446,63 @@ def android_provider_command(provider: str, external_url: str) -> str:
     return "; ".join(checks)
 
 
-def _webos_provider_params(provider: str, external_url: str) -> dict[str, Any]:
+def _webos_provider_params(
+    provider: str,
+    external_url: str,
+    *,
+    media_type: str | None = None,
+    content_id: str | None = None,
+    video_id: str | None = None,
+    season: int | None = None,
+    episode: int | None = None,
+    episode_title: str | None = None,
+) -> dict[str, Any]:
     """Build a broad set of provider launch params accepted by LG TV apps."""
     target = android_provider_target(provider, external_url)
-    content_id = provider_content_id(provider, external_url)
+    provider_id = provider_content_id(provider, external_url)
     params: dict[str, Any] = {
         "contentTarget": target,
         "target": target,
         "uri": target,
         "url": target,
     }
+    if media_type:
+        params["mediaType"] = media_type
     if content_id:
-        params["contentId"] = content_id
+        params["sourceContentId"] = content_id
+    if video_id:
+        params["videoId"] = video_id
+    if season is not None:
+        params["season"] = season
+    if episode is not None:
+        params["episode"] = episode
+    if episode_title:
+        params["episodeTitle"] = episode_title
+    if provider_id:
+        params["contentId"] = provider_id
         if provider == "prime":
-            params["gti"] = content_id
+            params["gti"] = provider_id
         elif provider == "disney":
-            params["entityId"] = content_id
+            params["entityId"] = provider_id
         elif provider == "apple":
-            params["adamId"] = content_id
+            params["adamId"] = provider_id
         elif provider == "max":
-            params["videoId"] = content_id
+            params["providerVideoId"] = provider_id
         elif provider == "crunchyroll":
-            params["mediaId"] = content_id
+            params["mediaId"] = provider_id
     return params
 
 
 def webos_provider_launch_requests(
-    provider: str, external_url: str
+    provider: str,
+    external_url: str,
+    *,
+    media_type: str | None = None,
+    content_id: str | None = None,
+    video_id: str | None = None,
+    season: int | None = None,
+    episode: int | None = None,
+    episode_title: str | None = None,
 ) -> list[tuple[str, dict[str, Any]]]:
     """Return ordered LG webOS launch attempts for one provider title."""
     if provider == "netflix":
@@ -490,13 +520,35 @@ def webos_provider_launch_requests(
                     },
                 )
             ]
-        return [("system.launcher/launch", {"id": "netflix"})]
+        payload: dict[str, Any] = {"id": "netflix"}
+        if media_type:
+            payload["mediaType"] = media_type
+        if content_id:
+            payload["sourceContentId"] = content_id
+        if video_id:
+            payload["videoId"] = video_id
+        if season is not None:
+            payload["season"] = season
+        if episode is not None:
+            payload["episode"] = episode
+        if episode_title:
+            payload["episodeTitle"] = episode_title
+        return [("system.launcher/launch", payload)]
 
     app_ids = WEBOS_PROVIDER_APP_IDS.get(provider, ())
     if not app_ids:
         return []
 
-    params = _webos_provider_params(provider, external_url)
+    params = _webos_provider_params(
+        provider,
+        external_url,
+        media_type=media_type,
+        content_id=content_id,
+        video_id=video_id,
+        season=season,
+        episode=episode,
+        episode_title=episode_title,
+    )
     requests: list[tuple[str, dict[str, Any]]] = []
     for app_id in app_ids:
         # applicationManager/launch passes params directly to the target app.
