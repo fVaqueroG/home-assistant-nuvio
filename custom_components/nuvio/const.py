@@ -32,6 +32,7 @@ NUVIO_API_KEY: Final = (
 SERVICE_OPEN: Final = "open"
 SERVICE_PLAY: Final = "play"
 SERVICE_PLAY_SOURCE: Final = "play_source"
+SERVICE_PLAY_PROVIDER: Final = "play_provider"
 SERVICE_REMOTE_KEY: Final = "remote_key"
 
 ATTR_CONTENT_ID: Final = "content_id"
@@ -57,6 +58,8 @@ ATTR_ADDON_NAME: Final = "addon_name"
 ATTR_VIDEO_SIZE: Final = "video_size"
 ATTR_FILENAME: Final = "filename"
 ATTR_IN_NUVIO: Final = "in_nuvio"
+ATTR_EXTERNAL_URL: Final = "external_url"
+ATTR_PROVIDER_NAME: Final = "provider_name"
 
 DATA_API: Final = "api"
 DATA_ACCOUNT_API: Final = "account_api"
