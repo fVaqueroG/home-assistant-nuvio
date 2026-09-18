@@ -6,18 +6,36 @@ class NuvioCard extends HTMLElement {
   }
   static getStubConfig(){ return {title:"Nuvio",columns:6,show_remote:true,remote_side:"left"}; }
   setConfig(c){ this._config=Object.assign({title:"Nuvio",columns:6,show_search:true,show_remote:true,remote_side:"left"},c||{}); this.render(); }
-  set hass(h){ this._hass=h; if(!this._loaded&&!this._loading)this.loadHome(); }
+  set hass(h){ this._hass=h; if(!this._loaded&&!this._loading&&!this._homeRetryTimer&&(this._homeRetryCount||0)<3)this.loadHome(); }
   getCardSize(){ return 8; }
   ws(m){ return this._hass.connection.sendMessagePromise(m); }
   esc(v){ return String(v==null?"":v).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;"); }
   players(){ return this._playersMeta.length?this._playersMeta.map(x=>x.entity_id):(this._hass?Object.keys(this._hass.states).filter(x=>x.startsWith("media_player.")).sort():[]); }
   platform(id){ var p=this._playersMeta.find(x=>x.entity_id===id); return p?p.platform:""; }
   player(){ var s=this.shadowRoot&&this.shadowRoot.querySelector("#player"); return this._playerId||(s&&s.value)||this._config.default_player||this._config.entity||this.players()[0]||""; }
-  async loadHome(refresh=false){
-    if(!this._hass)return; this._loading=true; this._error=""; this.render();
-    try{ var r=await this.ws({type:"nuvio/home",refresh:refresh}); this._sections=r.sections||[]; this._hero=((r.hero||{}).enabled===false?[]:((r.hero||{}).items||[])); this._heroIndex=Math.min(this._heroIndex,Math.max(0,this._hero.length-1)); this._homePrefs=r.preferences||{}; this._playersMeta=r.players||[]; if(!this._playerId)this._playerId=this._config.default_player||this._config.entity||this.players()[0]||""; this._loaded=true; }
-    catch(e){ this._error=e.message||"Could not load Nuvio."; }
-    this._loading=false; this.render();
+  async loadHome(refresh=false,retry=false){
+    if(!this._hass||this._loading)return;
+    clearTimeout(this._homeRetryTimer);this._homeRetryTimer=null;
+    if(!retry)this._homeRetryCount=0;
+    this._loading=true;this._error="";this.render();
+    var needsRetry=false;
+    try{
+      var r=await this.ws({type:"nuvio/home",refresh:refresh});
+      var sections=r.sections||[],hero=(r.hero||{}).enabled===false?[]:((r.hero||{}).items||[]);
+      var empty=!sections.length&&!hero.length;
+      needsRetry=r.retry===true||empty;
+      // An empty refresh must not erase content that was already displayed.
+      if(!empty){this._sections=sections;this._hero=hero;this._homePrefs=r.preferences||{};this._loaded=true;}
+      this._heroIndex=Math.min(this._heroIndex,Math.max(0,this._hero.length-1));
+      this._playersMeta=r.players||[];
+      if(!this._playerId)this._playerId=this._config.default_player||this._config.entity||this.players()[0]||"";
+    }catch(e){needsRetry=true;this._error=e.message||"Could not load Nuvio.";}
+    this._loading=false;
+    if(needsRetry&&(this._homeRetryCount||0)<3&&this.isConnected){
+      this._homeRetryCount=(this._homeRetryCount||0)+1;
+      this._homeRetryTimer=setTimeout(()=>{this._homeRetryTimer=null;this.loadHome(true,true);},3000*this._homeRetryCount);
+    }else if(!needsRetry){this._homeRetryCount=0;}
+    this.render();
   }
   async search(){
     var q=this._query.trim(); if(!q){this._view="home";this.render();return;}
@@ -353,8 +371,9 @@ class NuvioCard extends HTMLElement {
     return '<div class="header"><h2>'+this.esc(this._config.title)+'</h2><div class="tools">'+s+'<button class="ib" id="refresh" title="Refresh"><ha-icon icon="mdi:refresh"></ha-icon></button>'+remote+'</div></div>';
   }
   home(){
+    if(this._homeRetryTimer&&!this._sections.length&&!this._hero.length)return '<div class="status">Nuvio Home is still loading. Retrying automatically…</div>';
     if(this._loading&&!this._loaded)return '<div class="status">Loading Nuvio…</div>';
-    if(!this._sections.length&&!this._hero.length)return '<div class="status">No Nuvio Home content was returned.</div>';
+    if(!this._sections.length&&!this._hero.length)return '<div class="status">Nuvio Home is temporarily unavailable or has no content. Use Refresh to try again.</div>';
     var rows=this._sections.map((s,si)=>{
       var title=this.homeRowTitle(s);
       if(s.kind==="collection"){
@@ -527,6 +546,7 @@ class NuvioCard extends HTMLElement {
     (document.body||document.documentElement).appendChild(portal);
   }
   disconnectedCallback(){
+    clearTimeout(this._homeRetryTimer);this._homeRetryTimer=null;
     clearInterval(this._heroTimer);this._heroTimer=null;
     this.removeRemotePortal();
   }
@@ -621,7 +641,7 @@ class NuvioCard extends HTMLElement {
   wire(){
     var r=this.shadowRoot,q=r.querySelector("#search");
     if(q){q.addEventListener("input",e=>this._query=e.target.value);q.addEventListener("keydown",e=>{if(e.key==="Enter")this.search();});}
-    r.querySelector("#refresh")?.addEventListener("click",()=>{this._loaded=false;this.loadHome(true);});
+    r.querySelector("#refresh")?.addEventListener("click",()=>this.loadHome(true));
     r.querySelectorAll("[data-remote-key]").forEach(b=>b.addEventListener("click",()=>this.remoteKey(b.dataset.remoteKey)));
     r.querySelectorAll(".remote-toggle-button").forEach(b=>b.addEventListener("click",()=>this.toggleRemote()));
     r.querySelector("#back")?.addEventListener("click",()=>{this._view=this._view==="details"?(this._returnView||"home"):"home";this._error="";this.render();});
@@ -661,4 +681,4 @@ class NuvioCard extends HTMLElement {
 if(!customElements.get("nuvio-card"))customElements.define("nuvio-card",NuvioCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==="nuvio-card"))window.customCards.push({type:"nuvio-card",name:"Nuvio",description:"Browse, search and play your Nuvio catalog.",preview:true});
-console.info("NUVIO-CARD v0.4.18");
+console.info("NUVIO-CARD v0.4.19");

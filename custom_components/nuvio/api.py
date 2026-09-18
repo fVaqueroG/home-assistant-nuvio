@@ -76,7 +76,13 @@ class NuvioApi:
         async def load_manifest(manifest_url: str):
             try:
                 manifest = await self._get_json(manifest_url)
-                return Addon(manifest_url, addon_base_url(manifest_url), manifest), None
+                addon = Addon(manifest_url, addon_base_url(manifest_url), manifest)
+                # Keep completed manifests if Home's time budget cancels a
+                # slower sibling. One slow addon must not hide every catalog.
+                by_url = {item.manifest_url: item for item in self._addons or []}
+                by_url[manifest_url] = addon
+                self._addons = [by_url[url] for url in self.manifest_urls if url in by_url]
+                return addon, None
             except NuvioApiError as err:
                 return None, str(err)
 
@@ -89,6 +95,11 @@ class NuvioApi:
             raise NuvioApiError("; ".join(errors) or "No addon manifests configured")
         self._addons = addons
         return addons
+
+    @property
+    def cached_addons(self) -> list[Addon]:
+        """Return manifests already loaded, including partial discovery."""
+        return list(self._addons or [])
 
     async def async_catalog(
         self,

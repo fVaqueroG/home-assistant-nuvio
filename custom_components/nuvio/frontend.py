@@ -28,7 +28,7 @@ from .debrid import DebridNotCached, DebridNotConfigured, DebridResolveError
 from .const import CONF_PROFILE_ID, DATA_ACCOUNT_API, DATA_API, DATA_DEBRID_RESOLVER, DOMAIN
 
 CARD_URL = "/nuvio/nuvio-card.js"
-CARD_VERSION = "0.4.18"
+CARD_VERSION = "0.4.19"
 CARD_RESOURCE_URL = f"{CARD_URL}?v={CARD_VERSION}"
 CARD_FILE = Path(__file__).parent / "frontend" / "nuvio-card.js"
 DATA_FRONTEND_REGISTERED = "frontend_registered"
@@ -304,12 +304,15 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
     api = entry.runtime_data[DATA_API]
     account = entry.runtime_data.get(DATA_ACCOUNT_API)
     profile_id = int(entry.data.get(CONF_PROFILE_ID, 1))
+    home_incomplete = False
 
     async def home_call(coro, timeout: float, fallback: Any):
         """Bound optional Home calls so one slow addon cannot stall the card."""
+        nonlocal home_incomplete
         try:
             return await asyncio.wait_for(coro, timeout=timeout)
         except (TimeoutError, NuvioApiError, NuvioAuthError):
+            home_incomplete = True
             return fallback
 
     # Manifest discovery is independent of account/profile sync; start it now
@@ -374,6 +377,8 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
     row_limit = 15 if selected_layout == "modern" else 24
 
     addons = await addons_task
+    if not addons:
+        addons = api.cached_addons
     addon_by_id = {_addon_id(addon): addon for addon in addons}
 
     catalog_specs: list[tuple[Addon, dict[str, Any], str, str, str, int]] = []
@@ -1103,6 +1108,7 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
     }
 
     result = {
+        "retry": home_incomplete,
         "sections": sections,
         "hero": {
             "enabled": hero_section_enabled,
@@ -1111,7 +1117,14 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
         "players": players,
         "preferences": preferences,
     }
-    domain_data[DATA_HOME_CACHE] = (now_monotonic, result)
+    has_content = bool(sections or hero_items)
+    if home_incomplete and not has_content and cached is not None:
+        previous = cached[1]
+        if previous.get("sections") or previous.get("hero", {}).get("items"):
+            return {**previous, "retry": True}
+    # Never turn a transient timeout or an empty startup into a cached Home.
+    if has_content and not home_incomplete:
+        domain_data[DATA_HOME_CACHE] = (time.monotonic(), result)
     return result
 
 
