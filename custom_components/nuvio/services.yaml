@@ -182,6 +182,33 @@ play_provider:
     provider_name:
       selector:
         text:
+    media_type:
+      selector:
+        select:
+          options:
+            - movie
+            - series
+    content_id:
+      selector:
+        text:
+    video_id:
+      selector:
+        text:
+    season:
+      selector:
+        number:
+          min: 0
+          max: 999
+          mode: box
+    episode:
+      selector:
+        number:
+          min: 0
+          max: 9999
+          mode: box
+    episode_title:
+      selector:
+        text:
 
 remote_key:
   name: Remote key
