@@ -205,9 +205,18 @@ This row deliberately reuses the integration's existing filters instead of intro
 - Movies use TMDB movie watch-provider availability.
 - Series episodes use TMDB's **season-level** watch-provider availability for the selected season.
 
-TMDB/JustWatch availability does **not** include full provider deep links. Nuvio therefore matches each TMDB provider to the corresponding WatchHub source. A provider icon is clickable only when WatchHub returned a matching external provider URL; otherwise the icon remains visible as availability information but is disabled rather than falsely opening the provider home screen.
+TMDB/JustWatch availability does **not** include full provider deep links, so Nuvio resolves playback links separately. When **TheTVDB API credentials** are configured, every provider-row load also resolves the exact TMDB movie/series/season/episode external IDs and queries TheTVDB v4 extended records for provider remote IDs. TheTVDB source-type `prefix` / `postfix` metadata is used to reconstruct the provider's canonical URL when available.
 
-Availability data is supplied by **JustWatch via TMDB**. This product uses the TMDB API but is not endorsed or certified by TMDB.
+The provider row is independent of WatchHub. Its order is:
+
+1. **TMDB/JustWatch** decides which providers are available in the configured **WatchHub country** and applies the configured **Streaming providers** allow-list.
+2. **TheTVDB** is queried for the exact movie or episode and supplies the preferred provider link when its remote-ID metadata contains one.
+3. **WatchHub** is only the playback-link fallback when TheTVDB has no usable provider URL.
+4. If neither TheTVDB nor WatchHub supplies a usable provider URL, the TMDB provider logo remains visible as availability information but is disabled instead of opening the provider home page.
+
+This means a TMDB-listed provider can be playable from the row even when it does **not** appear in WatchHub. For series episodes, TMDB's exact episode external IDs are used to obtain the corresponding TheTVDB episode ID before querying TheTVDB remote IDs.
+
+Availability data is supplied by **JustWatch via TMDB**. Exact external/provider-link metadata can be supplied by **TheTVDB**. This product uses the TMDB API but is not endorsed or certified by TMDB.
 
 ## WatchHub provider launching
 
