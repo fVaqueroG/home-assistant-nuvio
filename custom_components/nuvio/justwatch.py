@@ -48,8 +48,6 @@ query NuvioSearch(
         }
         offers(country: $country, platform: WEB, filter: $filter) {
           standardWebURL
-          preAffiliatedStandardWebURL
-          streamUrl
           monetizationType
           presentationType
           package {
@@ -106,8 +104,6 @@ query NuvioEpisodes(
         }
         offers(country: $country, platform: WEB, filter: $filter) {
           standardWebURL
-          preAffiliatedStandardWebURL
-          streamUrl
           monetizationType
           presentationType
           package {
@@ -223,59 +219,10 @@ class JustWatchGraphQLApi:
             technical_name = str(package.get("technicalName") or "").strip()
             short_name = str(package.get("shortName") or "").strip()
 
-            urls = [
-                str(raw.get("streamUrl") or "").strip(),
-                str(raw.get("preAffiliatedStandardWebURL") or "").strip(),
-                str(raw.get("standardWebURL") or "").strip(),
-            ]
-            urls = [
-                url
-                for url in urls
-                if url.lower().startswith(("http://", "https://"))
-            ]
-            if not urls:
+            url = str(raw.get("standardWebURL") or "").strip()
+            if not url.lower().startswith(("http://", "https://")):
                 continue
 
-            provisional_key = streaming_provider_key(
-                name or technical_name,
-                urls[0],
-            )
-            if not provisional_key:
-                continue
-
-            def specificity(url: str) -> int:
-                lower = url.casefold()
-                score = 0
-                if provisional_key == "netflix":
-                    if "/watch/" in lower:
-                        score += 100
-                    elif "/title/" in lower:
-                        score += 20
-                elif provisional_key == "prime":
-                    if "app.primevideo.com/detail" in lower:
-                        score += 100
-                    elif "/detail" in lower or "gti=" in lower:
-                        score += 80
-                elif provisional_key == "disney":
-                    if "entity-" in lower or "/entity/" in lower:
-                        score += 100
-                elif provisional_key == "apple":
-                    if "umc.cmc." in lower:
-                        score += 100
-                elif provisional_key == "max":
-                    if any(marker in lower for marker in ("/watch/", "/video/", "/movie/")):
-                        score += 100
-                elif provisional_key == "crunchyroll":
-                    if "/watch/" in lower:
-                        score += 100
-                elif provisional_key == "paramount":
-                    if "/video/" in lower:
-                        score += 100
-                if "affiliate" not in lower:
-                    score += 1
-                return score
-
-            url = max(urls, key=specificity)
             key = streaming_provider_key(name or technical_name, url)
             if not key:
                 continue
@@ -286,12 +233,6 @@ class JustWatchGraphQLApi:
                 "provider_code": short_name or None,
                 "package_id": package.get("packageId"),
                 "url": url,
-                "standard_url": str(raw.get("standardWebURL") or "").strip() or None,
-                "pre_affiliated_url": str(
-                    raw.get("preAffiliatedStandardWebURL") or ""
-                ).strip()
-                or None,
-                "stream_url": str(raw.get("streamUrl") or "").strip() or None,
                 "monetization_type": monetization,
                 "presentation_type": raw.get("presentationType"),
                 "source": "justwatch",
