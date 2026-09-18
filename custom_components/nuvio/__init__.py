@@ -57,6 +57,7 @@ from .const import (
     DATA_DEBRID_RESOLVER,
     DATA_TMDB_API,
     DATA_TVDB_API,
+    DATA_JUSTWATCH_API,
     DEFAULT_PACKAGE_NAME,
     DOMAIN,
     SERVICE_OPEN,
@@ -81,6 +82,7 @@ from .frontend import async_register_frontend
 from .debrid import DebridResolver
 from .tmdb import TmdbWatchApi
 from .tvdb import TvdbApi
+from .justwatch import JustWatchGraphQLApi
 
 type NuvioConfigEntry = ConfigEntry[dict[str, Any]]
 
@@ -245,6 +247,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
             entry.data.get(CONF_TVDB_API_KEY, ""),
             entry.data.get(CONF_TVDB_SUBSCRIBER_PIN, ""),
         ),
+        DATA_JUSTWATCH_API: JustWatchGraphQLApi(session),
     }
 
     if not hass.services.has_service(DOMAIN, SERVICE_OPEN):
