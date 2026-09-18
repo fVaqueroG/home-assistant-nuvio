@@ -1713,12 +1713,33 @@ async def ws_streams(hass, connection, msg) -> None:
             or DEFAULT_WATCHHUB_COUNTRY
         ).upper()
         rows = []
-        for addon, stream in await api.async_all_streams(
+        stream_pairs = await api.async_all_streams(
             msg["media_type"],
             msg["video_id"],
             watchhub_country=watchhub_country,
             addon_scope=msg["addon_scope"],
+        )
+        watchhub_series_fallback = False
+        if (
+            not stream_pairs
+            and msg["addon_scope"] == "watchhub"
+            and msg["media_type"] == "series"
         ):
+            # WatchHub often exposes subscription availability at series level
+            # even when an episode-specific Stremio id returns no streams.
+            # Retry only when the episode lookup is empty; episode-level results
+            # remain authoritative whenever WatchHub supplies them.
+            series_video_id = re.sub(r":\d+:\d+$", "", msg["video_id"])
+            if series_video_id and series_video_id != msg["video_id"]:
+                stream_pairs = await api.async_all_streams(
+                    "series",
+                    series_video_id,
+                    watchhub_country=watchhub_country,
+                    addon_scope="watchhub",
+                )
+                watchhub_series_fallback = bool(stream_pairs)
+
+        for addon, stream in stream_pairs:
             behavior = stream.get("behaviorHints")
             if not isinstance(behavior, dict):
                 behavior = {}
@@ -1779,6 +1800,11 @@ async def ws_streams(hass, connection, msg) -> None:
                 request_headers = {}
 
             presentation = _stream_presentation(stream, behavior, client_resolve)
+            if watchhub_series_fallback and is_watchhub:
+                presentation["badges"] = [
+                    {"kind": "availability", "label": "Series-level"},
+                    *presentation["badges"],
+                ]
             rows.append(
                 {
                     "addon": addon.name,
@@ -1790,6 +1816,9 @@ async def ws_streams(hass, connection, msg) -> None:
                     "external_url": external_url,
                     "external": bool(external_url) and not bool(direct_url),
                     "provider_key": provider_key,
+                    "watchhub_series_fallback": bool(
+                        watchhub_series_fallback and is_watchhub
+                    ),
                     "info_hash": stream.get("infoHash")
                     or client_resolve.get("infoHash"),
                     "magnet_uri": client_resolve.get("magnetUri"),
