@@ -20,6 +20,7 @@ assert.match(cardSource,/nuvio-ring-up ha-icon\{transform:translateY\(-6px\)\}/)
 assert.match(cardSource,/ring-btn\.right ha-icon\{transform:translateX\(6px\)\}/);
 assert.equal((cardSource.match(/paginate:true/g)||[]).length,0);
 assert.match(cardSource,/async loadMoreCatalog\(\)/);
+assert.doesNotMatch(cardSource,/_catalogItems\.length\s*>?=\s*300/);
 assert.match(cardSource,/refreshCatalogGrid\(\)/);
 assert.match(cardSource,/grid\.insertAdjacentHTML\("beforeend",html\)/);
 assert.doesNotMatch(cardSource,/grid\.innerHTML=visible\.map/);
