@@ -95,6 +95,12 @@ PLAY_PROVIDER_SCHEMA = probatio.Schema(
         probatio.Required(ATTR_ENTITY_ID): cv.entity_ids,
         probatio.Required(ATTR_EXTERNAL_URL): cv.url,
         probatio.Optional(ATTR_PROVIDER_NAME): cv.string,
+        probatio.Optional(ATTR_MEDIA_TYPE): probatio.In(["movie", "series"]),
+        probatio.Optional(ATTR_CONTENT_ID): cv.string,
+        probatio.Optional(ATTR_VIDEO_ID): cv.string,
+        probatio.Optional(ATTR_SEASON): probatio.Coerce(int),
+        probatio.Optional(ATTR_EPISODE): probatio.Coerce(int),
+        probatio.Optional(ATTR_EPISODE_TITLE): cv.string,
     }
 )
 
@@ -613,7 +619,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
 
             for entity_id in webos_ids:
                 launch_requests = (
-                    webos_provider_launch_requests(provider, external_url)
+                    webos_provider_launch_requests(
+                        provider,
+                        external_url,
+                        media_type=call.data.get(ATTR_MEDIA_TYPE),
+                        content_id=call.data.get(ATTR_CONTENT_ID),
+                        video_id=call.data.get(ATTR_VIDEO_ID),
+                        season=call.data.get(ATTR_SEASON),
+                        episode=call.data.get(ATTR_EPISODE),
+                        episode_title=call.data.get(ATTR_EPISODE_TITLE),
+                    )
                     if provider
                     else []
                 )
