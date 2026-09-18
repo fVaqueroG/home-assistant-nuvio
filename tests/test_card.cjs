@@ -49,6 +49,13 @@ const flush=()=>new Promise(r=>setImmediate(r));
  await card.openCatalog(card._sections[8]);resolve.forEach(r=>r({items:[]}));await pending;
  assert.equal(card._catalogItems[0].id,'new');
  card.remove();assert.equal(card._heroTimer,null);assert.equal(timers.size,0);
+ // External provider links (for example WatchHub/Amazon) are navigation URLs,
+ // not media streams: never expose the direct-player buttons for them.
+ const external=window.document.createElement('nuvio-card');external.setConfig({show_remote:false});external._loaded=true;external._view='sources';
+ external._item={id:'tt1',type:'movie',name:'Movie'};external._details=external._item;external._streams=[{addon:'WatchHub',name:'Amazon Video',external_url:'https://watch.amazon.com/detail?gti=test',external:true,direct:false,resolvable:false,badges:[]}];
+ external.render();const externalHtml=external.shadowRoot.innerHTML;
+ assert.match(externalHtml,/Open title in Nuvio/);assert.match(externalHtml,/External provider link/);assert.doesNotMatch(externalHtml,/Play on TV/);assert.doesNotMatch(externalHtml,/Play in Nuvio/);
+ external.remove();
  // Empty cold-start responses recover without a browser reload.
  const cold=window.document.createElement('nuvio-card');window.document.body.append(cold);cold.setConfig({show_remote:false});
  const recovered={sections:[{kind:'collection',name:'Streaming',items:[]}],hero:{items:[]}};
@@ -70,5 +77,5 @@ const flush=()=>new Promise(r=>setImmediate(r));
  const empty=window.document.createElement('nuvio-card');window.document.body.append(empty);empty.setConfig({show_remote:false});empty.ws=async()=>({sections:[]});empty.hass={states:{}};await flush();
  for(let i=0;i<3;i++){let id=empty._homeRetryTimer,fn=timeouts.get(id);timeouts.delete(id);fn();await flush();}
  assert.equal(empty._homeRetryTimer,null);assert.equal(empty._homeRetryCount,3);empty.remove();assert.equal(timeouts.size,0);
- console.log('PASS: lazy Home catalogs, seven-item Hero cap, progressive recovery, cached automatic retries, retained content, plus collection rows, source tabs, details/back, regular catalogs, stable HA updates, hero controls, partial failures, request races, timer cleanup');
+ console.log('PASS: external provider-link safety, lazy Home catalogs, seven-item Hero cap, progressive recovery, cached automatic retries, retained content, plus collection rows, source tabs, details/back, regular catalogs, stable HA updates, hero controls, partial failures, request races, timer cleanup');
 })().catch(e=>{console.error(e);process.exitCode=1;});
