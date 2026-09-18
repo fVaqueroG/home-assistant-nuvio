@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import asyncio
 import probatio
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_ENTITY_ID
@@ -698,6 +699,49 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
                     if provider
                     else []
                 )
+
+                # smartest-tv found that a running Netflix app can ignore a new
+                # content deep link. Apply the same clean-relaunch experiment to
+                # the providers that have also ignored title parameters on this
+                # TV. Apple TV is deliberately excluded because its current
+                # launch behavior is already confirmed working.
+                clean_relaunch_providers = {
+                    "netflix",
+                    "prime",
+                    "disney",
+                    "max",
+                    "crunchyroll",
+                    "paramount",
+                }
+                if provider in clean_relaunch_providers and launch_requests:
+                    app_ids: list[str] = []
+                    for _, launch_payload in launch_requests:
+                        app_id = str(launch_payload.get("id") or "").strip()
+                        if app_id and app_id not in app_ids:
+                            app_ids.append(app_id)
+
+                    for app_id in app_ids:
+                        try:
+                            await hass.services.async_call(
+                                "webostv",
+                                "command",
+                                {
+                                    ATTR_ENTITY_ID: [entity_id],
+                                    "command": "system.launcher/close",
+                                    "payload": {"id": app_id},
+                                },
+                                blocking=True,
+                            )
+                        except HomeAssistantError:
+                            # Some LG firmware rejects LAUNCHER_CLOSE (403) or
+                            # reports an error when the app is not currently
+                            # running. The subsequent launch can still work.
+                            continue
+
+                    # Match smartest-tv's Netflix timing. Giving the app process
+                    # time to terminate also gives the other providers a fresh
+                    # startup in which to consume contentId.
+                    await asyncio.sleep(2)
                 launched = False
                 for command, payload in launch_requests:
                     try:
@@ -718,6 +762,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
                     launched = True
                     break
                 if launched:
+                    continue
+
+                # If every direct contentId launch was rejected at the webOS
+                # service layer, fall back to LG's own title search before
+                # giving up and merely selecting the provider app.
+                if await _async_open_webos_native_search(entity_id, call):
                     continue
 
                 state = hass.states.get(entity_id)
