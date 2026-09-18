@@ -306,12 +306,40 @@ def test_crunchyroll_provider_targets() -> None:
     assert provider_content_id("crunchyroll", url) == "GABCDE123"
     command = android_provider_command("crunchyroll", url)
     assert "com.crunchyroll.crunchyroid" in command
+
     requests = webos_provider_launch_requests("crunchyroll", url)
-    assert requests[0][0] == "system.launcher/launch"
-    assert requests[0][1]["id"] == "crunchyroll"
-    assert requests[0][1]["contentId"] == url
-    assert "params" not in requests[0][1]
-    assert requests[1][1]["params"]["mediaId"] == "GABCDE123"
+    assert requests[0] == (
+        "com.webos.applicationManager/launch",
+        {
+            "id": "com.crunchyroll.webos",
+            "params": {
+                "action": "play",
+                "url": url,
+                "episodeId": "GABCDE123",
+                "contentId": "GABCDE123",
+            },
+        },
+    )
+
+    # Keep the stock/generic Crunchyroll webOS contract as a fallback.
+    assert requests[1][0] == "system.launcher/launch"
+    assert requests[1][1] == {"id": "crunchyroll", "contentId": url}
+    assert requests[2][1]["params"]["mediaId"] == "GABCDE123"
+
+
+def test_crunchyroll_series_url_opens_series_in_custom_webos_app() -> None:
+    url = "https://www.crunchyroll.com/series/GYABCDE12/example-series"
+    requests = webos_provider_launch_requests("crunchyroll", url)
+    assert requests[0] == (
+        "com.webos.applicationManager/launch",
+        {
+            "id": "com.crunchyroll.webos",
+            "params": {
+                "action": "open",
+                "url": url,
+            },
+        },
+    )
 
 
 def test_paramount_provider_targets() -> None:
