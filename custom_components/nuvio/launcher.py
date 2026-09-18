@@ -8,7 +8,12 @@ from typing import Any
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from .const import NUVIO_ACTIVITY, NUVIO_WEBOS_APP_ID
-from .providers import PROVIDER_ALIASES, streaming_provider_key
+from .providers import (
+    ANDROID_PROVIDER_PACKAGES,
+    PROVIDER_ALIASES,
+    WEBOS_PROVIDER_APP_IDS,
+    streaming_provider_key,
+)
 
 
 def deep_link(media_type: str, content_id: str) -> str:
@@ -417,7 +422,7 @@ def android_provider_command(provider: str, external_url: str) -> str:
             ]
         )
 
-    packages = _ANDROID_PROVIDER_PACKAGES.get(provider, ())
+    packages = ANDROID_PROVIDER_PACKAGES.get(provider, ())
     if not packages:
         return _android_view_command(target)
 
@@ -487,7 +492,7 @@ def webos_provider_launch_requests(
             ]
         return [("system.launcher/launch", {"id": "netflix"})]
 
-    app_ids = _WEBOS_PROVIDER_APP_IDS.get(provider, ())
+    app_ids = WEBOS_PROVIDER_APP_IDS.get(provider, ())
     if not app_ids:
         return []
 
