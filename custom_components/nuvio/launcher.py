@@ -76,6 +76,7 @@ def player_intent_command(
     package_name: str,
     stream_url: str,
     stream_title: str,
+    mime_type: str | None = None,
     media_type: str | None = None,
     content_id: str | None = None,
     video_id: str | None = None,
@@ -106,6 +107,7 @@ def player_intent_command(
         "launchMode": "player",
         "streamUrl": stream_url,
         "streamTitle": stream_title,
+        "mimeType": mime_type,
         "contentType": normalized_type,
         "contentId": content_id,
         "videoId": video_id,
@@ -162,6 +164,7 @@ def webos_launch_payload(
     launch_mode: str = "details",
     stream_url: str | None = None,
     stream_title: str | None = None,
+    mime_type: str | None = None,
     filename: str | None = None,
     video_size: int | None = None,
     addon_name: str | None = None,
@@ -194,6 +197,8 @@ def webos_launch_payload(
         params["streamUrl"] = stream_url
     if stream_title is not None:
         params["streamTitle"] = stream_title
+    if mime_type is not None:
+        params["mimeType"] = mime_type
     optional: dict[str, Any] = {
         "videoId": effective_video_id,
         "name": title,
