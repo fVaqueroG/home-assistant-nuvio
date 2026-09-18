@@ -654,7 +654,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
                 )
 
         async def handle_remote_key(call: ServiceCall) -> None:
-            """Send a navigation key to the selected TV."""
+            """Send a navigation or numeric key to the selected TV."""
             entity_ids = call.data[ATTR_ENTITY_ID]
             key = call.data[ATTR_KEY]
             registry = async_get_entity_registry(hass)
