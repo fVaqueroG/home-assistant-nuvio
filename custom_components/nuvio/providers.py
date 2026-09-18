@@ -88,7 +88,7 @@ PROVIDER_ALIASES: dict[str, tuple[str, ...]] = {
     "max": ("max", "hbo max", "hbo"),
     "apple": ("apple tv+", "apple tv plus", "apple tv", "apple"),
     "paramount": ("paramount+", "paramount plus", "paramount"),
-    "crunchyroll": ("crunchyroll",),
+    "crunchyroll": ("com.crunchyroll.webos", "crunchyroll"),
     "vix": ("vix", "vix premium"),
     "mercado_play": ("mercado play", "mercadoplay"),
     "pluto_tv": ("pluto tv", "pluto"),
