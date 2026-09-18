@@ -1338,10 +1338,11 @@ async def ws_home(hass, connection, msg) -> None:
     probatio.Required("catalog_id"): str,
     probatio.Optional("genre", default=""): str,
     probatio.Optional("hide_unreleased", default=False): bool,
+    probatio.Optional("paginate", default=False): bool,
 })
 @websocket_api.async_response
 async def ws_catalog(hass, connection, msg) -> None:
-    """Return the full first page for one Nuvio Home catalog."""
+    """Return one catalog, optionally following Nuvio-compatible skip pages."""
     try:
         api = _entry(hass).runtime_data[DATA_API]
         addon: Addon | None = None
@@ -1355,26 +1356,101 @@ async def ws_catalog(hass, connection, msg) -> None:
         # Imported folders can retain an old addon ID after an addon migration.
         # Resolve an exact, unambiguous catalog match among configured addons.
         if addon is None and not msg["manifest_url"]:
-            matches = [candidate for candidate in addons if any(
-                str(catalog.get("id")) == msg["catalog_id"]
-                and str(catalog.get("type")) == msg["media_type"]
-                for catalog in candidate.manifest.get("catalogs", [])
-                if isinstance(catalog, dict)
-            )]
+            matches = [
+                candidate
+                for candidate in addons
+                if any(
+                    str(catalog.get("id")) == msg["catalog_id"]
+                    and str(catalog.get("type")) == msg["media_type"]
+                    for catalog in candidate.manifest.get("catalogs", [])
+                    if isinstance(catalog, dict)
+                )
+            ]
             if len(matches) == 1:
                 addon = matches[0]
         if addon is None:
             raise NuvioApiError("The addon for this catalog is no longer configured")
+
+        media_type = str(msg["media_type"])
+        catalog_id = str(msg["catalog_id"])
         genre = str(msg.get("genre") or "").strip()
-        metas = await api.async_catalog(
-            addon,
-            str(msg["media_type"]),
-            str(msg["catalog_id"]),
-            extra=urlencode({"genre": genre}) if genre.lower() not in {"", "none", "all"} else None,
+        paginate = bool(msg.get("paginate", False))
+
+        descriptor = next(
+            (
+                catalog
+                for catalog in addon.manifest.get("catalogs", [])
+                if isinstance(catalog, dict)
+                and str(catalog.get("id")) == catalog_id
+                and str(catalog.get("type")) == media_type
+            ),
+            {},
         )
+        supports_skip = any(
+            isinstance(extra, dict)
+            and str(extra.get("name") or "").strip().casefold() == "skip"
+            for extra in descriptor.get("extra") or []
+        )
+
+        async def load_page(skip: int = 0) -> list[dict[str, Any]]:
+            extra_args: dict[str, str] = {}
+            if genre.casefold() not in {"", "none", "all"}:
+                extra_args["genre"] = genre
+            if skip > 0:
+                extra_args["skip"] = str(skip)
+            return await api.async_catalog(
+                addon,
+                media_type,
+                catalog_id,
+                extra=urlencode(extra_args) if extra_args else None,
+            )
+
+        metas = await load_page()
+        page_count = 1
+        next_skip = len(metas)
+        duplicate_pages = 0
+        seen_raw_ids = {
+            str(meta.get("id") or "").strip()
+            for meta in metas
+            if str(meta.get("id") or "").strip()
+        }
+
+        # NuvioTV advances skip by the number of raw items returned, not by a
+        # guessed page size. Follow that behavior, including a small duplicate-
+        # page tolerance for addons that repeat boundary results.
+        while (
+            paginate
+            and supports_skip
+            and metas
+            and next_skip > 0
+            and page_count < 15
+            and len(seen_raw_ids) < 300
+        ):
+            page = await load_page(next_skip)
+            page_count += 1
+            if not page:
+                break
+
+            page_ids = [
+                str(meta.get("id") or "").strip()
+                for meta in page
+                if str(meta.get("id") or "").strip()
+            ]
+            new_ids = [item_id for item_id in page_ids if item_id not in seen_raw_ids]
+            if new_ids:
+                duplicate_pages = 0
+                seen_raw_ids.update(new_ids)
+            else:
+                duplicate_pages += 1
+
+            metas.extend(page)
+            next_skip += len(page)
+            if duplicate_pages >= 3:
+                break
+
         items = _dedupe_catalog_items(
             metas,
-            str(msg["media_type"]),
+            media_type,
             addon.manifest_url,
             hide_unreleased=bool(msg.get("hide_unreleased", False)),
             limit=300,
@@ -1384,8 +1460,10 @@ async def ws_catalog(hass, connection, msg) -> None:
             {
                 "items": items,
                 "addon": addon.name,
-                "catalog_id": str(msg["catalog_id"]),
-                "media_type": str(msg["media_type"]),
+                "catalog_id": catalog_id,
+                "media_type": media_type,
+                "supports_skip": supports_skip,
+                "pages_loaded": page_count,
             },
         )
     except (NuvioApiError, NuvioAuthError) as err:
