@@ -68,7 +68,7 @@ query NuvioSearch(
         offers(country: $country, platform: WEB, filter: $filter) {
           standardWebURL
           preAffiliatedStandardWebURL
-          deeplinkWeb: deeplinkURL(platform: WEB)
+          streamUrl
           monetizationType
           presentationType
           package {
@@ -126,7 +126,7 @@ query NuvioEpisodes(
         offers(country: $country, platform: WEB, filter: $filter) {
           standardWebURL
           preAffiliatedStandardWebURL
-          deeplinkWeb: deeplinkURL(platform: WEB)
+          streamUrl
           monetizationType
           presentationType
           package {
@@ -181,6 +181,14 @@ class JustWatchGraphQLApi:
     def renewable(self) -> bool:
         """Return whether the account session can refresh automatically."""
         return bool(self._refresh_token)
+
+    @property
+    def session_tokens(self) -> dict[str, str]:
+        """Return the current renewable account-session tokens."""
+        return {
+            "access_token": self._access_token,
+            "refresh_token": self._refresh_token,
+        }
 
     async def async_sign_in(self, email: str, password: str) -> dict[str, str]:
         """Sign in using JustWatch's Firebase web authentication.
@@ -438,7 +446,6 @@ class JustWatchGraphQLApi:
 
             url_candidates = (
                 raw.get("preAffiliatedStandardWebURL"),
-                raw.get("deeplinkWeb"),
                 raw.get("standardWebURL"),
             )
             url = next(
@@ -483,7 +490,7 @@ class JustWatchGraphQLApi:
                     raw.get("preAffiliatedStandardWebURL") or ""
                 ).strip()
                 or None,
-                "deeplink_web": str(raw.get("deeplinkWeb") or "").strip() or None,
+                "stream_url": str(raw.get("streamUrl") or "").strip() or None,
                 "authenticated": self.authenticated,
                 "monetization_type": monetization,
                 "presentation_type": raw.get("presentationType"),
