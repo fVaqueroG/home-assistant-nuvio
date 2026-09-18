@@ -100,6 +100,9 @@ play_source:
           options:
             - movie
             - series
+    title:
+      selector:
+        text:
     content_id:
       selector:
         text:
