@@ -96,7 +96,10 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
     async def _async_discover_streaming_providers(self, entry) -> None:
         """Add provider folders from the synced Nuvio Streaming collection."""
         discovered: dict[str, str] = {}
-        for value in entry.data.get(CONF_STREAMING_PROVIDERS, []):
+        stored_providers = entry.data.get(CONF_STREAMING_PROVIDERS, [])
+        if isinstance(stored_providers, str):
+            stored_providers = [stored_providers]
+        for value in stored_providers:
             key = normalize_selected_provider(value)
             if key:
                 discovered[key] = provider_label(key)
