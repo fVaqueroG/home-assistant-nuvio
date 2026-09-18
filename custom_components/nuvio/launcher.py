@@ -678,6 +678,75 @@ def webos_provider_launch_requests(
             )
         return requests
 
+    if provider == "crunchyroll":
+        provider_id = provider_content_id(provider, raw_url)
+        requests: list[tuple[str, dict[str, Any]]] = []
+
+        # The patched open-source Crunchyroll webOS app accepts standard
+        # Crunchyroll URLs directly and routes /watch/<episodeId> into its
+        # existing player. It also handles webOSRelaunch when already open.
+        if raw_url:
+            custom_params: dict[str, Any] = {
+                "action": "open",
+                "url": raw_url,
+            }
+            if provider_id and re.search(r"/watch/", urlparse(raw_url).path, re.IGNORECASE):
+                custom_params.update(
+                    {
+                        "action": "play",
+                        "episodeId": provider_id,
+                        "contentId": provider_id,
+                    }
+                )
+
+            requests.append(
+                (
+                    "com.webos.applicationManager/launch",
+                    {
+                        "id": "com.crunchyroll.webos",
+                        "params": custom_params,
+                    },
+                )
+            )
+
+        # Retain the generic/official LG Crunchyroll app contract as a
+        # fallback for TVs where the custom app is not installed.
+        fallback_params = _webos_provider_params(
+            provider,
+            raw_url,
+            media_type=media_type,
+            content_id=content_id,
+            video_id=video_id,
+            season=season,
+            episode=episode,
+            episode_title=episode_title,
+        )
+        for app_id in WEBOS_PROVIDER_APP_IDS.get("crunchyroll", ()):
+            if app_id == "com.crunchyroll.webos" or not raw_url:
+                continue
+            requests.extend(
+                [
+                    (
+                        "system.launcher/launch",
+                        {"id": app_id, "contentId": raw_url},
+                    ),
+                    (
+                        "system.launcher/launch",
+                        {
+                            "id": app_id,
+                            "contentId": raw_url,
+                            "params": dict(fallback_params),
+                        },
+                    ),
+                    (
+                        "com.webos.applicationManager/launch",
+                        {"id": app_id, "params": dict(fallback_params)},
+                    ),
+                ]
+            )
+
+        return requests
+
     app_ids = WEBOS_PROVIDER_APP_IDS.get(provider, ())
     if not app_ids:
         return []
@@ -696,7 +765,6 @@ def webos_provider_launch_requests(
 
     minimal_content_id_providers = {
         "prime",
-        "crunchyroll",
         "paramount",
     }
 
