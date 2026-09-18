@@ -225,21 +225,25 @@ TMDB/JustWatch availability does **not** include full provider deep links, so Nu
 The provider row is independent of WatchHub. Its order is:
 
 1. **TMDB/JustWatch** decides which providers are available in the configured **WatchHub country** and applies the configured **Streaming providers** allow-list.
-2. **TheTVDB** is queried for the exact movie or episode and supplies the preferred provider link when its remote-ID metadata contains one.
-3. **WatchHub** is only the playback-link fallback when TheTVDB has no usable provider URL.
-4. If neither TheTVDB nor WatchHub supplies a usable provider URL, the TMDB provider logo remains visible as availability information but is disabled instead of opening the provider home page.
+2. Nuvio queries JustWatch's unofficial GraphQL endpoint for the exact movie or selected episode and prefers that provider's `standardWebURL`.
+3. **TheTVDB** supplies the fallback exact provider URL when configured and JustWatch has no usable offer.
+4. **WatchHub** is the final provider-link fallback.
+5. If none supplies a usable provider URL, the TMDB provider logo remains visible as availability information but is disabled.
 
-This means a TMDB-listed provider can be playable from the row even when it does **not** appear in WatchHub. For series episodes, TMDB's exact episode external IDs are used to obtain the corresponding TheTVDB episode ID before querying TheTVDB remote IDs.
+For series episodes, Nuvio resolves the JustWatch show → season → episode and reads the selected episode's own offers. TheTVDB's exact episode ID remains the next fallback when the JustWatch episode has no usable offer.
 
 Availability data is supplied by **JustWatch via TMDB**. Exact external/provider-link metadata can be supplied by **TheTVDB**. This product uses the TMDB API but is not endorsed or certified by TMDB.
 
 ## Provider launch compatibility
 
-Real-TV testing is authoritative for provider launch support. Netflix and Apple TV movie launches are currently confirmed to reach the requested title on LG webOS. Prime Video, Disney+, Max, Crunchyroll, and Paramount+ have been observed reopening/opening the app without reaching the requested title when using application-manager launch parameters.
+Real-TV testing is authoritative for provider launch support. Apple TV direct title/episode launching is confirmed working on LG webOS, and Netflix movie title IDs remain usable. Netflix series offers can still be show-level, while Prime Video, Disney+, Max, Crunchyroll, and Paramount+ have been observed opening/reopening the app without honoring the requested title target.
 
-Nuvio therefore prefers `system.launcher/launch` for Prime Video, Disney+, Max, Crunchyroll, and Paramount+ and sends the provider target as both `contentId` and `params.contentTarget`. Netflix keeps its known contentId format, and Apple TV keeps its currently working application-manager path.
+Nuvio therefore uses two LG webOS paths:
 
-Provider playback also carries the movie/series title into the service so a future in-app search fallback can type the exact title when a provider ignores deep-link parameters.
+- **Direct provider launch** for Apple TV, Netflix movies, and Netflix episode offers whose JustWatch URL contains an episode-specific `/watch/<id>` playable ID.
+- **LG native content search** for Prime Video, Disney+, Max, Crunchyroll, Paramount+, and Netflix episode offers that only contain a show-level `/title/<id>` URL. Episode searches include the series title, `SxxExx`, and episode title when available.
+
+The native-search path launches LG's built-in `com.webos.app.search` with the title already populated. If that search app is unavailable on a firmware version, Nuvio falls back to the provider-specific launch attempt and finally Home Assistant's installed-app source match.
 
 ## WatchHub provider launching
 
