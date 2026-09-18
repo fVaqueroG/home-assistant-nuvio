@@ -11,6 +11,13 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .account import NuvioAccountApi, NuvioAuthError, NuvioLoginExpired
 from .api import NuvioApi, NuvioApiError, normalize_manifest_url
+from .providers import (
+    normalize_provider_text,
+    normalize_selected_provider,
+    provider_catalog_options,
+    provider_label,
+    streaming_provider_key,
+)
 from .const import (
     CONF_ACCESS_TOKEN,
     CONF_CONNECT_ACCOUNT,
@@ -50,24 +57,19 @@ DEBRID_OPTIONS = [
     selector.SelectOptionDict(value="realdebrid", label="Real-Debrid"),
 ]
 
-STREAMING_PROVIDER_OPTIONS = [
-    selector.SelectOptionDict(value="netflix", label="Netflix"),
-    selector.SelectOptionDict(value="prime", label="Prime Video"),
-    selector.SelectOptionDict(value="disney", label="Disney+"),
-    selector.SelectOptionDict(value="max", label="Max"),
-    selector.SelectOptionDict(value="apple", label="Apple TV+"),
-    selector.SelectOptionDict(value="paramount", label="Paramount+"),
-    selector.SelectOptionDict(value="peacock", label="Peacock"),
-    selector.SelectOptionDict(value="hulu", label="Hulu"),
-    selector.SelectOptionDict(value="crunchyroll", label="Crunchyroll"),
-]
-
-
-def _streaming_provider_selector() -> selector.SelectSelector:
+def _streaming_provider_selector(
+    extra: dict[str, str] | None = None,
+) -> selector.SelectSelector:
+    """Return a provider selector with built-ins plus synced/custom providers."""
+    options = [
+        selector.SelectOptionDict(value=key, label=label)
+        for key, label in provider_catalog_options(extra)
+    ]
     return selector.SelectSelector(
         selector.SelectSelectorConfig(
-            options=STREAMING_PROVIDER_OPTIONS,
+            options=options,
             multiple=True,
+            custom_value=True,
         )
     )
 
@@ -89,6 +91,52 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
         self._account_api: NuvioAccountApi | None = None
         self._login: dict[str, Any] | None = None
         self._reconfigure = False
+        self._streaming_provider_options: dict[str, str] = {}
+
+    async def _async_discover_streaming_providers(self, entry) -> None:
+        """Add provider folders from the synced Nuvio Streaming collection."""
+        discovered: dict[str, str] = {}
+        for value in entry.data.get(CONF_STREAMING_PROVIDERS, []):
+            key = normalize_selected_provider(value)
+            if key:
+                discovered[key] = provider_label(key)
+
+        refresh_token = entry.data.get(CONF_REFRESH_TOKEN)
+        if not refresh_token:
+            self._streaming_provider_options = discovered
+            return
+
+        account_api = NuvioAccountApi(
+            async_get_clientsession(self.hass),
+            access_token=entry.data.get(CONF_ACCESS_TOKEN),
+            refresh_token=refresh_token,
+        )
+        profile_id = int(entry.data.get(CONF_PROFILE_ID, DEFAULT_PROFILE_ID))
+        try:
+            collections = await account_api.async_collections(profile_id)
+        except NuvioAuthError:
+            self._streaming_provider_options = discovered
+            return
+
+        streaming_titles = {
+            "streaming",
+            "streaming services",
+            "servicios de streaming",
+            "plataformas de streaming",
+        }
+        for collection in collections:
+            title = normalize_provider_text(collection.get("title"))
+            if title not in streaming_titles:
+                continue
+            for folder in collection.get("folders") or []:
+                if not isinstance(folder, dict):
+                    continue
+                label = str(folder.get("title") or "").strip()
+                key = streaming_provider_key(label)
+                if key and label:
+                    discovered[key] = label
+
+        self._streaming_provider_options = discovered
 
     async def _async_start_account_login(self) -> ConfigFlowResult:
         """Start Nuvio's device authorization flow."""
@@ -117,7 +165,7 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                     default=values.get(
                         CONF_STREAMING_PROVIDERS, list(DEFAULT_STREAMING_PROVIDERS)
                     ),
-                ): _streaming_provider_selector(),
+                ): _streaming_provider_selector(self._streaming_provider_options),
                 probatio.Required(
                     CONF_WATCHHUB_COUNTRY,
                     default=values.get(
@@ -180,7 +228,11 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_PACKAGE_NAME: user_input[CONF_PACKAGE_NAME].strip(),
                     CONF_PROFILE_ID: user_input[CONF_PROFILE_ID],
                     CONF_STREAMING_PROVIDERS: list(
-                        dict.fromkeys(user_input.get(CONF_STREAMING_PROVIDERS, []))
+                        dict.fromkeys(
+                            key
+                            for value in user_input.get(CONF_STREAMING_PROVIDERS, [])
+                            if (key := normalize_selected_provider(value))
+                        )
                     ),
                     CONF_WATCHHUB_COUNTRY: str(
                         user_input.get(
@@ -239,7 +291,7 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                             list(DEFAULT_STREAMING_PROVIDERS),
                         ),
                     ),
-                ): _streaming_provider_selector(),
+                ): _streaming_provider_selector(self._streaming_provider_options),
                 probatio.Required(
                     CONF_WATCHHUB_COUNTRY,
                     default=values.get(
@@ -276,6 +328,8 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
         """Connect, reconnect, or disconnect an account on an existing entry."""
         self._reconfigure = True
         entry = self._get_reconfigure_entry()
+        if user_input is None:
+            await self._async_discover_streaming_providers(entry)
         errors: dict[str, str] = {}
         if user_input is not None:
             provider = str(
@@ -300,7 +354,11 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_PACKAGE_NAME: str(user_input[CONF_PACKAGE_NAME]).strip(),
                     CONF_PROFILE_ID: user_input[CONF_PROFILE_ID],
                     CONF_STREAMING_PROVIDERS: list(
-                        dict.fromkeys(user_input.get(CONF_STREAMING_PROVIDERS, []))
+                        dict.fromkeys(
+                            key
+                            for value in user_input.get(CONF_STREAMING_PROVIDERS, [])
+                            if (key := normalize_selected_provider(value))
+                        )
                     ),
                     CONF_WATCHHUB_COUNTRY: str(
                         user_input.get(
