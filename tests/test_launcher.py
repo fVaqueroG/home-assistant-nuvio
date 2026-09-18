@@ -272,11 +272,36 @@ def test_max_provider_targets_support_both_android_packages() -> None:
     assert "com.wbd.hbomax" in command
     assert "com.wbd.stream" in command
     requests = webos_provider_launch_requests("max", url)
-    assert requests[0][0] == "system.launcher/launch"
-    assert requests[0][1]["id"] == "com.wbd.stream"
-    assert requests[0][1]["contentId"] == url
-    assert "params" not in requests[0][1]
-    assert requests[1][1]["params"]["videoId"] == content_id
+    assert requests[0][0] == "com.webos.applicationManager/launch"
+    assert requests[0][1] == {
+        "id": "com.wbd.stream",
+        "params": {"contentId": content_id},
+    }
+    assert requests[1][1] == {
+        "id": "com.wbd.stream",
+        "params": {
+            "contentTarget": url,
+            "target": url,
+        },
+    }
+    assert requests[2][1]["id"] == "com.hbo.hbomax"
+
+
+def test_max_video_watch_url_uses_video_uuid_not_watch_segment() -> None:
+    url = (
+        "https://play.max.com/video/watch/"
+        "2a9b19c2-7dad-4f46-97f1-58c282824bd5/"
+        "ea64405b-c32a-4ece-aeca-61ad47d6bfb0"
+    )
+    content_id = "2a9b19c2-7dad-4f46-97f1-58c282824bd5"
+    assert provider_content_id("max", url) == content_id
+    requests = webos_provider_launch_requests("max", url)
+    assert requests[0][1]["params"]["contentId"] == content_id
+
+
+def test_max_hbomax_uri_keeps_explicit_content_id() -> None:
+    url = "hbomax://deeplink?contentId=urn:hbo:feature:XYZ12345"
+    assert provider_content_id("max", url) == "urn:hbo:feature:XYZ12345"
 
 
 def test_crunchyroll_provider_targets() -> None:
