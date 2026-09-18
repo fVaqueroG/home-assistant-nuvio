@@ -311,6 +311,12 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
         except (TimeoutError, NuvioApiError, NuvioAuthError):
             return fallback
 
+    # Manifest discovery is independent of account/profile sync; start it now
+    # so slow account endpoints do not add serial delay to Home startup.
+    addons_task = asyncio.create_task(
+        home_call(api.async_addons(refresh=refresh), 6.0, [])
+    )
+
     home_settings: dict[str, Any] = {}
     profile_settings: dict[str, Any] = {}
     collections: list[dict[str, Any]] = []
@@ -366,7 +372,7 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
     # at 24 items before See All.  The Smart-TV Modern implementation uses 15.
     row_limit = 15 if selected_layout == "modern" else 24
 
-    addons = await home_call(api.async_addons(refresh=refresh), 8.0, [])
+    addons = await addons_task
     addon_by_id = {_addon_id(addon): addon for addon in addons}
 
     catalog_specs: list[tuple[Addon, dict[str, Any], str, str, str, int]] = []
@@ -445,9 +451,22 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
         loaded_sections[key] = section
         return section
 
-    # Load Home rows concurrently.
+    async def bounded_catalog_load(
+        spec: tuple[Addon, dict[str, Any], str, str, str, int],
+        *,
+        include_if_disabled: bool = False,
+    ) -> dict[str, Any] | None:
+        try:
+            return await asyncio.wait_for(
+                load_catalog_spec(spec, include_if_disabled=include_if_disabled),
+                timeout=6.0,
+            )
+        except (TimeoutError, NuvioApiError):
+            return None
+
+    # Load Home rows concurrently, but never let a stalled addon hold the card.
     loaded_home = await asyncio.gather(
-        *(load_catalog_spec(spec) for spec in catalog_specs)
+        *(bounded_catalog_load(spec) for spec in catalog_specs)
     )
     for section in loaded_home:
         if section:
@@ -462,7 +481,7 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
             if key in catalog_spec_by_key
         ]
         hero_loaded = await asyncio.gather(
-            *(load_catalog_spec(spec, include_if_disabled=True) for spec in hero_specs)
+            *(bounded_catalog_load(spec, include_if_disabled=True) for spec in hero_specs)
         )
         for section in hero_loaded:
             if section:
@@ -846,7 +865,7 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
         ]
         next_up_items: list[dict[str, Any]] = []
         if next_up_tasks:
-            done, pending = await asyncio.wait(next_up_tasks, timeout=3.5)
+            done, pending = await asyncio.wait(next_up_tasks, timeout=2.0)
             for task in pending:
                 task.cancel()
             for task in done:
@@ -1007,7 +1026,7 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
 
         hero_tasks = [asyncio.create_task(enrich_hero_item(item)) for item in hero_items]
         if hero_tasks:
-            done, pending = await asyncio.wait(hero_tasks, timeout=2.5)
+            done, pending = await asyncio.wait(hero_tasks, timeout=1.5)
             for task in pending:
                 task.cancel()
             enriched_by_id: dict[str, dict[str, Any]] = {}
