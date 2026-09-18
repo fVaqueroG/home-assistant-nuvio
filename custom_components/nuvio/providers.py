@@ -83,10 +83,10 @@ STREAMING_PROVIDER_CATALOG: tuple[tuple[str, str], ...] = (
 
 PROVIDER_ALIASES: dict[str, tuple[str, ...]] = {
     "netflix": ("netflix", "netflix standard with ads"),
-    "prime": ("prime video", "amazon prime video", "amazon video", "prime"),
+    "prime": ("prime video", "amazon prime video", "amazon video", "amazon", "prime"),
     "disney": ("disney+", "disney plus", "disney"),
-    "max": ("max", "hbo max"),
-    "apple": ("apple tv+", "apple tv plus", "apple tv"),
+    "max": ("max", "hbo max", "hbo"),
+    "apple": ("apple tv+", "apple tv plus", "apple tv", "apple"),
     "paramount": ("paramount+", "paramount plus", "paramount"),
     "crunchyroll": ("crunchyroll",),
     "vix": ("vix", "vix premium"),
