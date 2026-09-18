@@ -139,8 +139,13 @@ def test_provider_detection_and_source_matching() -> None:
     assert provider_key("Amazon Video", "https://watch.amazon.com/detail?gti=abc") == "prime"
     assert provider_key("Netflix", "https://www.netflix.com/watch/81234567") == "netflix"
     assert provider_key("Disney Plus", "https://www.disneyplus.com/movies/test") == "disney"
+    assert provider_key("Mercado Play", "https://www.mercadolibre.com/") == "mercado_play"
+    assert provider_key("ViX Premium", "https://vix.com/") == "vix"
+    assert provider_key("Pluto TV", "https://pluto.tv/") == "pluto_tv"
+    assert provider_key("A New Future Service", None) == "a_new_future_service"
     assert provider_source_match("disney", ["Live TV", "Disney+", "HDMI 1"]) == "Disney+"
     assert provider_source_match("max", ["Netflix", "Max", "Prime Video"]) == "Max"
+    assert provider_source_match("pluto_tv", ["Netflix", "Pluto TV", "HDMI 1"]) == "Pluto TV"
 
 
 def test_netflix_provider_targets() -> None:
