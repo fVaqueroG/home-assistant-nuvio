@@ -2154,33 +2154,36 @@ async def ws_details(hass, connection, msg) -> None:
         connection.send_error(msg["id"], "nuvio_error", str(err))
 
 
-async def _async_register_lovelace_resource(hass: HomeAssistant) -> None:
-    """Ensure the bundled card is a Lovelace module resource in storage mode."""
+async def _async_register_lovelace_resource(hass: HomeAssistant) -> bool:
+    """Ensure exactly one bundled card resource exists in storage mode."""
     lovelace = hass.data.get(LOVELACE_DATA)
     if lovelace is None or lovelace.resource_mode != MODE_STORAGE:
-        return
+        return False
 
     resource_collection = lovelace.resources
     await resource_collection.async_get_info()
     resources = resource_collection.async_items() or []
+    matches = [
+        resource
+        for resource in resources
+        if str(resource.get(CONF_URL) or "").split("?", 1)[0] == CARD_URL
+    ]
 
-    for resource in resources:
-        url = str(resource.get(CONF_URL) or "")
-        if url.split("?", 1)[0] != CARD_URL:
-            continue
-
-        if (
-            url != CARD_RESOURCE_URL
-            or resource.get(CONF_TYPE) != "module"
-        ):
+    if matches:
+        primary = matches[0]
+        url = str(primary.get(CONF_URL) or "")
+        if url != CARD_RESOURCE_URL or primary.get(CONF_TYPE) != "module":
             await resource_collection.async_update_item(
-                resource[CONF_ID],
+                primary[CONF_ID],
                 {
                     CONF_URL: CARD_RESOURCE_URL,
                     CONF_RESOURCE_TYPE_WS: "module",
                 },
             )
-        return
+
+        for duplicate in matches[1:]:
+            await resource_collection.async_delete_item(duplicate[CONF_ID])
+        return True
 
     await resource_collection.async_create_item(
         {
@@ -2188,6 +2191,7 @@ async def _async_register_lovelace_resource(hass: HomeAssistant) -> None:
             CONF_RESOURCE_TYPE_WS: "module",
         }
     )
+    return True
 
 
 async def async_register_frontend(hass: HomeAssistant) -> None:
@@ -2200,10 +2204,12 @@ async def async_register_frontend(hass: HomeAssistant) -> None:
         [StaticPathConfig(CARD_URL, str(CARD_FILE), cache_headers=False)]
     )
 
-    # Extra-module registration makes the card available outside Lovelace too,
-    # while the Lovelace resource below makes dashboard loading deterministic.
-    frontend.add_extra_js_url(hass, CARD_RESOURCE_URL)
-    await _async_register_lovelace_resource(hass)
+    # Storage-mode dashboards load the card through exactly one Lovelace
+    # resource. Only fall back to a global extra module when Lovelace resources
+    # are unavailable (for example, non-storage resource mode).
+    resource_registered = await _async_register_lovelace_resource(hass)
+    if not resource_registered:
+        frontend.add_extra_js_url(hass, CARD_RESOURCE_URL)
 
     websocket_api.async_register_command(hass, ws_home)
     websocket_api.async_register_command(hass, ws_catalog)
