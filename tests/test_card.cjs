@@ -18,6 +18,8 @@ assert.match(cardSource,/mdi:chevron-right/);
 assert.doesNotMatch(cardSource,/data-remote-key="up"[^\n]*⌃/);
 assert.match(cardSource,/nuvio-ring-up ha-icon\{transform:translateY\(-6px\)\}/);
 assert.match(cardSource,/ring-btn\.right ha-icon\{transform:translateX\(6px\)\}/);
+assert.equal((cardSource.match(/paginate:true/g)||[]).length,2);
+assert.match(cardSource,/async loadLazyCatalog[\s\S]*?type:"nuvio\/catalog"[\s\S]*?hide_unreleased:[^\n]+\n\s*\}\);/);
 const flush=()=>new Promise(r=>setImmediate(r));
 (async()=>{
  const card=window.document.createElement('nuvio-card');window.document.body.append(card);
