@@ -542,9 +542,6 @@ def webos_provider_prefers_native_search(
     ):
         return False
 
-    if provider in {"prime", "disney", "max", "crunchyroll", "paramount"}:
-        return True
-
     if (
         provider == "netflix"
         and media_type == "series"
@@ -566,59 +563,49 @@ def webos_provider_launch_requests(
     episode: int | None = None,
     episode_title: str | None = None,
 ) -> list[tuple[str, dict[str, Any]]]:
-    """Return ordered LG webOS launch attempts for one provider title."""
-    if provider == "netflix":
-        provider_id = netflix_content_id(external_url)
-        raw_url = str(external_url or "").strip()
-        exact_watch_url = "/watch/" in raw_url.casefold()
+    """Return ordered LG webOS launch attempts for one provider title.
 
-        legacy_payload: dict[str, Any] = {"id": "netflix"}
+    For Netflix and providers proven to ignore broad app parameters on the
+    user's TV, first mirror aiowebostv/smartest-tv's launch_app_with_content_id
+    contract exactly: system.launcher/launch with only id + contentId.
+    Apple TV deliberately keeps its already-working application-manager path.
+    """
+    raw_url = str(external_url or "").strip()
+
+    if provider == "netflix":
+        provider_id = netflix_content_id(raw_url)
+        requests: list[tuple[str, dict[str, Any]]] = []
         if provider_id:
+            # smartest-tv uses the public Netflix /watch/<videoId> DIAL-style
+            # content target. This works for both movie IDs and exact episode
+            # videoIds when JustWatch gives us /watch/<id>.
             netflix_target = (
+                f"m=https://www.netflix.com/watch/{provider_id}&source_type=4"
+            )
+            requests.append(
+                (
+                    "system.launcher/launch",
+                    {"id": "netflix", "contentId": netflix_target},
+                )
+            )
+
+            # Keep the older ConnectSDK payload as a service-level fallback
+            # for firmware that rejects the modern URL form entirely.
+            legacy_target = (
                 "m=http%3A%2F%2Fapi.netflix.com%2Fcatalog%2Ftitles%2Fmovies%2F"
                 f"{provider_id}&source_type=4"
             )
-            legacy_payload["contentId"] = netflix_target
-            legacy_payload["params"] = {"contentId": netflix_target}
-        if media_type:
-            legacy_payload["mediaType"] = media_type
-        if content_id:
-            legacy_payload["sourceContentId"] = content_id
-        if video_id:
-            legacy_payload["videoId"] = video_id
-        if season is not None:
-            legacy_payload["season"] = season
-        if episode is not None:
-            legacy_payload["episode"] = episode
-        if episode_title:
-            legacy_payload["episodeTitle"] = episode_title
-
-        if exact_watch_url and media_type == "series" and episode is not None:
-            exact_params: dict[str, Any] = {
-                "contentTarget": raw_url,
-                "target": raw_url,
-                "url": raw_url,
-            }
-            if provider_id:
-                exact_params["contentId"] = provider_id
-            if content_id:
-                exact_params["sourceContentId"] = content_id
-            if video_id:
-                exact_params["sourceVideoId"] = video_id
-            if season is not None:
-                exact_params["season"] = season
-            exact_params["episode"] = episode
-            if episode_title:
-                exact_params["episodeTitle"] = episode_title
-            return [
+            requests.append(
                 (
-                    "com.webos.applicationManager/launch",
-                    {"id": "netflix", "params": exact_params},
-                ),
-                ("system.launcher/launch", legacy_payload),
-            ]
-
-        return [("system.launcher/launch", legacy_payload)]
+                    "system.launcher/launch",
+                    {
+                        "id": "netflix",
+                        "contentId": legacy_target,
+                        "params": {"contentId": legacy_target},
+                    },
+                )
+            )
+        return requests
 
     app_ids = WEBOS_PROVIDER_APP_IDS.get(provider, ())
     if not app_ids:
@@ -626,7 +613,7 @@ def webos_provider_launch_requests(
 
     params = _webos_provider_params(
         provider,
-        external_url,
+        raw_url,
         media_type=media_type,
         content_id=content_id,
         video_id=video_id,
@@ -635,8 +622,8 @@ def webos_provider_launch_requests(
         episode_title=episode_title,
     )
     requests: list[tuple[str, dict[str, Any]]] = []
-    target = str(params.get("contentTarget") or external_url or "").strip()
-    prefer_system_launcher = provider in {
+
+    minimal_content_id_providers = {
         "prime",
         "disney",
         "max",
@@ -645,34 +632,45 @@ def webos_provider_launch_requests(
     }
 
     for app_id in app_ids:
-        if prefer_system_launcher:
-            payload: dict[str, Any] = {
-                "id": app_id,
-                "params": dict(params),
-            }
-            if target:
-                payload["contentId"] = target
-            requests.append(("system.launcher/launch", payload))
+        if provider in minimal_content_id_providers and raw_url:
+            # Exact aiowebostv.launch_app_with_content_id contract used by
+            # smartest-tv for non-Netflix services.
             requests.append(
                 (
-                    "com.webos.applicationManager/launch",
+                    "system.launcher/launch",
+                    {"id": app_id, "contentId": raw_url},
+                )
+            )
+
+            # If the firmware rejects the minimal form, retain our broader
+            # provider-specific launch contracts as service-level fallbacks.
+            requests.append(
+                (
+                    "system.launcher/launch",
                     {
                         "id": app_id,
+                        "contentId": raw_url,
                         "params": dict(params),
                     },
                 )
             )
+            requests.append(
+                (
+                    "com.webos.applicationManager/launch",
+                    {"id": app_id, "params": dict(params)},
+                )
+            )
             continue
 
+        # Apple TV stays on the existing path because it is already confirmed
+        # to open the requested title/episode correctly on the user's LG TV.
         requests.append(
             (
                 "com.webos.applicationManager/launch",
-                {
-                    "id": app_id,
-                    "params": dict(params),
-                },
+                {"id": app_id, "params": dict(params)},
             )
         )
+
     return requests
 
 
