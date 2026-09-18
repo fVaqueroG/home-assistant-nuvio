@@ -572,6 +572,39 @@ def webos_provider_launch_requests(
     """
     raw_url = str(external_url or "").strip()
 
+    if provider == "disney":
+        provider_id = provider_content_id(provider, raw_url)
+        targets: list[str] = []
+        if provider_id and re.fullmatch(
+            r"[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}",
+            provider_id,
+            re.IGNORECASE,
+        ):
+            # LG Disney+ accepts the canonical video UUID through
+            # Application Manager params.contentTarget.
+            targets.append(f"https://www.disneyplus.com/video/{provider_id}")
+        if raw_url and raw_url not in targets:
+            targets.append(raw_url)
+
+        requests: list[tuple[str, dict[str, Any]]] = []
+        for app_id in WEBOS_PROVIDER_APP_IDS.get("disney", ()):
+            for target in targets:
+                requests.append(
+                    (
+                        "com.webos.applicationManager/launch",
+                        {
+                            "id": app_id,
+                            "params": {
+                                "contentTarget": target,
+                                # Keep the legacy alias as a harmless fallback
+                                # for Disney app variants that inspect target.
+                                "target": target,
+                            },
+                        },
+                    )
+                )
+        return requests
+
     if provider == "netflix":
         provider_id = netflix_content_id(raw_url)
         requests: list[tuple[str, dict[str, Any]]] = []
@@ -625,7 +658,6 @@ def webos_provider_launch_requests(
 
     minimal_content_id_providers = {
         "prime",
-        "disney",
         "max",
         "crunchyroll",
         "paramount",
