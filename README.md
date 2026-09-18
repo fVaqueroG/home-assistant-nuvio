@@ -211,7 +211,9 @@ WatchHub provider links can be filtered from **Settings → Devices & services �
 - **Streaming providers** filters the services that are shown. The same whitelist also filters provider folders in the synchronized **Streaming** collection so the Home row and title source list stay consistent.
 - **WatchHub country** filters provider availability by country. It defaults to Home Assistant's configured country. The integration first tries WatchHub's country-specific endpoint and falls back to the normal endpoint plus Stremio `geos` / `countryWhitelist` hints when supplied.
 
-The default provider whitelist is **Netflix, Prime Video, Disney+, and Max**. Apple TV+, Paramount+, Peacock, Hulu, and Crunchyroll are also available. Provider names are normalized (for example, `Amazon Video` → Prime Video and `HBO Max` → Max), with the external URL hostname used as a fallback. Leaving the provider selection empty disables provider filtering and shows every WatchHub provider.
+The default provider whitelist is **Netflix, Prime Video, Disney+, and Max**, but the selector now includes a broad global catalog such as Apple TV+, Paramount+, Crunchyroll, **ViX, Mercado Play, Pluto TV, Claro video, Tubi, Plex, MUBI, Universal+, Runtime**, and many more. During reconfiguration the integration also discovers folders from the signed-in profile's synchronized **Streaming** collection and adds any provider names it finds. The selector accepts a custom provider value too, so a new WatchHub service does not require an integration update just to become filterable.
+
+Provider names are normalized (for example, `Amazon Video` → Prime Video, `HBO Max` → Max, and `Mercado Play` → `mercado_play`), with the external URL hostname used as a fallback. Unknown provider names receive a stable generated key and can still be selected and filtered. Leaving the provider selection empty disables provider filtering and shows every WatchHub provider.
 
 ## Debrid link resolution
 
