@@ -202,6 +202,33 @@ PROVIDER_HOSTS: dict[str, tuple[str, ...]] = {
 }
 
 
+ANDROID_PROVIDER_PACKAGES: dict[str, tuple[str, ...]] = {
+    "netflix": ("com.netflix.ninja",),
+    "prime": ("com.amazon.amazonvideo.livingroom",),
+    "disney": ("com.disney.disneyplus",),
+    "apple": ("com.apple.atve.androidtv.appletv",),
+    # Max has used both package ids across Android TV generations/regions.
+    "max": ("com.wbd.hbomax", "com.wbd.stream"),
+    "crunchyroll": ("com.crunchyroll.crunchyroid",),
+    "paramount": ("com.cbs.ott",),
+    "vix": ("com.univision.prendetv",),
+}
+
+
+WEBOS_PROVIDER_APP_IDS: dict[str, tuple[str, ...]] = {
+    "netflix": ("netflix",),
+    "prime": ("amazon",),
+    "disney": ("com.disney.disneyplus-prod",),
+    # Both ids have existed on LG TVs depending on Max/HBO app generation.
+    "max": ("com.wbd.stream", "hbo-go-2"),
+    "apple": ("com.apple.appletv", "com.apple.tv"),
+    "crunchyroll": ("crunchyroll",),
+    # Paramount's id varies by regional app build. The launcher tries all
+    # known ids and then falls back to Home Assistant's installed source list.
+    "paramount": ("paramountplus", "com.paramountplus", "com.cbs.ott"),
+}
+
+
 _PROVIDER_LABELS = dict(STREAMING_PROVIDER_CATALOG)
 
 
