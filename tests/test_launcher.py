@@ -12,6 +12,7 @@ from custom_components.nuvio.launcher import (
     player_intent_command,
     stream_intent_command,
     webos_launch_payload,
+    webos_discovered_app_id,
     webos_provider_launch_payload,
     webos_provider_launch_requests,
     webos_provider_prefers_native_search,
@@ -150,6 +151,51 @@ def test_provider_detection_and_source_matching() -> None:
     assert provider_source_match("pluto_tv", ["Netflix", "Pluto TV", "HDMI 1"]) == "Pluto TV"
 
 
+def test_webos_discovered_app_id_matches_real_tv_inventory() -> None:
+    apps = [
+        {"id": "netflix", "title": "Netflix"},
+        {"id": "mx.max.production", "title": "Max"},
+        {"id": "com.televisa.vix", "title": "ViX"},
+        {"id": "com.claro.video.lg", "title": "Claro video"},
+        {"id": "com.mercado.play", "title": "Mercado Play"},
+    ]
+
+    assert webos_discovered_app_id("max", apps) == "mx.max.production"
+    assert webos_discovered_app_id("vix", apps) == "com.televisa.vix"
+    assert webos_discovered_app_id("claro_video", apps) == "com.claro.video.lg"
+    assert webos_discovered_app_id("mercado_play", apps) == "com.mercado.play"
+
+
+def test_webos_discovered_crunchyroll_skips_custom_client() -> None:
+    apps = [
+        {"id": "com.crunchyroll.webos", "title": "Crunchyroll"},
+        {"id": "regional.crunchyroll", "title": "Crunchyroll TV"},
+    ]
+
+    assert (
+        webos_discovered_app_id("crunchyroll", apps)
+        == "regional.crunchyroll"
+    )
+
+
+def test_discovered_provider_uses_content_target() -> None:
+    url = "https://vix.com/es-es/detail/video-123"
+    requests = webos_provider_launch_requests(
+        "vix",
+        url,
+        discovered_app_id="com.televisa.vix",
+    )
+    assert requests == [
+        (
+            "com.webos.applicationManager/launch",
+            {
+                "id": "com.televisa.vix",
+                "params": {"contentTarget": url},
+            },
+        )
+    ]
+
+
 def test_netflix_provider_targets() -> None:
     url = "https://www.netflix.com/watch/81234567"
     assert netflix_content_id(url) == "81234567"
@@ -159,13 +205,16 @@ def test_netflix_provider_targets() -> None:
     assert "com.netflix.ninja/.MainActivity" in command
     assert "netflix://title/81234567" in command
     requests = webos_provider_launch_requests("netflix", url)
-    assert requests[0][0] == "system.launcher/launch"
-    payload = requests[0][1]
-    assert payload["id"] == "netflix"
-    assert payload["contentId"] == (
+    assert requests[0] == (
+        "com.webos.applicationManager/launch",
+        {
+            "id": "netflix",
+            "params": {"contentTarget": url},
+        },
+    )
+    assert requests[1][1]["contentId"] == (
         "m=https://www.netflix.com/watch/81234567&source_type=4"
     )
-    assert "params" not in payload
 
 
 def test_netflix_episode_prefers_exact_watch_url_on_webos() -> None:
@@ -181,20 +230,23 @@ def test_netflix_episode_prefers_exact_watch_url_on_webos() -> None:
         episode_title="Example Episode",
     )
 
-    assert len(requests) == 2
+    assert len(requests) == 3
 
     command, payload = requests[0]
-    assert command == "system.launcher/launch"
+    assert command == "com.webos.applicationManager/launch"
     assert payload == {
         "id": "netflix",
-        "contentId": "m=https://www.netflix.com/watch/82080204&source_type=4",
+        "params": {"contentTarget": url},
     }
 
     fallback_command, fallback = requests[1]
     assert fallback_command == "system.launcher/launch"
     assert fallback["id"] == "netflix"
     assert "82080204" in fallback["contentId"]
-    assert fallback["params"]["contentId"] == fallback["contentId"]
+
+    legacy_command, legacy = requests[2]
+    assert legacy_command == "system.launcher/launch"
+    assert legacy["params"]["contentId"] == legacy["contentId"]
 
 
 def test_netflix_other_episode_watch_id_is_distinct() -> None:
@@ -216,10 +268,15 @@ def test_prime_provider_targets() -> None:
     assert "-p com.amazon.amazonvideo.livingroom" in command
     assert "app.primevideo.com/detail?gti=amzn1.dv.gti.example" in command
     requests = webos_provider_launch_requests("prime", url)
-    assert requests[0][0] == "system.launcher/launch"
-    assert requests[0][1]["id"] == "amazon"
-    assert requests[0][1] == {"id": "amazon", "contentId": url}
-    params = requests[1][1]["params"]
+    assert requests[0] == (
+        "com.webos.applicationManager/launch",
+        {
+            "id": "amazon",
+            "params": {"contentTarget": url},
+        },
+    )
+    assert requests[1][1] == {"id": "amazon", "contentId": url}
+    params = requests[2][1]["params"]
     assert params["gti"] == "amzn1.dv.gti.example"
     assert params["contentId"] == "amzn1.dv.gti.example"
 
@@ -236,19 +293,20 @@ def test_disney_provider_targets() -> None:
     assert "-p com.disney.disneyplus" in command
 
     requests = webos_provider_launch_requests("disney", url)
-    assert len(requests) == 1
+    assert len(requests) == 2
     assert requests[0] == (
         "com.webos.applicationManager/launch",
         {
             "id": "com.disney.disneyplus-prod",
-            "params": {
-                "contentTarget": url,
-                "target": url,
-                "contentId": content_id,
-                "entityId": content_id,
-            },
+            "params": {"contentTarget": url},
         },
     )
+    assert requests[1][1]["params"] == {
+        "contentTarget": url,
+        "target": url,
+        "contentId": content_id,
+        "entityId": content_id,
+    }
 
 
 def test_apple_provider_targets() -> None:
@@ -257,8 +315,13 @@ def test_apple_provider_targets() -> None:
     command = android_provider_command("apple", url)
     assert "com.apple.atve.androidtv.appletv" in command
     requests = webos_provider_launch_requests("apple", url)
-    assert requests[0][1]["id"] == "com.apple.appletv"
-    assert requests[0][1]["params"]["contentId"] == "umc.cmc.6abc123xyz"
+    assert requests[0] == (
+        "com.webos.applicationManager/launch",
+        {
+            "id": "com.apple.appletv",
+            "params": {"contentTarget": url},
+        },
+    )
 
 
 def test_max_provider_targets_support_both_android_packages() -> None:
@@ -268,20 +331,29 @@ def test_max_provider_targets_support_both_android_packages() -> None:
     command = android_provider_command("max", url)
     assert "com.wbd.hbomax" in command
     assert "com.wbd.stream" in command
-    requests = webos_provider_launch_requests("max", url)
-    assert requests[0][0] == "com.webos.applicationManager/launch"
-    assert requests[0][1] == {
+    requests = webos_provider_launch_requests(
+        "max",
+        url,
+        discovered_app_id="regional.max.app",
+    )
+    assert requests[0] == (
+        "com.webos.applicationManager/launch",
+        {
+            "id": "regional.max.app",
+            "params": {"contentTarget": url},
+        },
+    )
+    assert requests[1] == (
+        "com.webos.applicationManager/launch",
+        {
+            "id": "com.wbd.stream",
+            "params": {"contentTarget": url},
+        },
+    )
+    assert requests[2][1] == {
         "id": "com.wbd.stream",
         "params": {"contentId": content_id},
     }
-    assert requests[1][1] == {
-        "id": "com.wbd.stream",
-        "params": {
-            "contentTarget": url,
-            "target": url,
-        },
-    }
-    assert requests[2][1]["id"] == "com.hbo.hbomax"
 
 
 def test_max_video_watch_url_uses_video_uuid_not_watch_segment() -> None:
@@ -293,7 +365,8 @@ def test_max_video_watch_url_uses_video_uuid_not_watch_segment() -> None:
     content_id = "2a9b19c2-7dad-4f46-97f1-58c282824bd5"
     assert provider_content_id("max", url) == content_id
     requests = webos_provider_launch_requests("max", url)
-    assert requests[0][1]["params"]["contentId"] == content_id
+    assert requests[0][1]["params"]["contentTarget"] == url
+    assert requests[1][1]["params"]["contentId"] == content_id
 
 
 def test_max_hbomax_uri_keeps_explicit_content_id() -> None:
@@ -323,9 +396,15 @@ def test_crunchyroll_provider_targets() -> None:
 
     # Retain the official LG Crunchyroll app as a fallback if the custom
     # deeplink-enabled app is not installed.
-    assert requests[1][0] == "system.launcher/launch"
-    assert requests[1][1] == {"id": "crunchyroll", "contentId": url}
-    assert requests[2][1]["params"]["mediaId"] == "GABCDE123"
+    assert requests[1] == (
+        "com.webos.applicationManager/launch",
+        {
+            "id": "crunchyroll",
+            "params": {"contentTarget": url},
+        },
+    )
+    assert requests[2][1] == {"id": "crunchyroll", "contentId": url}
+    assert requests[3][1]["params"]["mediaId"] == "GABCDE123"
 
 
 def test_crunchyroll_series_deeplink_targets_custom_webos_app() -> None:
@@ -350,12 +429,20 @@ def test_paramount_provider_targets() -> None:
     assert provider_content_id("paramount", url) == "abcDEF123"
     command = android_provider_command("paramount", url)
     assert "com.cbs.ott" in command
-    requests = webos_provider_launch_requests("paramount", url)
+    requests = webos_provider_launch_requests(
+        "paramount",
+        url,
+        discovered_app_id="regional.paramount.app",
+    )
     assert requests
-    assert requests[0][0] == "system.launcher/launch"
-    assert requests[0][1]["contentId"] == url
-    assert "params" not in requests[0][1]
-    assert requests[1][1]["params"]["contentId"] == "abcDEF123"
+    assert requests[0] == (
+        "com.webos.applicationManager/launch",
+        {
+            "id": "regional.paramount.app",
+            "params": {"contentTarget": url},
+        },
+    )
+    assert requests[4][1]["contentId"] == url
 
 
 def test_webos_provider_episode_context_and_app_maps() -> None:
@@ -377,12 +464,7 @@ def test_webos_provider_episode_context_and_app_maps() -> None:
     command, payload = requests[0]
     assert command == "com.webos.applicationManager/launch"
     assert payload["id"] == "com.disney.disneyplus-prod"
-    assert payload["params"] == {
-        "contentTarget": url,
-        "target": url,
-        "contentId": "12345678-1234-1234-1234-123456789abc",
-        "entityId": "12345678-1234-1234-1234-123456789abc",
-    }
+    assert payload["params"] == {"contentTarget": url}
 
     netflix = webos_provider_launch_requests(
         "netflix",
@@ -395,7 +477,9 @@ def test_webos_provider_episode_context_and_app_maps() -> None:
     )[0][1]
     assert netflix == {
         "id": "netflix",
-        "contentId": "m=https://www.netflix.com/watch/80014749&source_type=4",
+        "params": {
+            "contentTarget": "https://www.netflix.com/title/80014749",
+        },
     }
 
 
@@ -416,9 +500,9 @@ def test_webos_native_provider_search_query() -> None:
 
 
 def test_webos_native_provider_search_policy() -> None:
-    # Non-Apple providers now try the minimal smartest-tv contentId launch
-    # before native LG search. Pre-emptive search remains only for Netflix
-    # episodes where the URL is show-level rather than /watch/<episodeId>.
+    # Direct contentTarget launches are preferred for provider apps.
+    # Pre-emptive search remains only for Netflix episodes where the URL is
+    # show-level rather than an exact /watch/<episodeId>.
     for provider in ("prime", "disney", "max", "crunchyroll", "paramount"):
         assert not webos_provider_prefers_native_search(
             provider,
