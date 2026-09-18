@@ -11,14 +11,16 @@
           "profile_id": "Nuvio profile number",
           "connect_account": "Connect Nuvio account",
           "debrid_provider": "Debrid provider",
-          "debrid_api_key": "Debrid API key / token"
+          "debrid_api_key": "Debrid API key / token",
+          "streaming_providers": "Streaming providers"
         },
         "data_description": {
           "package_name": "Use com.nuvio.app for Play Store builds or com.nuvio.tv for most GitHub/sideload builds.",
           "profile_id": "Profile 1 is the primary profile. Use 2–5 for another profile.",
           "connect_account": "Adds Continue Watching, My Library, profiles, and synchronized addons.",
           "debrid_provider": "Optional. With a linked Nuvio account, Home Assistant automatically uses supported debrid credentials synced for the profile. Select a provider here only as a local override.",
-          "debrid_api_key": "Optional when your Nuvio account already has synced debrid. Stored only in Home Assistant when provided."
+          "debrid_api_key": "Optional when your Nuvio account already has synced debrid. Stored only in Home Assistant when provided.",
+          "streaming_providers": "Only these providers appear in the synchronized Streaming collection and WatchHub source results. Leave it empty to show all WatchHub providers."
         }
       },
       "reconfigure": {
@@ -29,14 +31,16 @@
           "connect_account": "Connect Nuvio account",
           "debrid_provider": "Debrid provider",
           "debrid_api_key": "Debrid API key / token",
-          "package_name": "Android Nuvio package"
+          "package_name": "Android Nuvio package",
+          "streaming_providers": "Streaming providers"
         },
         "data_description": {
           "profile_id": "Profile 1 is the primary profile. Use 2–5 for another profile.",
           "connect_account": "Turn this off to disconnect the currently linked Nuvio account.",
           "debrid_provider": "Optional: use Nuvio-account synced credentials automatically, or select a provider as a local override.",
           "debrid_api_key": "Leave blank to use Nuvio-synced credentials or keep an existing local override.",
-          "package_name": "Use com.nuvio.tv for the normal full app, or com.nuviodebug.com for the fork test build that supports exact Home Assistant player launches."
+          "package_name": "Use com.nuvio.tv for the normal full app, or com.nuviodebug.com for the fork test build that supports exact Home Assistant player launches.",
+          "streaming_providers": "Only these providers appear in the synchronized Streaming collection and WatchHub source results. Leave it empty to show all WatchHub providers."
         }
       },
       "device": {
