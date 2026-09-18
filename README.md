@@ -196,34 +196,31 @@ Nuvio still sends the selected `video_id`, season, episode, and episode title to
 
 ## JustWatch account session
 
-Nuvio can optionally use your **signed-in JustWatch account** for provider-offer queries.
+Nuvio can use your **signed-in JustWatch account as the authoritative provider-link source**.
 
 Configure it from **Settings → Devices & services → Nuvio → Reconfigure**:
 
-- Enable **Connect JustWatch account**.
-- For a normal email/password JustWatch account, enter the email and password once. Nuvio exchanges them for Firebase session tokens and **does not store the password**.
-- Home Assistant stores the renewable JustWatch refresh/access tokens in the Nuvio config entry and refreshes the short-lived access token automatically.
-- For Google/Apple/social-login JustWatch accounts, an advanced **JustWatch access token** field is available as a fallback. A browser-only access token is not renewable unless a refresh token is already present.
-- Once connected, provider rows identify authenticated links as **JustWatch account**.
+1. Turn on **Manage JustWatch account** and submit.
+2. Choose **Email & password (recommended)** for a normal JustWatch account.
+3. Enter your JustWatch email and password. Nuvio exchanges them for Firebase session tokens and **does not store the password**.
+4. Home Assistant stores the renewable JustWatch refresh/access tokens and refreshes the short-lived access token automatically.
 
-Authenticated offer queries request JustWatch's `preAffiliatedStandardWebURL` and prefer it over the normal affiliate/web URL. This removes JustWatch redirect wrappers before the provider URL is handed to the TV.
+For Google/Apple/social-login accounts that do not have a JustWatch password, choose **Google/Apple session token (advanced)**. That path accepts the current browser session token but cannot renew it without a refresh token.
 
-JustWatch's official streaming-service documentation also describes provider-supplied LG webOS deeplinks as an app `id` plus `params.contentTarget`. Those deeplinks are part of JustWatch's streaming-service ingestion data, but the normal consumer GraphQL schema does not currently document a corresponding `web_os` field. Nuvio therefore does **not** invent one: if JustWatch exposes a native webOS payload in a future consumer response, it can be preferred directly; otherwise Nuvio uses the authenticated provider destination.
+Once connected:
+
+- provider cards identify links as **JustWatch account**;
+- authenticated requests explicitly request pre-affiliate offers and prefer `preAffiliatedStandardWebURL` over the affiliate/web URL;
+- JustWatch-account provider links are authoritative: Nuvio does **not** silently substitute TheTVDB or WatchHub if the signed-in account does not return a usable link;
+- selecting **Manage JustWatch account** again lets you reconnect or disconnect the saved JustWatch session.
+
+JustWatch's official streaming-service documentation describes provider-supplied LG webOS deeplinks as an app `id` plus `params.contentTarget`. Those native LG payloads exist in JustWatch's streaming-service ingestion data, but the normal consumer GraphQL schema does not currently document a corresponding webOS field. Nuvio therefore uses the authenticated provider destination that the consumer account API actually exposes rather than guessing an undocumented field.
 
 ## Unofficial JustWatch offer links
 
-Nuvio can now query JustWatch's current **unofficial web GraphQL endpoint** directly, without a JustWatch account or paid partner API token. This integration uses only public title/season/episode offer data and does not log in to or scrape a user's JustWatch account.
+Without a connected JustWatch account, Nuvio can still query JustWatch's unofficial web GraphQL endpoint anonymously for exact movie/episode provider offers. In that anonymous mode, TheTVDB and WatchHub remain fallback link sources.
 
-For the **Available on** row, TMDB/JustWatch availability remains the country/provider authority. Playback-link resolution is now:
-
-1. **Unofficial JustWatch GraphQL offer URL** for the exact movie or, when available, exact episode.
-2. **TheTVDB** provider remote URL when configured and JustWatch has no usable offer URL.
-3. **WatchHub** provider URL as the final fallback.
-4. Availability-only icon when none of those sources provides a usable URL.
-
-For episodes, Nuvio searches the JustWatch show, resolves the requested season and episode node, and uses that episode's own offers rather than silently substituting a show-level URL. This is specifically intended to improve exact-episode launches where WatchHub only returns the series page.
-
-The JustWatch GraphQL endpoint is unofficial and can change without notice. Any JustWatch request failure is isolated: Sources and the provider row continue using TMDB, TheTVDB, and WatchHub fallbacks rather than failing the card.
+For episodes, Nuvio searches the JustWatch show, resolves the requested season and episode node, and uses that episode's own offers rather than silently substituting a show-level URL. Any anonymous JustWatch failure is isolated so Sources and the provider row can continue using the configured fallbacks.
 
 ## TMDB / JustWatch availability row
 
