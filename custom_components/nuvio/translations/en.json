@@ -17,10 +17,7 @@
           "tmdb_access_token": "TMDB API Read Access Token",
           "tvdb_api_key": "TheTVDB API key",
           "tvdb_subscriber_pin": "TheTVDB subscriber PIN",
-          "connect_justwatch_account": "Connect JustWatch account",
-          "justwatch_email": "JustWatch email",
-          "justwatch_password": "JustWatch password",
-          "justwatch_access_token": "JustWatch access token (advanced)"
+          "connect_justwatch_account": "Connect JustWatch account"
         },
         "data_description": {
           "package_name": "Use com.nuvio.app for Play Store builds or com.nuvio.tv for most GitHub/sideload builds.",
@@ -33,10 +30,7 @@
           "tmdb_access_token": "Optional. Enables the available-provider row using TMDB/JustWatch data. It uses the same country and streaming-provider selections above.",
           "tvdb_api_key": "Optional but recommended. Resolves movie/episode remote IDs and exact provider links from TheTVDB.",
           "tvdb_subscriber_pin": "Optional. Use it when your TheTVDB API key requires a subscriber PIN.",
-          "connect_justwatch_account": "Use your JustWatch session for provider-offer queries. Renewable tokens are stored; your password is not saved.",
-          "justwatch_email": "Your JustWatch account email. Required with the password for one-time sign-in.",
-          "justwatch_password": "Used only to create a renewable JustWatch session and is not stored in Home Assistant.",
-          "justwatch_access_token": "Alternative for Google/Apple sign-in accounts: paste the browser's current access_token. It may expire if no refresh token is available."
+          "connect_justwatch_account": "Open a dedicated JustWatch sign-in after this screen. Email/password accounts receive a renewable session automatically, and the password is not stored."
         }
       },
       "reconfigure": {
@@ -53,10 +47,7 @@
           "tmdb_access_token": "TMDB API Read Access Token",
           "tvdb_api_key": "TheTVDB API key",
           "tvdb_subscriber_pin": "TheTVDB subscriber PIN",
-          "connect_justwatch_account": "Connect JustWatch account",
-          "justwatch_email": "JustWatch email",
-          "justwatch_password": "JustWatch password",
-          "justwatch_access_token": "JustWatch access token (advanced)"
+          "manage_justwatch_account": "Manage JustWatch account"
         },
         "data_description": {
           "profile_id": "Profile 1 is the primary profile. Use 2–5 for another profile.",
@@ -69,10 +60,7 @@
           "tmdb_access_token": "Optional. Enables the available-provider row using TMDB/JustWatch data. It uses the same country and streaming-provider selections above.",
           "tvdb_api_key": "Optional but recommended. Resolves movie/episode remote IDs and exact provider links from TheTVDB.",
           "tvdb_subscriber_pin": "Optional. Use it when your TheTVDB API key requires a subscriber PIN.",
-          "connect_justwatch_account": "Use your JustWatch session for provider-offer queries. Renewable tokens are stored; your password is not saved.",
-          "justwatch_email": "Your JustWatch account email. Required with the password for one-time sign-in.",
-          "justwatch_password": "Used only to create a renewable JustWatch session and is not stored in Home Assistant.",
-          "justwatch_access_token": "Alternative for Google/Apple sign-in accounts: paste the browser's current access_token. It may expire if no refresh token is available."
+          "manage_justwatch_account": "Turn this on to connect, reconnect, or disconnect JustWatch. Leave it off to keep the current session."
         }
       },
       "device": {
@@ -82,6 +70,34 @@
           "qr_code": "Scan to authorize",
           "authorization_code": "Authorization code"
         }
+      },
+      "justwatch": {
+        "title": "Connect JustWatch",
+        "description": "Choose how to connect the JustWatch account. Email & password is recommended because it creates a renewable session.",
+        "menu_options": {
+          "justwatch_email": "Email & password (recommended)",
+          "justwatch_token": "Google/Apple session token (advanced)",
+          "justwatch_disconnect": "Disconnect JustWatch"
+        }
+      },
+      "justwatch_email": {
+        "title": "Sign in to JustWatch",
+        "description": "The password is used only to create a renewable JustWatch session and is not stored.",
+        "data": {
+          "justwatch_email": "JustWatch email",
+          "justwatch_password": "JustWatch password"
+        }
+      },
+      "justwatch_token": {
+        "title": "Advanced JustWatch session",
+        "description": "Use this only for an account that signs in through Google or Apple and does not have a JustWatch password.",
+        "data": {
+          "justwatch_access_token": "JustWatch session token"
+        }
+      },
+      "justwatch_disconnect": {
+        "title": "Disconnect JustWatch",
+        "description": "This removes the saved JustWatch session from Nuvio. It does not modify the JustWatch account."
       }
     },
     "error": {
