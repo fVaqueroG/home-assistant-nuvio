@@ -2,13 +2,16 @@
 
 This module intentionally implements only the small subset Nuvio needs:
 country-specific provider offer URLs for an exact movie or TV episode.
-It uses JustWatch's public web GraphQL endpoint without account credentials.
-Because this endpoint is unofficial, every caller must treat failures as optional.
+It uses JustWatch's unofficial web GraphQL endpoint. When a renewable
+JustWatch account session is configured, requests are authenticated with the
+same Firebase ID-token mechanism used by the JustWatch web client. Failures
+remain optional so provider discovery can fall back cleanly.
 """
 
 from __future__ import annotations
 
 import time
+from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
@@ -17,6 +20,21 @@ from aiohttp import ClientError, ClientSession
 from .providers import streaming_provider_key
 
 JUSTWATCH_GRAPHQL_URL = "https://apis.justwatch.com/graphql"
+# Public Firebase web API key used by JustWatch's browser client. Firebase web
+# API keys identify the project; they are not account secrets.
+JUSTWATCH_FIREBASE_API_KEY = "AIzaSyDv6JIzdDvbTBS-JWdR4Kl22UvgWGAyuo8"
+JUSTWATCH_SIGNIN_URL = (
+    "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword"
+    f"?key={JUSTWATCH_FIREBASE_API_KEY}"
+)
+JUSTWATCH_LOOKUP_URL = (
+    "https://identitytoolkit.googleapis.com/v1/accounts:lookup"
+    f"?key={JUSTWATCH_FIREBASE_API_KEY}"
+)
+JUSTWATCH_REFRESH_URL = (
+    "https://securetoken.googleapis.com/v1/token"
+    f"?key={JUSTWATCH_FIREBASE_API_KEY}"
+)
 
 _SEARCH_QUERY = """
 query NuvioSearch(
@@ -49,6 +67,8 @@ query NuvioSearch(
         }
         offers(country: $country, platform: WEB, filter: $filter) {
           standardWebURL
+          preAffiliatedStandardWebURL
+          deeplinkWeb: deeplinkURL(platform: WEB)
           monetizationType
           presentationType
           package {
@@ -105,6 +125,8 @@ query NuvioEpisodes(
         }
         offers(country: $country, platform: WEB, filter: $filter) {
           standardWebURL
+          preAffiliatedStandardWebURL
+          deeplinkWeb: deeplinkURL(platform: WEB)
           monetizationType
           presentationType
           package {
@@ -125,13 +147,194 @@ class JustWatchApiError(Exception):
     """Raised when the unofficial JustWatch GraphQL request fails."""
 
 
-class JustWatchGraphQLApi:
-    """Resolve direct provider offer URLs through JustWatch GraphQL."""
+class JustWatchAuthError(JustWatchApiError):
+    """Raised when JustWatch account authentication fails."""
 
-    def __init__(self, session: ClientSession) -> None:
+
+class JustWatchGraphQLApi:
+    """Resolve provider offers through anonymous or authenticated JustWatch."""
+
+    def __init__(
+        self,
+        session: ClientSession,
+        *,
+        access_token: str | None = None,
+        refresh_token: str | None = None,
+        token_updated: Callable[[dict[str, str]], Awaitable[None]] | None = None,
+    ) -> None:
         self._session = session
+        self._access_token = str(access_token or "").strip()
+        self._refresh_token = str(refresh_token or "").strip()
+        self._token_updated = token_updated
+        # Stored access tokens have an unknown remaining lifetime. If a refresh
+        # token exists, refresh on first authenticated request.
+        self._token_expires_at = 0.0 if self._refresh_token else float("inf")
         self._cache: dict[tuple[Any, ...], tuple[float, Any]] = {}
         self._ttl = 3600.0
+
+    @property
+    def authenticated(self) -> bool:
+        """Return whether account credentials are configured."""
+        return bool(self._refresh_token or self._access_token)
+
+    @property
+    def renewable(self) -> bool:
+        """Return whether the account session can refresh automatically."""
+        return bool(self._refresh_token)
+
+    async def async_sign_in(self, email: str, password: str) -> dict[str, str]:
+        """Sign in using JustWatch's Firebase web authentication.
+
+        The caller should persist the returned refresh token, not the password.
+        """
+        try:
+            async with self._session.post(
+                JUSTWATCH_SIGNIN_URL,
+                json={
+                    "clientType": "CLIENT_TYPE_WEB",
+                    "email": str(email).strip(),
+                    "password": password,
+                    "returnSecureToken": True,
+                },
+                headers={"content-type": "application/json"},
+                timeout=15,
+            ) as response:
+                body = await response.json(content_type=None)
+                if response.status >= 400:
+                    message = ""
+                    if isinstance(body, dict):
+                        error = body.get("error")
+                        if isinstance(error, dict):
+                            message = str(error.get("message") or "")
+                    raise JustWatchAuthError(
+                        f"JustWatch sign-in failed{': ' + message if message else ''}"
+                    )
+        except JustWatchAuthError:
+            raise
+        except (ClientError, TimeoutError, ValueError) as err:
+            raise JustWatchAuthError("Could not connect to JustWatch sign-in") from err
+
+        if not isinstance(body, dict):
+            raise JustWatchAuthError("JustWatch sign-in returned an invalid response")
+
+        access_token = str(body.get("idToken") or "").strip()
+        refresh_token = str(body.get("refreshToken") or "").strip()
+        if not access_token or not refresh_token:
+            raise JustWatchAuthError("JustWatch sign-in did not return renewable tokens")
+
+        self._access_token = access_token
+        self._refresh_token = refresh_token
+        try:
+            expires_in = max(60, int(body.get("expiresIn") or 3600))
+        except (TypeError, ValueError):
+            expires_in = 3600
+        self._token_expires_at = time.monotonic() + expires_in - 60
+
+        result = {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "email": str(body.get("email") or email).strip(),
+            "user_id": str(body.get("localId") or "").strip(),
+        }
+        if self._token_updated is not None:
+            await self._token_updated(result)
+        return result
+
+    async def async_validate_auth(self) -> dict[str, str]:
+        """Validate the configured account token and return basic identity."""
+        token = await self._async_auth_token()
+        if not token:
+            raise JustWatchAuthError("JustWatch account is not configured")
+        try:
+            async with self._session.post(
+                JUSTWATCH_LOOKUP_URL,
+                json={"idToken": token},
+                headers={"content-type": "application/json"},
+                timeout=15,
+            ) as response:
+                body = await response.json(content_type=None)
+                if response.status >= 400:
+                    raise JustWatchAuthError("JustWatch rejected the account session")
+        except JustWatchAuthError:
+            raise
+        except (ClientError, TimeoutError, ValueError) as err:
+            raise JustWatchAuthError("Could not validate JustWatch account") from err
+
+        users = body.get("users") if isinstance(body, dict) else None
+        user = users[0] if isinstance(users, list) and users else {}
+        return {
+            "email": str(user.get("email") or "").strip()
+            if isinstance(user, dict)
+            else "",
+            "user_id": str(user.get("localId") or "").strip()
+            if isinstance(user, dict)
+            else "",
+        }
+
+    async def _async_refresh_access_token(self) -> str:
+        if not self._refresh_token:
+            return self._access_token
+        try:
+            async with self._session.post(
+                JUSTWATCH_REFRESH_URL,
+                data={
+                    "grant_type": "refresh_token",
+                    "refresh_token": self._refresh_token,
+                },
+                headers={"content-type": "application/x-www-form-urlencoded"},
+                timeout=15,
+            ) as response:
+                body = await response.json(content_type=None)
+                if response.status >= 400:
+                    raise JustWatchAuthError("Could not refresh JustWatch account session")
+        except JustWatchAuthError:
+            raise
+        except (ClientError, TimeoutError, ValueError) as err:
+            raise JustWatchAuthError("Could not refresh JustWatch account session") from err
+
+        if not isinstance(body, dict):
+            raise JustWatchAuthError("JustWatch token refresh returned an invalid response")
+        access_token = str(body.get("id_token") or "").strip()
+        refresh_token = str(body.get("refresh_token") or self._refresh_token).strip()
+        if not access_token:
+            raise JustWatchAuthError("JustWatch token refresh returned no ID token")
+
+        self._access_token = access_token
+        self._refresh_token = refresh_token
+        try:
+            expires_in = max(60, int(body.get("expires_in") or 3600))
+        except (TypeError, ValueError):
+            expires_in = 3600
+        self._token_expires_at = time.monotonic() + expires_in - 60
+
+        if self._token_updated is not None:
+            await self._token_updated(
+                {
+                    "access_token": access_token,
+                    "refresh_token": refresh_token,
+                }
+            )
+        return access_token
+
+    async def _async_auth_token(self) -> str:
+        if self._refresh_token and (
+            not self._access_token or time.monotonic() >= self._token_expires_at
+        ):
+            return await self._async_refresh_access_token()
+        return self._access_token
+
+    async def _request_headers(self) -> dict[str, str]:
+        headers = {
+            "accept": "application/json",
+            "content-type": "application/json",
+            "origin": "https://www.justwatch.com",
+            "referer": "https://www.justwatch.com/",
+            "app-version": "3.9.3-webapp",
+        }
+        token = await self._async_auth_token()
+        if token:
+            headers["authorization"] = f"Bearer {token}"
+        return headers
 
     @staticmethod
     def _language(value: str | None) -> str:
@@ -162,29 +365,43 @@ class JustWatchGraphQLApi:
         query: str,
         variables: dict[str, Any],
     ) -> dict[str, Any]:
-        try:
-            async with self._session.post(
-                JUSTWATCH_GRAPHQL_URL,
-                json={
-                    "operationName": operation_name,
-                    "variables": variables,
-                    "query": query,
-                },
-                headers={
-                    "accept": "application/json",
-                    "content-type": "application/json",
-                },
-                timeout=15,
-            ) as response:
-                if response.status >= 400:
-                    raise JustWatchApiError(
-                        f"JustWatch GraphQL returned HTTP {response.status}"
-                    )
-                body = await response.json(content_type=None)
-        except JustWatchApiError:
-            raise
-        except (ClientError, TimeoutError, ValueError) as err:
-            raise JustWatchApiError("Could not connect to JustWatch GraphQL") from err
+        payload = {
+            "operationName": operation_name,
+            "variables": variables,
+            "query": query,
+        }
+
+        async def _once() -> tuple[int, Any]:
+            try:
+                async with self._session.post(
+                    JUSTWATCH_GRAPHQL_URL,
+                    json=payload,
+                    headers=await self._request_headers(),
+                    timeout=15,
+                ) as response:
+                    return response.status, await response.json(content_type=None)
+            except (ClientError, TimeoutError, ValueError) as err:
+                raise JustWatchApiError(
+                    "Could not connect to JustWatch GraphQL"
+                ) from err
+
+        status, body = await _once()
+        if status in {401, 403} and self._refresh_token:
+            # The Firebase ID token may have expired or been revoked. Refresh
+            # once and retry before degrading to the integration's fallbacks.
+            self._access_token = ""
+            self._token_expires_at = 0.0
+            await self._async_refresh_access_token()
+            status, body = await _once()
+
+        if status >= 400:
+            if status in {401, 403} and self.authenticated:
+                raise JustWatchAuthError(
+                    f"JustWatch account session was rejected (HTTP {status})"
+                )
+            raise JustWatchApiError(
+                f"JustWatch GraphQL returned HTTP {status}"
+            )
 
         if not isinstance(body, dict):
             raise JustWatchApiError("JustWatch returned an invalid response")
@@ -198,8 +415,7 @@ class JustWatchGraphQLApi:
             )
         return body
 
-    @staticmethod
-    def _offers(raw_offers: Any) -> list[dict[str, Any]]:
+    def _offers(self, raw_offers: Any) -> list[dict[str, Any]]:
         """Normalize streaming offers and collapse duplicates by provider."""
         if not isinstance(raw_offers, list):
             return []
@@ -220,8 +436,22 @@ class JustWatchGraphQLApi:
             technical_name = str(package.get("technicalName") or "").strip()
             short_name = str(package.get("shortName") or "").strip()
 
-            url = str(raw.get("standardWebURL") or "").strip()
-            if not url.lower().startswith(("http://", "https://")):
+            url_candidates = (
+                raw.get("preAffiliatedStandardWebURL"),
+                raw.get("deeplinkWeb"),
+                raw.get("standardWebURL"),
+            )
+            url = next(
+                (
+                    str(candidate).strip()
+                    for candidate in url_candidates
+                    if str(candidate or "").strip().lower().startswith(
+                        ("http://", "https://")
+                    )
+                ),
+                "",
+            )
+            if not url:
                 continue
 
             # JustWatch sometimes wraps the provider destination in an affiliate
@@ -248,6 +478,13 @@ class JustWatchGraphQLApi:
                 "provider_code": short_name or None,
                 "package_id": package.get("packageId"),
                 "url": url,
+                "standard_url": str(raw.get("standardWebURL") or "").strip() or None,
+                "pre_affiliated_url": str(
+                    raw.get("preAffiliatedStandardWebURL") or ""
+                ).strip()
+                or None,
+                "deeplink_web": str(raw.get("deeplinkWeb") or "").strip() or None,
+                "authenticated": self.authenticated,
                 "monetization_type": monetization,
                 "presentation_type": raw.get("presentationType"),
                 "source": "justwatch",
