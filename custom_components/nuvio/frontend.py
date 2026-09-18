@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 import time
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 import probatio
 from homeassistant.components import frontend, websocket_api
@@ -25,10 +25,18 @@ from homeassistant.helpers.entity_registry import async_get as async_get_entity_
 from .account import NuvioAuthError
 from .api import Addon, NuvioApiError
 from .debrid import DebridNotCached, DebridNotConfigured, DebridResolveError
-from .const import CONF_PROFILE_ID, DATA_ACCOUNT_API, DATA_API, DATA_DEBRID_RESOLVER, DOMAIN
+from .const import (
+    CONF_PROFILE_ID,
+    CONF_STREAMING_PROVIDERS,
+    DATA_ACCOUNT_API,
+    DATA_API,
+    DATA_DEBRID_RESOLVER,
+    DEFAULT_STREAMING_PROVIDERS,
+    DOMAIN,
+)
 
 CARD_URL = "/nuvio/nuvio-card.js"
-CARD_VERSION = "0.4.27"
+CARD_VERSION = "0.4.28"
 CARD_RESOURCE_URL = f"{CARD_URL}?v={CARD_VERSION}"
 CARD_FILE = Path(__file__).parent / "frontend" / "nuvio-card.js"
 DATA_FRONTEND_REGISTERED = "frontend_registered"
@@ -224,6 +232,71 @@ def _home_catalog_preferences(settings: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+STREAMING_PROVIDER_ALIASES: dict[str, tuple[str, ...]] = {
+    "netflix": ("netflix",),
+    "prime": ("prime video", "amazon prime video", "amazon video"),
+    "disney": ("disney", "disney plus"),
+    "max": ("max", "hbo max"),
+    "apple": ("apple tv", "apple tv plus"),
+    "paramount": ("paramount", "paramount plus"),
+    "peacock": ("peacock", "peacock tv"),
+    "hulu": ("hulu",),
+    "crunchyroll": ("crunchyroll",),
+}
+
+STREAMING_PROVIDER_HOSTS: dict[str, tuple[str, ...]] = {
+    "netflix": ("netflix.com",),
+    "prime": ("primevideo.com", "amazon.com"),
+    "disney": ("disneyplus.com", "disney.com"),
+    "max": ("max.com", "hbomax.com"),
+    "apple": ("tv.apple.com",),
+    "paramount": ("paramountplus.com",),
+    "peacock": ("peacocktv.com",),
+    "hulu": ("hulu.com",),
+    "crunchyroll": ("crunchyroll.com",),
+}
+
+
+def _normalize_provider_text(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold()).strip()
+
+
+def _streaming_provider_key(name: Any, external_url: Any = None) -> str | None:
+    """Map WatchHub/folder provider labels and URLs to one stable provider key."""
+    normalized = _normalize_provider_text(name)
+    padded = f" {normalized} "
+    for key, aliases in STREAMING_PROVIDER_ALIASES.items():
+        for alias in aliases:
+            if normalized == alias or f" {alias} " in padded:
+                return key
+
+    if external_url:
+        try:
+            host = (urlparse(str(external_url)).hostname or "").casefold()
+        except ValueError:
+            host = ""
+        for key, domains in STREAMING_PROVIDER_HOSTS.items():
+            if any(host == domain or host.endswith(f".{domain}") for domain in domains):
+                return key
+    return None
+
+
+def _selected_streaming_providers(entry: Any) -> set[str]:
+    raw = entry.data.get(CONF_STREAMING_PROVIDERS)
+    if raw is None:
+        raw = DEFAULT_STREAMING_PROVIDERS
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, (list, tuple, set)):
+        return set()
+    known = set(STREAMING_PROVIDER_ALIASES)
+    return {
+        str(value).strip().casefold()
+        for value in raw
+        if str(value).strip().casefold() in known
+    }
+
+
 def _parse_release_instant(value: Any) -> datetime | None:
     text = str(value or "").strip()
     if not text:
@@ -303,6 +376,7 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
 
     entry = _entry(hass)
     api = entry.runtime_data[DATA_API]
+    streaming_providers = _selected_streaming_providers(entry)
     if refresh:
         api.clear_catalog_cache()
     account = entry.runtime_data.get(DATA_ACCOUNT_API)
@@ -575,6 +649,14 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
             continue
         key = f"collection_{collection_id}"
         collection_keys.append(key)
+        collection_title = str(collection.get("title") or "").strip()
+        normalized_collection_title = _normalize_provider_text(collection_title)
+        is_streaming_collection = normalized_collection_title in {
+            "streaming",
+            "streaming services",
+            "servicios de streaming",
+            "plataformas de streaming",
+        }
         folders: list[dict[str, Any]] = []
         for folder in collection.get("folders") or []:
             if not isinstance(folder, dict):
@@ -583,6 +665,10 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
             title = str(folder.get("title") or "").strip()
             if not folder_id or not title:
                 continue
+            if streaming_providers and is_streaming_collection:
+                provider_key = _streaming_provider_key(title)
+                if provider_key not in streaming_providers:
+                    continue
             folders.append(
                 {
                     "id": folder_id,
@@ -1191,6 +1277,9 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
         "synced_home_settings": bool(home_settings),
         "collection_count": len(collections_by_key),
         "hero_catalog_keys": hero_catalog_keys,
+        "streaming_providers": [
+            key for key in STREAMING_PROVIDER_ALIASES if key in streaming_providers
+        ],
     }
 
     result = {
@@ -1558,7 +1647,9 @@ def _stream_presentation(
 async def ws_streams(hass, connection, msg) -> None:
     """Return selectable streams for one movie or episode."""
     try:
-        api = _entry(hass).runtime_data[DATA_API]
+        entry = _entry(hass)
+        api = entry.runtime_data[DATA_API]
+        streaming_providers = _selected_streaming_providers(entry)
         rows = []
         for addon, stream in await api.async_all_streams(
             msg["media_type"], msg["video_id"]
@@ -1588,6 +1679,23 @@ async def ws_streams(hass, connection, msg) -> None:
                 if stripped.startswith(("http://", "https://")):
                     external_url = candidate
 
+            provider_key = _streaming_provider_key(
+                stream.get("name") or stream.get("title"),
+                external_url,
+            )
+            addon_id = str(addon.manifest.get("id") or "").strip().casefold()
+            is_watchhub = (
+                addon_id == "org.stremio.watchhub"
+                or "watchhub" in str(addon.name or "").casefold()
+            )
+            if (
+                external_url
+                and streaming_providers
+                and is_watchhub
+                and provider_key not in streaming_providers
+            ):
+                continue
+
             proxy_headers = behavior.get("proxyHeaders")
             if not isinstance(proxy_headers, dict):
                 proxy_headers = {}
@@ -1606,6 +1714,7 @@ async def ws_streams(hass, connection, msg) -> None:
                     "url": direct_url,
                     "external_url": external_url,
                     "external": bool(external_url) and not bool(direct_url),
+                    "provider_key": provider_key,
                     "info_hash": stream.get("infoHash")
                     or client_resolve.get("infoHash"),
                     "magnet_uri": client_resolve.get("magnetUri"),
