@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import time
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 from aiohttp import ClientError, ClientSession
 
@@ -222,6 +223,20 @@ class JustWatchGraphQLApi:
             url = str(raw.get("standardWebURL") or "").strip()
             if not url.lower().startswith(("http://", "https://")):
                 continue
+
+            # JustWatch sometimes wraps the provider destination in an affiliate
+            # URL using ?u=<encoded provider URL>. Pass the provider's own URL to
+            # the TV whenever it is present; LG apps are much less likely to
+            # understand a JustWatch tracking redirect as contentId.
+            try:
+                parsed = urlparse(url)
+                actual_urls = parse_qs(parsed.query).get("u", [])
+                if actual_urls:
+                    actual = str(actual_urls[0] or "").strip()
+                    if actual.lower().startswith(("http://", "https://")):
+                        url = actual
+            except ValueError:
+                pass
 
             key = streaming_provider_key(name or technical_name, url)
             if not key:
