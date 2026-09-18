@@ -444,6 +444,7 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
             or str(catalog.get("name") or catalog_id),
             "addon": addon.name,
             "addon_id": _addon_id(addon),
+            "manifest_url": addon.manifest_url,
             "media_type": media_type,
             "catalog_id": catalog_id,
             "items": items,
@@ -1126,6 +1127,50 @@ async def ws_home(hass, connection, msg) -> None:
 
 
 @websocket_api.websocket_command({
+    probatio.Required("type"): "nuvio/catalog",
+    probatio.Required("manifest_url"): str,
+    probatio.Required("media_type"): str,
+    probatio.Required("catalog_id"): str,
+    probatio.Optional("hide_unreleased", default=False): bool,
+})
+@websocket_api.async_response
+async def ws_catalog(hass, connection, msg) -> None:
+    """Return the full first page for one Nuvio Home catalog."""
+    try:
+        api = _entry(hass).runtime_data[DATA_API]
+        addon: Addon | None = None
+        for candidate in await api.async_addons():
+            if candidate.manifest_url == msg["manifest_url"]:
+                addon = candidate
+                break
+        if addon is None:
+            raise NuvioApiError("The addon for this catalog is no longer configured")
+        metas = await api.async_catalog(
+            addon,
+            str(msg["media_type"]),
+            str(msg["catalog_id"]),
+        )
+        items = _dedupe_catalog_items(
+            metas,
+            str(msg["media_type"]),
+            addon.manifest_url,
+            hide_unreleased=bool(msg.get("hide_unreleased", False)),
+            limit=300,
+        )
+        connection.send_result(
+            msg["id"],
+            {
+                "items": items,
+                "addon": addon.name,
+                "catalog_id": str(msg["catalog_id"]),
+                "media_type": str(msg["media_type"]),
+            },
+        )
+    except (NuvioApiError, NuvioAuthError) as err:
+        connection.send_error(msg["id"], "nuvio_error", str(err))
+
+
+@websocket_api.websocket_command({
     probatio.Required("type"): "nuvio/search",
     probatio.Required("query"): str,
 })
@@ -1592,6 +1637,7 @@ async def async_register_frontend(hass: HomeAssistant) -> None:
     await _async_register_lovelace_resource(hass)
 
     websocket_api.async_register_command(hass, ws_home)
+    websocket_api.async_register_command(hass, ws_catalog)
     websocket_api.async_register_command(hass, ws_search)
     websocket_api.async_register_command(hass, ws_streams)
     websocket_api.async_register_command(hass, ws_resolve_stream)
