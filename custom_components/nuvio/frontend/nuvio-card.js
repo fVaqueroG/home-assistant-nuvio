@@ -182,7 +182,7 @@ class NuvioCard extends HTMLElement {
     if(resolved&&resolved.url)await this.playSource(resolved);
   }
   poster(i,preferLandscape=false){
-    var u=(preferLandscape&&(i.landscapePoster||i.background))||i.poster||i.background;
+    var u=(preferLandscape&&(i.episode_thumbnail||i.landscapePoster||i.background))||i.poster||i.background;
     return u?'<img loading="lazy" src="'+this.esc(u)+'" alt="">':'<div class="ph"><ha-icon icon="mdi:movie-open"></ha-icon></div>';
   }
   homeTypeLabel(type){
