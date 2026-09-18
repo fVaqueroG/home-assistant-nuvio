@@ -11,6 +11,7 @@ from typing import Any
 from urllib.parse import urlencode, urlparse
 
 import probatio
+import pycountry
 from homeassistant.components import frontend, websocket_api
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.components.lovelace.const import (
@@ -28,15 +29,17 @@ from .debrid import DebridNotCached, DebridNotConfigured, DebridResolveError
 from .const import (
     CONF_PROFILE_ID,
     CONF_STREAMING_PROVIDERS,
+    CONF_WATCHHUB_COUNTRY,
     DATA_ACCOUNT_API,
     DATA_API,
     DATA_DEBRID_RESOLVER,
     DEFAULT_STREAMING_PROVIDERS,
+    DEFAULT_WATCHHUB_COUNTRY,
     DOMAIN,
 )
 
 CARD_URL = "/nuvio/nuvio-card.js"
-CARD_VERSION = "0.4.28"
+CARD_VERSION = "0.4.29"
 CARD_RESOURCE_URL = f"{CARD_URL}?v={CARD_VERSION}"
 CARD_FILE = Path(__file__).parent / "frontend" / "nuvio-card.js"
 DATA_FRONTEND_REGISTERED = "frontend_registered"
@@ -295,6 +298,52 @@ def _selected_streaming_providers(entry: Any) -> set[str]:
         for value in raw
         if str(value).strip().casefold() in known
     }
+
+
+def _country_code_variants(value: Any) -> set[str]:
+    """Return comparable ISO alpha-2/alpha-3 variants for a country."""
+    alpha2 = str(value or "").strip().upper()
+    if not alpha2:
+        return set()
+    variants = {alpha2.casefold()}
+    country = pycountry.countries.get(alpha_2=alpha2)
+    if country is not None:
+        variants.add(str(country.alpha_3).casefold())
+    if alpha2 == "GB":
+        variants.add("uk")
+    return variants
+
+
+def _watchhub_stream_matches_country(
+    stream: dict[str, Any],
+    behavior: dict[str, Any],
+    country_code: str,
+) -> bool:
+    """Apply Stremio geo hints when WatchHub returns them."""
+    selected = _country_code_variants(country_code)
+    if not selected:
+        return True
+
+    raw_geo_values = (
+        stream.get("geos"),
+        stream.get("countryWhitelist"),
+        behavior.get("countryWhitelist"),
+        behavior.get("country_whitelist"),
+    )
+    restricted: set[str] = set()
+    for raw in raw_geo_values:
+        if isinstance(raw, str):
+            restricted.add(raw.strip().casefold())
+        elif isinstance(raw, (list, tuple, set)):
+            restricted.update(
+                str(value).strip().casefold()
+                for value in raw
+                if str(value).strip()
+            )
+
+    # No geo hint means the country-specific WatchHub endpoint (or WatchHub
+    # itself) is authoritative, so keep the source.
+    return not restricted or bool(selected & restricted)
 
 
 def _parse_release_instant(value: Any) -> datetime | None:
@@ -1280,6 +1329,11 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
         "streaming_providers": [
             key for key in STREAMING_PROVIDER_ALIASES if key in streaming_providers
         ],
+        "watchhub_country": str(
+            entry.data.get(CONF_WATCHHUB_COUNTRY)
+            or getattr(hass.config, "country", None)
+            or DEFAULT_WATCHHUB_COUNTRY
+        ).upper(),
     }
 
     result = {
@@ -1650,9 +1704,16 @@ async def ws_streams(hass, connection, msg) -> None:
         entry = _entry(hass)
         api = entry.runtime_data[DATA_API]
         streaming_providers = _selected_streaming_providers(entry)
+        watchhub_country = str(
+            entry.data.get(CONF_WATCHHUB_COUNTRY)
+            or getattr(hass.config, "country", None)
+            or DEFAULT_WATCHHUB_COUNTRY
+        ).upper()
         rows = []
         for addon, stream in await api.async_all_streams(
-            msg["media_type"], msg["video_id"]
+            msg["media_type"],
+            msg["video_id"],
+            watchhub_country=watchhub_country,
         ):
             behavior = stream.get("behaviorHints")
             if not isinstance(behavior, dict):
@@ -1693,6 +1754,16 @@ async def ws_streams(hass, connection, msg) -> None:
                 and streaming_providers
                 and is_watchhub
                 and provider_key not in streaming_providers
+            ):
+                continue
+            if (
+                external_url
+                and is_watchhub
+                and not _watchhub_stream_matches_country(
+                    stream,
+                    behavior,
+                    watchhub_country,
+                )
             ):
                 continue
 
