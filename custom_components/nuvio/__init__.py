@@ -130,7 +130,26 @@ REMOTE_KEY_SCHEMA = probatio.Schema(
     {
         probatio.Required(ATTR_ENTITY_ID): cv.entity_ids,
         probatio.Required(ATTR_KEY): probatio.In(
-            ["up", "down", "left", "right", "ok", "back", "home", "wake"]
+            [
+                "up",
+                "down",
+                "left",
+                "right",
+                "ok",
+                "back",
+                "home",
+                "wake",
+                "0",
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "7",
+                "8",
+                "9",
+            ]
         ),
     }
 )
@@ -649,6 +668,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
                 "back": "KEYCODE_BACK",
                 "home": "KEYCODE_HOME",
                 "wake": "KEYCODE_WAKEUP",
+                "0": "KEYCODE_0",
+                "1": "KEYCODE_1",
+                "2": "KEYCODE_2",
+                "3": "KEYCODE_3",
+                "4": "KEYCODE_4",
+                "5": "KEYCODE_5",
+                "6": "KEYCODE_6",
+                "7": "KEYCODE_7",
+                "8": "KEYCODE_8",
+                "9": "KEYCODE_9",
             }
             android_remote_commands = {
                 "up": "DPAD_UP",
@@ -661,6 +690,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
                 # HOME reliably wakes/dismisses the screensaver without
                 # risking a POWER toggle on an already-on television.
                 "wake": "HOME",
+                "0": "0",
+                "1": "1",
+                "2": "2",
+                "3": "3",
+                "4": "4",
+                "5": "5",
+                "6": "6",
+                "7": "7",
+                "8": "8",
+                "9": "9",
             }
             webos_buttons = {
                 "up": "UP",
@@ -671,6 +710,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
                 "back": "BACK",
                 "home": "HOME",
                 "wake": "HOME",
+                "0": "0",
+                "1": "1",
+                "2": "2",
+                "3": "3",
+                "4": "4",
+                "5": "5",
+                "6": "6",
+                "7": "7",
+                "8": "8",
+                "9": "9",
             }
 
             unsupported: list[str] = []
