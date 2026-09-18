@@ -104,14 +104,19 @@ def _decode_synced_value(value: Any) -> Any:
     return value
 
 
-def _layout_settings(blob: dict[str, Any]) -> dict[str, Any]:
+def _feature_settings(blob: dict[str, Any], feature: str) -> dict[str, Any]:
+    """Decode one synchronized Nuvio profile-settings feature."""
     features = blob.get("features")
     if not isinstance(features, dict):
         return {}
-    raw = features.get("layout_settings")
+    raw = features.get(feature)
     if not isinstance(raw, dict):
         return {}
     return {str(key): _decode_synced_value(value) for key, value in raw.items()}
+
+
+def _layout_settings(blob: dict[str, Any]) -> dict[str, Any]:
+    return _feature_settings(blob, "layout_settings")
 
 
 def _home_string_list(value: Any) -> list[str]:
