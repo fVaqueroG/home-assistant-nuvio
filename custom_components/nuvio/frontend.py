@@ -26,7 +26,6 @@ from homeassistant.helpers.entity_registry import async_get as async_get_entity_
 from .account import NuvioAuthError
 from .api import Addon, NuvioApiError
 from .debrid import DebridNotCached, DebridNotConfigured, DebridResolveError
-from .tmdb import TmdbApiError
 from .tvdb import TvdbApiError
 from .providers import (
     normalize_provider_text,
