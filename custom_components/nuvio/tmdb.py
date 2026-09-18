@@ -81,8 +81,6 @@ class TmdbWatchApi:
     @staticmethod
     def _direct_tmdb_id(content_id: str) -> int | None:
         value = str(content_id or "").strip()
-        if value.isdigit():
-            return int(value)
         for pattern in (
             r"^tmdb:(\d+)$",
             r"^tmdb:(?:movie|tv|series):(\d+)$",
