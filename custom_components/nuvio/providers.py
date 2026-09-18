@@ -218,9 +218,8 @@ ANDROID_PROVIDER_PACKAGES: dict[str, tuple[str, ...]] = {
 WEBOS_PROVIDER_APP_IDS: dict[str, tuple[str, ...]] = {
     "netflix": ("netflix",),
     "prime": ("amazon",),
-    # Disney+ app ids differ across LG generations/regions. The native
-    # content-player id is tried first for direct contentTarget deep links.
-    "disney": ("cdp-uwp-native", "com.disney.disneyplus-prod"),
+    # Current LG webOS app inventories expose Disney+ with this id.
+    "disney": ("com.disney.disneyplus-prod",),
     # Max/HBO app ids vary by generation/region. Prefer the current Max
     # app, then the legacy HBO Max id, with hbo-go-2 retained as a last fallback.
     "max": ("com.wbd.stream", "com.hbo.hbomax", "hbo-go-2"),
