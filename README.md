@@ -254,7 +254,7 @@ Real-TV testing is authoritative for provider launch support. Apple TV direct ti
 For Netflix, Prime Video, Disney+, Max, Crunchyroll, and Paramount+, Nuvio now adapts the LG launch strategy used by **smartest-tv**:
 
 - JustWatch `standardWebURL` values are unwrapped when JustWatch supplied an affiliate redirect, so the TV receives the provider's own URL.
-- The target provider app is cleanly closed, Nuvio waits 2 seconds, then launches it again. This follows smartest-tv's proven Netflix behavior and is also applied experimentally to the other providers that have ignored title parameters while already running.
+- Nuvio does **not** close or restart provider apps. If the app is already running, the content launch/deeplink is sent directly to the existing app session; if it is not running, webOS launches it normally.
 - The first LG request mirrors `aiowebostv.launch_app_with_content_id()`: `system.launcher/launch` with only `id` and `contentId`.
 - Netflix uses `m=https://www.netflix.com/watch/<videoId>&source_type=4` when a numeric Netflix ID is available.
 - Prime Video, Disney+, Max, Crunchyroll, and Paramount+ receive the resolved provider URL itself as `contentId`.
