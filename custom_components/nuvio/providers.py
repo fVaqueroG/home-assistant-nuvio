@@ -224,14 +224,26 @@ def streaming_provider_key(name: Any, external_url: Any = None) -> str | None:
     filtered without a code update.
     """
     normalized = normalize_provider_text(name)
-    padded = f" {normalized} "
+
+    # Prefer exact aliases globally before fuzzy containment. This prevents
+    # names such as "YouTube Premium" from being classified as "YouTube".
     for key, aliases in PROVIDER_ALIASES.items():
-        for alias in aliases:
-            alias_normalized = normalize_provider_text(alias)
-            if normalized == alias_normalized or (
-                alias_normalized and f" {alias_normalized} " in padded
-            ):
-                return key
+        if any(normalized == normalize_provider_text(alias) for alias in aliases):
+            return key
+
+    padded = f" {normalized} "
+    fuzzy_aliases = sorted(
+        (
+            (normalize_provider_text(alias), key)
+            for key, aliases in PROVIDER_ALIASES.items()
+            for alias in aliases
+        ),
+        key=lambda item: len(item[0]),
+        reverse=True,
+    )
+    for alias_normalized, key in fuzzy_aliases:
+        if alias_normalized and f" {alias_normalized} " in padded:
+            return key
 
     if external_url:
         try:
