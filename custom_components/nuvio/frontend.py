@@ -46,7 +46,7 @@ from .const import (
 )
 
 CARD_URL = "/nuvio/nuvio-card.js"
-CARD_VERSION = "0.4.34"
+CARD_VERSION = "0.4.35"
 CARD_RESOURCE_URL = f"{CARD_URL}?v={CARD_VERSION}"
 CARD_FILE = Path(__file__).parent / "frontend" / "nuvio-card.js"
 DATA_FRONTEND_REGISTERED = "frontend_registered"
