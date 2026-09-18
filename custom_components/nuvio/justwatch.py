@@ -540,7 +540,7 @@ class JustWatchGraphQLApi:
                 },
                 "country": country,
                 "language": language,
-                "filter": {"bestOnly": True},
+                "filter": {"bestOnly": True, "preAffiliate": True},
             },
         )
         popular = (body.get("data") or {}).get("popularTitles") or {}
@@ -649,7 +649,7 @@ class JustWatchGraphQLApi:
                 "nodeId": season_id,
                 "country": country,
                 "language": language,
-                "filter": {"bestOnly": True},
+                "filter": {"bestOnly": True, "preAffiliate": True},
             },
         )
         node = (body.get("data") or {}).get("node") or {}
