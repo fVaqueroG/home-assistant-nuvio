@@ -943,7 +943,10 @@ class NuvioCard extends HTMLElement {
           : '<span class="debrid-note">Play uses Nuvio for the selected source or opens Nuvio\'s source picker when the source cannot be resolved here.</span>')
       : "";
     var filtered=this._addonFilter!=="all";
-    var summary=(filtered?visible.length+" of "+this._streams.length:this._streams.length)+" source"+((filtered?visible.length:this._streams.length)===1?"":"s")+" from "+groups.size+" addon"+(groups.size===1?"":"s")+(unresolved?' · '+unresolved+' resolvable':"");
+    var sourceCountLabel=filtered
+      ? visible.length+" of "+this._streams.length+" source"+(this._streams.length===1?"":"s")
+      : this._streams.length+" source"+(this._streams.length===1?"":"s");
+    var summary=sourceCountLabel+" from "+groups.size+" addon"+(groups.size===1?"":"s")+(unresolved?' · '+unresolved+' resolvable':"");
     var loadingText=this._streamLoadingStage==="watchhub"
       ? "Loading WatchHub…"
       : "Loading other addons…";
