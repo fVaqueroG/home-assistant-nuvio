@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 import re
@@ -48,7 +49,8 @@ from .const import (
 )
 
 CARD_URL = "/nuvio/nuvio-card.js"
-CARD_VERSION = "0.4.47"
+MANIFEST_FILE = Path(__file__).parent / "manifest.json"
+CARD_VERSION = str(json.loads(MANIFEST_FILE.read_text(encoding="utf-8"))["version"])
 CARD_RESOURCE_URL = f"{CARD_URL}?v={CARD_VERSION}"
 CARD_FILE = Path(__file__).parent / "frontend" / "nuvio-card.js"
 DATA_FRONTEND_REGISTERED = "frontend_registered"

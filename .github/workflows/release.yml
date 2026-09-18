@@ -37,6 +37,15 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           grep -F "NUVIO-CARD v$VERSION" custom_components/nuvio/frontend/nuvio-card.js
+          grep -F '<span class="card-version">v'"$VERSION"'</span>' custom_components/nuvio/frontend/nuvio-card.js
+          python - <<'PY'
+          from pathlib import Path
+          source = Path("custom_components/nuvio/frontend.py").read_text()
+          if 'CARD_VERSION = "' in source:
+              raise SystemExit("frontend.py must derive CARD_VERSION from manifest.json")
+          if 'MANIFEST_FILE.read_text' not in source:
+              raise SystemExit("frontend.py is not deriving the card cache version from manifest.json")
+          PY
 
       - name: Compile Python integration
         shell: bash
