@@ -357,7 +357,8 @@ class NuvioCard extends HTMLElement {
           }
         }));
         if(requestId!==this._catalogRequest)return;
-        this._catalogItems=this.collectionItems(this._collectionTab);
+        var combined=this.collectionItems(this._collectionTab);
+        this._catalogItems=this.mergeCatalogItems(this._catalogItems,combined).items;
         this._catalogVisibleCount=Math.min(this._catalogItems.length,this._catalogVisibleCount+chunk);
         var active=this.activeCollectionTabs();
         this._catalogLoadError=active.filter(t=>t.error).map(t=>t.name+": "+t.error).join(" · ");
