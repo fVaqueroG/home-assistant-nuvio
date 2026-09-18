@@ -16,7 +16,11 @@
           "watchhub_country": "WatchHub country",
           "tmdb_access_token": "TMDB API Read Access Token",
           "tvdb_api_key": "TheTVDB API key",
-          "tvdb_subscriber_pin": "TheTVDB subscriber PIN"
+          "tvdb_subscriber_pin": "TheTVDB subscriber PIN",
+          "connect_justwatch_account": "Connect JustWatch account",
+          "justwatch_email": "JustWatch email",
+          "justwatch_password": "JustWatch password",
+          "justwatch_access_token": "JustWatch access token (advanced)"
         },
         "data_description": {
           "package_name": "Use com.nuvio.app for Play Store builds or com.nuvio.tv for most GitHub/sideload builds.",
@@ -28,7 +32,11 @@
           "watchhub_country": "Filters WatchHub availability to the selected country. Defaults to the country configured in Home Assistant.",
           "tmdb_access_token": "Optional. Enables the available-provider row using TMDB/JustWatch data. It uses the same country and streaming-provider selections above.",
           "tvdb_api_key": "Optional but recommended. Resolves movie/episode remote IDs and exact provider links from TheTVDB.",
-          "tvdb_subscriber_pin": "Optional. Use it when your TheTVDB API key requires a subscriber PIN."
+          "tvdb_subscriber_pin": "Optional. Use it when your TheTVDB API key requires a subscriber PIN.",
+          "connect_justwatch_account": "Use your JustWatch session for provider-offer queries. Renewable tokens are stored; your password is not saved.",
+          "justwatch_email": "Your JustWatch account email. Required with the password for one-time sign-in.",
+          "justwatch_password": "Used only to create a renewable JustWatch session and is not stored in Home Assistant.",
+          "justwatch_access_token": "Alternative for Google/Apple sign-in accounts: paste the browser's current access_token. It may expire if no refresh token is available."
         }
       },
       "reconfigure": {
@@ -44,7 +52,11 @@
           "watchhub_country": "WatchHub country",
           "tmdb_access_token": "TMDB API Read Access Token",
           "tvdb_api_key": "TheTVDB API key",
-          "tvdb_subscriber_pin": "TheTVDB subscriber PIN"
+          "tvdb_subscriber_pin": "TheTVDB subscriber PIN",
+          "connect_justwatch_account": "Connect JustWatch account",
+          "justwatch_email": "JustWatch email",
+          "justwatch_password": "JustWatch password",
+          "justwatch_access_token": "JustWatch access token (advanced)"
         },
         "data_description": {
           "profile_id": "Profile 1 is the primary profile. Use 2–5 for another profile.",
@@ -56,7 +68,11 @@
           "watchhub_country": "Filters WatchHub availability to the selected country. Defaults to the country configured in Home Assistant.",
           "tmdb_access_token": "Optional. Enables the available-provider row using TMDB/JustWatch data. It uses the same country and streaming-provider selections above.",
           "tvdb_api_key": "Optional but recommended. Resolves movie/episode remote IDs and exact provider links from TheTVDB.",
-          "tvdb_subscriber_pin": "Optional. Use it when your TheTVDB API key requires a subscriber PIN."
+          "tvdb_subscriber_pin": "Optional. Use it when your TheTVDB API key requires a subscriber PIN.",
+          "connect_justwatch_account": "Use your JustWatch session for provider-offer queries. Renewable tokens are stored; your password is not saved.",
+          "justwatch_email": "Your JustWatch account email. Required with the password for one-time sign-in.",
+          "justwatch_password": "Used only to create a renewable JustWatch session and is not stored in Home Assistant.",
+          "justwatch_access_token": "Alternative for Google/Apple sign-in accounts: paste the browser's current access_token. It may expire if no refresh token is available."
         }
       },
       "device": {
@@ -76,7 +92,8 @@
       "login_connection_failed": "Could not check the Nuvio authorization. Check the connection and try again.",
       "debrid_key_required": "Enter an API key/token for the selected debrid provider.",
       "tmdb_token_invalid": "TMDB rejected the access token. Use a valid API Read Access Token.",
-      "tvdb_credentials_invalid": "TheTVDB rejected the API key or subscriber PIN."
+      "tvdb_credentials_invalid": "TheTVDB rejected the API key or subscriber PIN.",
+      "justwatch_credentials_invalid": "JustWatch rejected the credentials or token. Check the account and try again."
     },
     "abort": {
       "single_instance_allowed": "Nuvio is already configured",
