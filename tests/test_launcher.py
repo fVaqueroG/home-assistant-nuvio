@@ -175,8 +175,9 @@ def test_prime_provider_targets() -> None:
     assert "-p com.amazon.amazonvideo.livingroom" in command
     assert "app.primevideo.com/detail?gti=amzn1.dv.gti.example" in command
     requests = webos_provider_launch_requests("prime", url)
-    assert requests[0][0] == "com.webos.applicationManager/launch"
+    assert requests[0][0] == "system.launcher/launch"
     assert requests[0][1]["id"] == "amazon"
+    assert requests[0][1]["contentId"] == android_provider_target("prime", url)
     params = requests[0][1]["params"]
     assert params["gti"] == "amzn1.dv.gti.example"
     assert params["contentId"] == "amzn1.dv.gti.example"
@@ -193,7 +194,9 @@ def test_disney_provider_targets() -> None:
     assert "com.disney.disneyplus" in command
     assert "-p com.disney.disneyplus" in command
     requests = webos_provider_launch_requests("disney", url)
+    assert requests[0][0] == "system.launcher/launch"
     assert requests[0][1]["id"] == "com.disney.disneyplus-prod"
+    assert requests[0][1]["contentId"] == url
     assert requests[0][1]["params"]["entityId"] == content_id
 
 
@@ -215,10 +218,9 @@ def test_max_provider_targets_support_both_android_packages() -> None:
     assert "com.wbd.hbomax" in command
     assert "com.wbd.stream" in command
     requests = webos_provider_launch_requests("max", url)
-    assert [payload["id"] for _, payload in requests][:2] == [
-        "com.wbd.stream",
-        "hbo-go-2",
-    ]
+    assert requests[0][0] == "system.launcher/launch"
+    assert requests[0][1]["id"] == "com.wbd.stream"
+    assert requests[0][1]["contentId"] == url
     assert requests[0][1]["params"]["videoId"] == content_id
 
 
@@ -228,7 +230,9 @@ def test_crunchyroll_provider_targets() -> None:
     command = android_provider_command("crunchyroll", url)
     assert "com.crunchyroll.crunchyroid" in command
     requests = webos_provider_launch_requests("crunchyroll", url)
+    assert requests[0][0] == "system.launcher/launch"
     assert requests[0][1]["id"] == "crunchyroll"
+    assert requests[0][1]["contentId"] == url
     assert requests[0][1]["params"]["mediaId"] == "GABCDE123"
 
 
@@ -239,6 +243,8 @@ def test_paramount_provider_targets() -> None:
     assert "com.cbs.ott" in command
     requests = webos_provider_launch_requests("paramount", url)
     assert requests
+    assert requests[0][0] == "system.launcher/launch"
+    assert requests[0][1]["contentId"] == url
     assert requests[0][1]["params"]["contentId"] == "abcDEF123"
 
 
@@ -255,7 +261,7 @@ def test_webos_provider_episode_context_and_app_maps() -> None:
     )
     assert requests
     command, payload = requests[0]
-    assert command == "com.webos.applicationManager/launch"
+    assert command == "system.launcher/launch"
     assert payload["id"] == "com.disney.disneyplus-prod"
     assert payload["params"]["sourceContentId"] == "tt123"
     assert payload["params"]["sourceVideoId"] == "tt123:2:4"
