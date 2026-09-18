@@ -27,6 +27,7 @@ from .account import NuvioAuthError
 from .api import Addon, NuvioApiError
 from .debrid import DebridNotCached, DebridNotConfigured, DebridResolveError
 from .tvdb import TvdbApiError
+from .justwatch import JustWatchApiError
 from .providers import (
     normalize_provider_text,
     normalize_selected_provider,
@@ -41,6 +42,7 @@ from .const import (
     DATA_DEBRID_RESOLVER,
     DATA_TMDB_API,
     DATA_TVDB_API,
+    DATA_JUSTWATCH_API,
     DEFAULT_STREAMING_PROVIDERS,
     DEFAULT_WATCHHUB_COUNTRY,
     DOMAIN,
@@ -1902,24 +1904,29 @@ async def ws_resolve_stream(hass, connection, msg) -> None:
     probatio.Required("type"): "nuvio/watch_providers",
     probatio.Required("media_type"): probatio.In(["movie", "series"]),
     probatio.Required("content_id"): str,
+    probatio.Optional("title"): str,
     probatio.Optional("season"): probatio.Coerce(int),
     probatio.Optional("episode"): probatio.Coerce(int),
 })
 @websocket_api.async_response
 async def ws_watch_providers(hass, connection, msg) -> None:
-    """Return configured-country availability plus exact provider links."""
+    """Return configured-country availability plus provider playback links."""
     entry = _entry(hass)
     tmdb_api = entry.runtime_data.get(DATA_TMDB_API)
     tvdb_api = entry.runtime_data.get(DATA_TVDB_API)
+    justwatch_api = entry.runtime_data.get(DATA_JUSTWATCH_API)
     region = str(
         entry.data.get(CONF_WATCHHUB_COUNTRY)
         or getattr(hass.config, "country", None)
         or DEFAULT_WATCHHUB_COUNTRY
     ).upper()
+    language = str(getattr(hass.config, "language", None) or "en").replace("_", "-")
+    title = str(msg.get("title") or "").strip()
     selected = _selected_streaming_providers(entry)
 
     tmdb_configured = bool(tmdb_api and tmdb_api.configured)
     tvdb_configured = bool(tvdb_api and tvdb_api.configured)
+    justwatch_enabled = justwatch_api is not None
     if not tmdb_configured:
         connection.send_result(
             msg["id"],
@@ -1927,6 +1934,7 @@ async def ws_watch_providers(hass, connection, msg) -> None:
                 "configured": False,
                 "tmdb_configured": False,
                 "tvdb_configured": tvdb_configured,
+                "justwatch_enabled": justwatch_enabled,
                 "region": region,
                 "scope": None,
                 "providers": [],
@@ -1970,37 +1978,73 @@ async def ws_watch_providers(hass, connection, msg) -> None:
     else:
         external_ids = ids_result
 
-    tvdb_links: list[dict[str, Any]] = []
-    if tvdb_configured and external_ids:
-        try:
-            if (
-                msg["media_type"] == "series"
-                and msg.get("episode") is not None
-                and external_ids.get("tvdb_id") is not None
-            ):
-                tvdb_links = await tvdb_api.async_episode_links(
-                    int(external_ids["tvdb_id"])
-                )
-            elif msg["media_type"] == "series" and external_ids.get("tvdb_id") is not None:
-                tvdb_links = await tvdb_api.async_series_links(
-                    int(external_ids["tvdb_id"])
-                )
-            elif msg["media_type"] == "movie":
-                tvdb_links = await tvdb_api.async_movie_links(
-                    imdb_id=external_ids.get("imdb_id")
-                    or re.sub(r":\d+:\d+$", "", msg["content_id"]),
-                )
-        except (TvdbApiError, TypeError, ValueError) as err:
-            errors["thetvdb"] = str(err)
+    async def _load_tvdb_links() -> list[dict[str, Any]]:
+        if not tvdb_configured or not external_ids:
+            return []
+        if (
+            msg["media_type"] == "series"
+            and msg.get("episode") is not None
+            and external_ids.get("tvdb_id") is not None
+        ):
+            return await tvdb_api.async_episode_links(int(external_ids["tvdb_id"]))
+        if msg["media_type"] == "series" and external_ids.get("tvdb_id") is not None:
+            return await tvdb_api.async_series_links(int(external_ids["tvdb_id"]))
+        if msg["media_type"] == "movie":
+            return await tvdb_api.async_movie_links(
+                imdb_id=external_ids.get("imdb_id")
+                or re.sub(r":\d+:\d+$", "", msg["content_id"]),
+            )
+        return []
 
-    exact_by_provider: dict[str, dict[str, Any]] = {}
+    async def _load_justwatch_links() -> list[dict[str, Any]]:
+        if justwatch_api is None or not title:
+            return []
+        return await justwatch_api.async_provider_offers(
+            media_type=msg["media_type"],
+            title=title,
+            country=region,
+            language=language,
+            tmdb_id=external_ids.get("tmdb_id"),
+            imdb_id=external_ids.get("imdb_id"),
+            season=msg.get("season"),
+            episode=msg.get("episode"),
+        )
+
+    tvdb_result, justwatch_result = await asyncio.gather(
+        _load_tvdb_links(),
+        _load_justwatch_links(),
+        return_exceptions=True,
+    )
+
+    tvdb_links: list[dict[str, Any]] = []
+    if isinstance(tvdb_result, Exception):
+        errors["thetvdb"] = str(tvdb_result)
+    else:
+        tvdb_links = tvdb_result
+
+    justwatch_links: list[dict[str, Any]] = []
+    if isinstance(justwatch_result, Exception):
+        errors["justwatch"] = str(justwatch_result)
+    else:
+        justwatch_links = justwatch_result
+
+    justwatch_by_provider: dict[str, dict[str, Any]] = {}
+    for link in justwatch_links:
+        if not isinstance(link, dict):
+            continue
+        key = str(link.get("provider_key") or "").strip()
+        url = str(link.get("url") or "").strip()
+        if key and url and key not in justwatch_by_provider:
+            justwatch_by_provider[key] = link
+
+    tvdb_by_provider: dict[str, dict[str, Any]] = {}
     for link in tvdb_links:
         if not isinstance(link, dict):
             continue
         key = str(link.get("provider_key") or "").strip()
         url = str(link.get("url") or "").strip()
-        if key and url and key not in exact_by_provider:
-            exact_by_provider[key] = link
+        if key and url and key not in tvdb_by_provider:
+            tvdb_by_provider[key] = link
 
     providers: list[dict[str, Any]] = []
     for raw in availability.get("providers") or []:
@@ -2011,13 +2055,30 @@ async def ws_watch_providers(hass, connection, msg) -> None:
         if selected and key not in selected:
             continue
         provider["provider_key"] = key
-        exact = exact_by_provider.get(str(key or ""))
-        if exact:
-            provider["deep_link"] = exact.get("url")
+
+        justwatch = justwatch_by_provider.get(str(key or ""))
+        tvdb = tvdb_by_provider.get(str(key or ""))
+        if justwatch:
+            provider["deep_link"] = justwatch.get("url")
+            provider["deep_link_source"] = "justwatch"
+            provider["justwatch_provider_name"] = justwatch.get("provider_name")
+            provider["justwatch_provider_code"] = justwatch.get("provider_code")
+            provider["justwatch_monetization_type"] = justwatch.get(
+                "monetization_type"
+            )
+        elif tvdb:
+            provider["deep_link"] = tvdb.get("url")
             provider["deep_link_source"] = "thetvdb"
-            provider["remote_id"] = exact.get("remote_id")
-            provider["tvdb_source_name"] = exact.get("provider_name")
+            provider["remote_id"] = tvdb.get("remote_id")
+            provider["tvdb_source_name"] = tvdb.get("provider_name")
+
         providers.append(provider)
+
+    attribution_parts = ["Availability by JustWatch via TMDB"]
+    if justwatch_enabled:
+        attribution_parts.append("Offer links via unofficial JustWatch GraphQL")
+    if tvdb_configured:
+        attribution_parts.append("Fallback exact links via TheTVDB")
 
     connection.send_result(
         msg["id"],
@@ -2026,12 +2087,9 @@ async def ws_watch_providers(hass, connection, msg) -> None:
             "providers": providers,
             "tmdb_configured": tmdb_configured,
             "tvdb_configured": tvdb_configured,
+            "justwatch_enabled": justwatch_enabled,
             "external_ids": external_ids,
-            "attribution": (
-                "Availability by JustWatch via TMDB · Exact provider links via TheTVDB"
-                if tvdb_configured
-                else "Availability data by JustWatch via TMDB"
-            ),
+            "attribution": " · ".join(attribution_parts),
             "errors": errors,
         },
     )
