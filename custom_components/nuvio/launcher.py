@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import re
 import shlex
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, unquote, urlparse
 
 from .const import NUVIO_ACTIVITY, NUVIO_WEBOS_APP_ID
 
@@ -220,6 +221,170 @@ def webos_launch_payload(
     }
     params.update({key: value for key, value in optional.items() if value is not None})
     return {"id": NUVIO_WEBOS_APP_ID, "params": params}
+
+
+
+_PROVIDER_ALIASES: dict[str, tuple[str, ...]] = {
+    "netflix": ("netflix", "netflixstandardwithads"),
+    "prime": ("amazonprimevideo", "primevideo", "amazonvideo", "amazon", "prime"),
+    "disney": ("disneyplus", "disney"),
+    "max": ("hbomax", "max"),
+    "paramount": ("paramountplus", "paramount"),
+    "apple": ("appletvplus", "appletv", "apple"),
+    "crunchyroll": ("crunchyroll",),
+    "vix": ("vixpremium", "vix"),
+    "claro": ("clarovideo", "claro"),
+}
+
+
+def _provider_norm(value: str | None) -> str:
+    """Normalize a provider/app label for fuzzy source matching."""
+    return re.sub(r"[^a-z0-9]", "", str(value or "").casefold().replace("+", "plus"))
+
+
+def provider_key(provider_name: str | None, external_url: str | None = None) -> str | None:
+    """Return a canonical streaming-provider key from a label and/or URL."""
+    name = _provider_norm(provider_name)
+    raw_url = str(external_url or "").strip()
+    parsed = urlparse(raw_url)
+    host = parsed.netloc.casefold()
+    path = parsed.path.casefold()
+    combined = _provider_norm(f"{host}{path}")
+
+    host_rules = (
+        ("netflix", ("netflix.com",)),
+        ("prime", ("primevideo.com", "watch.amazon.", "amazon.com", "amazon.com.mx")),
+        ("disney", ("disneyplus.com",)),
+        ("max", ("max.com", "hbomax.com")),
+        ("paramount", ("paramountplus.com",)),
+        ("apple", ("tv.apple.com",)),
+        ("crunchyroll", ("crunchyroll.com",)),
+        ("vix", ("vix.com",)),
+        ("claro", ("clarovideo.com",)),
+    )
+    for key, needles in host_rules:
+        if any(needle in host for needle in needles):
+            return key
+
+    for key, aliases in _PROVIDER_ALIASES.items():
+        if any(alias == name or (len(alias) >= 4 and alias in name) for alias in aliases):
+            return key
+        if any(alias == combined or (len(alias) >= 4 and alias in combined) for alias in aliases):
+            return key
+    return None
+
+
+def provider_source_match(provider: str, sources: list[str]) -> str | None:
+    """Match a canonical provider to a Home Assistant webOS source label."""
+    aliases = _PROVIDER_ALIASES.get(provider, (provider,))
+    best: str | None = None
+    best_score = -1
+    for source in sources:
+        normalized = _provider_norm(source)
+        for alias in aliases:
+            if normalized == alias:
+                score = 100
+            elif len(alias) >= 3 and (alias in normalized or normalized in alias):
+                score = min(len(normalized), len(alias))
+            else:
+                continue
+            if score > best_score:
+                best = source
+                best_score = score
+    return best
+
+
+def netflix_content_id(external_url: str) -> str | None:
+    """Extract the numeric Netflix title id from a provider URL."""
+    raw = str(external_url or "")
+    try:
+        decoded = unquote(raw)
+    except ValueError:
+        decoded = raw
+    patterns = (
+        r"netflix\.com/(?:watch|title)/(\d+)",
+        r"api\.netflix\.com/catalog/titles/(?:movies|series|programs)/(\d+)",
+        r"(?:^|[?&])(?:movieid|contentid|titleid)=(\d+)",
+    )
+    for candidate in (raw, decoded):
+        for pattern in patterns:
+            match = re.search(pattern, candidate, re.IGNORECASE)
+            if match:
+                return match.group(1)
+    return None
+
+
+def android_provider_target(provider: str, external_url: str) -> str:
+    """Return the Android app/deep-link target for a provider source."""
+    if provider == "netflix":
+        content_id = netflix_content_id(external_url)
+        if content_id:
+            return f"netflix://title/{content_id}"
+    return external_url
+
+
+def android_provider_command(provider: str, external_url: str) -> str:
+    """Build an ADB command that hands a provider title to its Android TV app."""
+    target = android_provider_target(provider, external_url)
+    if provider == "netflix" and target.startswith("netflix://title/"):
+        return " ".join(
+            [
+                "am",
+                "start",
+                "-W",
+                "-n",
+                "com.netflix.ninja/.MainActivity",
+                "-a",
+                "android.intent.action.VIEW",
+                "-d",
+                _arg(target),
+                "-f",
+                "0x10000020",
+                "-e",
+                "source",
+                "30",
+            ]
+        )
+    return " ".join(
+        [
+            "am",
+            "start",
+            "-W",
+            "-a",
+            "android.intent.action.VIEW",
+            "-d",
+            _arg(target),
+        ]
+    )
+
+
+def webos_provider_launch_payload(
+    provider: str, external_url: str
+) -> dict[str, Any] | None:
+    """Build an exact-title webOS launcher payload where the app supports it."""
+    if provider == "netflix":
+        content_id = netflix_content_id(external_url)
+        if content_id:
+            return {
+                "id": "netflix",
+                "contentId": (
+                    "m=http%3A%2F%2Fapi.netflix.com%2Fcatalog%2Ftitles%2Fmovies%2F"
+                    f"{content_id}&source_type=4"
+                ),
+            }
+        return {"id": "netflix"}
+
+    if provider == "prime":
+        target = str(external_url or "").strip()
+        if target:
+            return {
+                "id": "amazon",
+                "contentId": target,
+                "params": {"contentTarget": target},
+            }
+        return {"id": "amazon"}
+
+    return None
 
 
 def direct_stream_command(url: str, *, mime_type: str | None = None) -> str:
