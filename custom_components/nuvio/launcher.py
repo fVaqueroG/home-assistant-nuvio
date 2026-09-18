@@ -336,8 +336,20 @@ def provider_content_id(provider: str, external_url: str) -> str | None:
             values = query.get(key)
             if values and values[0]:
                 return values[0]
+
+        # Max playable URLs commonly use:
+        #   /video/watch/<videoId>/<editId>
+        # The first UUID after /video/watch/ is the content/video id.
         match = re.search(
-            r"/(?:movie|show|video|watch)/([a-z0-9-]{8,})",
+            r"/video/watch/([a-z0-9-]{8,})(?:/|$)",
+            path,
+            re.IGNORECASE,
+        )
+        if match:
+            return match.group(1)
+
+        match = re.search(
+            r"/(?:movie|movies|show|watch)/([a-z0-9-]{8,})(?:/|$)",
             path,
             re.IGNORECASE,
         )
@@ -605,6 +617,42 @@ def webos_provider_launch_requests(
                 )
         return requests
 
+    if provider == "max":
+        provider_id = provider_content_id(provider, raw_url)
+        requests: list[tuple[str, dict[str, Any]]] = []
+
+        for app_id in WEBOS_PROVIDER_APP_IDS.get("max", ()):
+            if provider_id:
+                # Native webOS Max/HBO Max contract: hand the provider's
+                # content id directly to Application Manager.
+                requests.append(
+                    (
+                        "com.webos.applicationManager/launch",
+                        {
+                            "id": app_id,
+                            "params": {"contentId": provider_id},
+                        },
+                    )
+                )
+
+            if raw_url:
+                # Some Max builds consume the official universal/deep URL
+                # instead of the bare content id.
+                requests.append(
+                    (
+                        "com.webos.applicationManager/launch",
+                        {
+                            "id": app_id,
+                            "params": {
+                                "contentTarget": raw_url,
+                                "target": raw_url,
+                            },
+                        },
+                    )
+                )
+
+        return requests
+
     if provider == "netflix":
         provider_id = netflix_content_id(raw_url)
         requests: list[tuple[str, dict[str, Any]]] = []
@@ -658,7 +706,6 @@ def webos_provider_launch_requests(
 
     minimal_content_id_providers = {
         "prime",
-        "max",
         "crunchyroll",
         "paramount",
     }
