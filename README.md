@@ -208,7 +208,7 @@ When an episode-specific WatchHub request returns no results, Nuvio retries the 
 
 The Sources screen loads **WatchHub first** and renders those provider links before querying the remaining addons. Other addon groups then appear progressively below it.
 
-The card header is persistent on every screen and keeps the card name visible. **Refresh** and **Control** remain at the top, and Sources adds an **Addons** button. The Addons button expands an **All + one chip per returned addon** filter row, matching the source-filter behavior used by the webOS app. Refreshing Sources repeats the WatchHub-first load.
+The card header is persistent on every screen and keeps the card name visible. **Home**, **Refresh**, and **Control** remain at the top, and Sources adds an **Addons** button. Home returns to the cached Nuvio Home screen immediately without forcing a reload. The Addons button expands an **All + one chip per returned addon** filter row, matching the source-filter behavior used by the webOS app. Refreshing Sources repeats the WatchHub-first load.
 
 ## Streaming provider filtering
 
