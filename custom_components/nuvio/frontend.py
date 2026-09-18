@@ -1926,6 +1926,9 @@ async def ws_watch_providers(hass, connection, msg) -> None:
     tmdb_configured = bool(tmdb_api and tmdb_api.configured)
     tvdb_configured = bool(tvdb_api and tvdb_api.configured)
     justwatch_enabled = justwatch_api is not None
+    justwatch_authenticated = bool(
+        justwatch_api is not None and justwatch_api.authenticated
+    )
     if not tmdb_configured:
         connection.send_result(
             msg["id"],
@@ -1934,6 +1937,7 @@ async def ws_watch_providers(hass, connection, msg) -> None:
                 "tmdb_configured": False,
                 "tvdb_configured": tvdb_configured,
                 "justwatch_enabled": justwatch_enabled,
+                "justwatch_authenticated": justwatch_authenticated,
                 "region": region,
                 "scope": None,
                 "providers": [],
@@ -2065,6 +2069,13 @@ async def ws_watch_providers(hass, connection, msg) -> None:
             provider["justwatch_monetization_type"] = justwatch.get(
                 "monetization_type"
             )
+            provider["justwatch_authenticated"] = bool(
+                justwatch.get("authenticated")
+            )
+            provider["justwatch_pre_affiliated_url"] = justwatch.get(
+                "pre_affiliated_url"
+            )
+            provider["justwatch_stream_url"] = justwatch.get("stream_url")
         elif tvdb:
             provider["deep_link"] = tvdb.get("url")
             provider["deep_link_source"] = "thetvdb"
@@ -2074,7 +2085,9 @@ async def ws_watch_providers(hass, connection, msg) -> None:
         providers.append(provider)
 
     attribution_parts = ["Availability by JustWatch via TMDB"]
-    if justwatch_enabled:
+    if justwatch_authenticated:
+        attribution_parts.append("Offer links via your JustWatch account")
+    elif justwatch_enabled:
         attribution_parts.append("Offer links via unofficial JustWatch GraphQL")
     if tvdb_configured:
         attribution_parts.append("Fallback exact links via TheTVDB")
@@ -2087,6 +2100,7 @@ async def ws_watch_providers(hass, connection, msg) -> None:
             "tmdb_configured": tmdb_configured,
             "tvdb_configured": tvdb_configured,
             "justwatch_enabled": justwatch_enabled,
+            "justwatch_authenticated": justwatch_authenticated,
             "external_ids": external_ids,
             "attribution": " · ".join(attribution_parts),
             "errors": errors,
