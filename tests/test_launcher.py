@@ -234,24 +234,21 @@ def test_disney_provider_targets() -> None:
     command = android_provider_command("disney", url)
     assert "com.disney.disneyplus" in command
     assert "-p com.disney.disneyplus" in command
+
     requests = webos_provider_launch_requests("disney", url)
-    assert requests[0][0] == "com.webos.applicationManager/launch"
-    assert requests[0][1] == {
-        "id": "cdp-uwp-native",
-        "params": {
-            "contentTarget": (
-                "https://www.disneyplus.com/video/"
-                "12345678-1234-1234-1234-123456789abc"
-            ),
-            "target": (
-                "https://www.disneyplus.com/video/"
-                "12345678-1234-1234-1234-123456789abc"
-            ),
+    assert len(requests) == 1
+    assert requests[0] == (
+        "com.webos.applicationManager/launch",
+        {
+            "id": "com.disney.disneyplus-prod",
+            "params": {
+                "contentTarget": url,
+                "target": url,
+                "contentId": content_id,
+                "entityId": content_id,
+            },
         },
-    }
-    assert requests[1][1]["id"] == "cdp-uwp-native"
-    assert requests[1][1]["params"]["contentTarget"] == url
-    assert requests[2][1]["id"] == "com.disney.disneyplus-prod"
+    )
 
 
 def test_apple_provider_targets() -> None:
@@ -331,9 +328,13 @@ def test_paramount_provider_targets() -> None:
 
 
 def test_webos_provider_episode_context_and_app_maps() -> None:
+    url = (
+        "https://www.disneyplus.com/browse/"
+        "entity-12345678-1234-1234-1234-123456789abc"
+    )
     requests = webos_provider_launch_requests(
         "disney",
-        "https://www.disneyplus.com/browse/entity-12345678-1234-1234-1234-123456789abc",
+        url,
         media_type="series",
         content_id="tt123",
         video_id="tt123:2:4",
@@ -344,14 +345,13 @@ def test_webos_provider_episode_context_and_app_maps() -> None:
     assert requests
     command, payload = requests[0]
     assert command == "com.webos.applicationManager/launch"
-    assert payload["id"] == "cdp-uwp-native"
-    assert payload["params"]["contentTarget"] == (
-        "https://www.disneyplus.com/video/"
-        "12345678-1234-1234-1234-123456789abc"
-    )
-    # The Disney webOS contract intentionally contains only the target.
-    # Contextual TMDB/Nuvio ids are not mixed into the app-specific payload.
-    assert set(payload["params"]) == {"contentTarget", "target"}
+    assert payload["id"] == "com.disney.disneyplus-prod"
+    assert payload["params"] == {
+        "contentTarget": url,
+        "target": url,
+        "contentId": "12345678-1234-1234-1234-123456789abc",
+        "entityId": "12345678-1234-1234-1234-123456789abc",
+    }
 
     netflix = webos_provider_launch_requests(
         "netflix",
