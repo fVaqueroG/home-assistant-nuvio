@@ -12,6 +12,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .account import NuvioAccountApi, NuvioAuthError, NuvioLoginExpired
 from .api import NuvioApi, NuvioApiError, normalize_manifest_url
 from .tmdb import TmdbApiError, TmdbWatchApi
+from .tvdb import TvdbApi, TvdbApiError
 from .providers import (
     normalize_provider_text,
     normalize_selected_provider,
@@ -32,6 +33,8 @@ from .const import (
     CONF_STREAMING_PROVIDERS,
     CONF_WATCHHUB_COUNTRY,
     CONF_TMDB_ACCESS_TOKEN,
+    CONF_TVDB_API_KEY,
+    CONF_TVDB_SUBSCRIBER_PIN,
     CONF_USER_ID,
     DEFAULT_MANIFEST_URL,
     DEFAULT_DEBRID_PROVIDER,
@@ -185,6 +188,14 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_TMDB_ACCESS_TOKEN,
                     default=values.get(CONF_TMDB_ACCESS_TOKEN, ""),
                 ): _debrid_key_selector(),
+                probatio.Optional(
+                    CONF_TVDB_API_KEY,
+                    default=values.get(CONF_TVDB_API_KEY, ""),
+                ): _debrid_key_selector(),
+                probatio.Optional(
+                    CONF_TVDB_SUBSCRIBER_PIN,
+                    default=values.get(CONF_TVDB_SUBSCRIBER_PIN, ""),
+                ): _debrid_key_selector(),
                 probatio.Required(
                     CONF_DEBRID_PROVIDER,
                     default=values.get(CONF_DEBRID_PROVIDER, DEFAULT_DEBRID_PROVIDER),
@@ -236,6 +247,25 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                             errors=errors,
                         )
 
+                tvdb_key = str(user_input.get(CONF_TVDB_API_KEY, "")).strip()
+                tvdb_pin = str(
+                    user_input.get(CONF_TVDB_SUBSCRIBER_PIN, "")
+                ).strip()
+                if tvdb_key:
+                    try:
+                        await TvdbApi(
+                            async_get_clientsession(self.hass),
+                            tvdb_key,
+                            tvdb_pin,
+                        ).async_validate()
+                    except TvdbApiError:
+                        errors[CONF_TVDB_API_KEY] = "tvdb_credentials_invalid"
+                        return self.async_show_form(
+                            step_id="user",
+                            data_schema=self._user_schema(user_input),
+                            errors=errors,
+                        )
+
                 provider = str(
                     user_input.get(CONF_DEBRID_PROVIDER, DEFAULT_DEBRID_PROVIDER)
                 )
@@ -267,6 +297,8 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                         )
                     ).upper(),
                     CONF_TMDB_ACCESS_TOKEN: tmdb_token,
+                    CONF_TVDB_API_KEY: tvdb_key,
+                    CONF_TVDB_SUBSCRIBER_PIN: tvdb_pin,
                     CONF_DEBRID_PROVIDER: provider,
                 }
                 if provider != "none":
@@ -332,6 +364,8 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                     ),
                 ): selector.CountrySelector(),
                 probatio.Optional(CONF_TMDB_ACCESS_TOKEN, default=""): _debrid_key_selector(),
+                probatio.Optional(CONF_TVDB_API_KEY, default=""): _debrid_key_selector(),
+                probatio.Optional(CONF_TVDB_SUBSCRIBER_PIN, default=""): _debrid_key_selector(),
                 probatio.Required(
                     CONF_DEBRID_PROVIDER,
                     default=values.get(
@@ -374,6 +408,31 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                 except TmdbApiError:
                     errors[CONF_TMDB_ACCESS_TOKEN] = "tmdb_token_invalid"
 
+            entered_tvdb_key = str(
+                user_input.get(CONF_TVDB_API_KEY, "")
+            ).strip()
+            entered_tvdb_pin = str(
+                user_input.get(CONF_TVDB_SUBSCRIBER_PIN, "")
+            ).strip()
+            existing_tvdb_key = str(
+                entry.data.get(CONF_TVDB_API_KEY, "")
+            ).strip()
+            existing_tvdb_pin = str(
+                entry.data.get(CONF_TVDB_SUBSCRIBER_PIN, "")
+            ).strip()
+            tvdb_key = entered_tvdb_key or existing_tvdb_key
+            tvdb_pin = entered_tvdb_pin or existing_tvdb_pin
+            if entered_tvdb_key or entered_tvdb_pin:
+                if tvdb_key:
+                    try:
+                        await TvdbApi(
+                            async_get_clientsession(self.hass),
+                            tvdb_key,
+                            tvdb_pin,
+                        ).async_validate()
+                    except TvdbApiError:
+                        errors[CONF_TVDB_API_KEY] = "tvdb_credentials_invalid"
+
             provider = str(
                 user_input.get(
                     CONF_DEBRID_PROVIDER,
@@ -413,6 +472,8 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                         )
                     ).upper(),
                     CONF_TMDB_ACCESS_TOKEN: tmdb_token,
+                    CONF_TVDB_API_KEY: tvdb_key,
+                    CONF_TVDB_SUBSCRIBER_PIN: tvdb_pin,
                     CONF_DEBRID_PROVIDER: provider,
                 }
                 if provider == "none":
