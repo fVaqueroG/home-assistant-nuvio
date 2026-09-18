@@ -60,10 +60,11 @@ class NuvioApi:
         self._meta_cache: dict[tuple[str, str, str], tuple[float, dict[str, Any]]] = {}
         self._catalog_ttl = 300.0
         self._meta_ttl = 300.0
+        self._watchhub_country_host_failures: set[str] = set()
 
-    async def _get_json(self, url: str) -> dict[str, Any]:
+    async def _get_json(self, url: str, *, timeout: float = 20) -> dict[str, Any]:
         try:
-            async with self._session.get(url, timeout=20) as response:
+            async with self._session.get(url, timeout=timeout) as response:
                 response.raise_for_status()
                 data = await response.json(content_type=None)
         except (ClientError, TimeoutError, ValueError) as err:
@@ -171,25 +172,66 @@ class NuvioApi:
         return metas
 
     async def async_streams(
-        self, addon: Addon, media_type: str, video_id: str
+        self,
+        addon: Addon,
+        media_type: str,
+        video_id: str,
+        *,
+        watchhub_country: str | None = None,
     ) -> list[dict[str, Any]]:
         """Return stream sources for a video from one addon."""
-        url = (
-            f"{addon.base_url}/stream/{quote(media_type, safe='')}/"
+        path = (
+            f"stream/{quote(media_type, safe='')}/"
             f"{quote(video_id, safe=':')}.json"
         )
-        data = await self._get_json(url)
+
+        addon_id = str(addon.manifest.get("id") or "").strip().casefold()
+        is_watchhub = (
+            addon_id == "org.stremio.watchhub"
+            or "watchhub" in addon.name.casefold()
+        )
+        country = str(watchhub_country or "").strip().lower()
+
+        # Stremio's own deep-link documentation uses country-specific WatchHub
+        # hosts such as watchhub-us.strem.io. Try the selected country first,
+        # but cache failures and immediately fall back to the normal endpoint.
+        if is_watchhub and country and addon.base_url == "https://watchhub.strem.io":
+            country_base = f"https://watchhub-{country}.strem.io"
+            if country_base not in self._watchhub_country_host_failures:
+                try:
+                    data = await self._get_json(
+                        f"{country_base}/{path}",
+                        timeout=4,
+                    )
+                except NuvioApiError:
+                    self._watchhub_country_host_failures.add(country_base)
+                else:
+                    streams = data.get("streams", [])
+                    return [
+                        stream for stream in streams if isinstance(stream, dict)
+                    ]
+
+        data = await self._get_json(f"{addon.base_url}/{path}")
         streams = data.get("streams", [])
         return [stream for stream in streams if isinstance(stream, dict)]
 
     async def async_all_streams(
-        self, media_type: str, video_id: str
+        self,
+        media_type: str,
+        video_id: str,
+        *,
+        watchhub_country: str | None = None,
     ) -> list[tuple[Addon, dict[str, Any]]]:
         """Return streams from all configured addons concurrently."""
 
         async def load(addon: Addon) -> tuple[Addon, list[dict[str, Any]]]:
             try:
-                return addon, await self.async_streams(addon, media_type, video_id)
+                return addon, await self.async_streams(
+                    addon,
+                    media_type,
+                    video_id,
+                    watchhub_country=watchhub_country,
+                )
             except NuvioApiError:
                 return addon, []
 
