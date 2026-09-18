@@ -2,7 +2,7 @@ class NuvioCard extends HTMLElement {
   constructor(){
     super(); this.attachShadow({mode:"open"});
     this._config={}; this._hass=null; this._loaded=false; this._loading=false;
-    this._sections=[]; this._hero=[]; this._heroIndex=0; this._homePrefs={}; this._results=[]; this._catalogSection=null; this._catalogItems=[]; this._catalogLoading=false; this._returnView="home"; this._playersMeta=[]; this._playerId=""; this._streams=[]; this._streamLoading=false; this._streamContext=null; this._debridMeta={configured:false,provider:""}; this._resolving=new Set(); this._lazyCatalogLoads=new Set(); this._lazyObserver=null; this._remoteExpanded=false; this._view="home"; this._item=null; this._details=null; this._season=null; this._query=""; this._error="";
+    this._sections=[]; this._hero=[]; this._heroIndex=0; this._homePrefs={}; this._results=[]; this._catalogSection=null; this._catalogItems=[]; this._catalogLoading=false; this._catalogReload=null; this._returnView="home"; this._playersMeta=[]; this._playerId=""; this._streams=[]; this._streamLoading=false; this._streamLoadingStage=""; this._streamContext=null; this._sourceRequest=0; this._addonFilter="all"; this._addonFilterExpanded=false; this._debridMeta={configured:false,provider:""}; this._resolving=new Set(); this._lazyCatalogLoads=new Set(); this._lazyObserver=null; this._remoteExpanded=false; this._view="home"; this._item=null; this._details=null; this._season=null; this._query=""; this._error="";
   }
   static getStubConfig(){ return {title:"Nuvio",columns:6,show_remote:true,remote_side:"left"}; }
   setConfig(c){ this._config=Object.assign({title:"Nuvio",columns:6,show_search:true,show_remote:true,remote_side:"left"},c||{}); this.render(); }
@@ -136,6 +136,7 @@ class NuvioCard extends HTMLElement {
   }
   async openCollection(folder,section){
     if(!folder)return;
+    this._catalogReload=()=>this.openCollection(folder,section);
     var request=(this._catalogRequest||0)+1;this._catalogRequest=request;
     this._catalogSection={kind:"collection",name:folder.name,show_all_tab:section.show_all_tab};
     this._catalogItems=[];this._collectionTabs=[];this._collectionTab=section.show_all_tab===false?0:-1;
@@ -173,6 +174,7 @@ class NuvioCard extends HTMLElement {
   }
   async openCatalog(section){
     if(!section||section.kind!=="catalog")return;
+    this._catalogReload=()=>this.openCatalog(section);
     this._catalogRequest=(this._catalogRequest||0)+1;var request=this._catalogRequest;
     this._collectionTabs=null;this._catalogSection=section;
     this._catalogItems=Array.isArray(section.items)?section.items.slice():[];
@@ -242,12 +244,101 @@ class NuvioCard extends HTMLElement {
     var videoId=this.streamVideoId(ep);
     if(!videoId){this._error="No video ID is available for this title.";this.render();return;}
     this._sourcesBackView=options.backTo||"details";
-    this._streamContext=ep;this._streams=[];this._streamLoading=true;this._view="sources";this._error="";this.render();
+    this._streamContext=ep;
+    this._addonFilter="all";
+    this._view="sources";
+    this._error="";
+    await this.loadSources({reset:true});
+  }
+  async refreshSources(){
+    await this.loadSources({reset:true});
+  }
+  async loadSources({reset=true}={}){
+    var videoId=this.streamVideoId(this._streamContext);
+    if(!videoId){this._error="No video ID is available for this title.";this.render();return;}
+    var request=(this._sourceRequest||0)+1;
+    this._sourceRequest=request;
+    if(reset){
+      this._streams=[];
+      this._debridMeta={configured:false,provider:""};
+      this._addonFilter="all";
+    }
+    this._streamLoading=true;
+    this._streamLoadingStage="watchhub";
+    this._error="";
+    this.render();
+    var errors=[];
     try{
-      var r=await this.ws({type:"nuvio/streams",media_type:this._item.type,video_id:videoId});
-      this._streams=r.streams||[];this._debridMeta=r.debrid||{configured:false,provider:""};
-    }catch(e){this._error=e.message||"Could not load stream sources.";}
-    this._streamLoading=false;this.render();
+      var watchhub=await this.ws({
+        type:"nuvio/streams",
+        media_type:this._item.type,
+        video_id:videoId,
+        addon_scope:"watchhub"
+      });
+      if(request!==this._sourceRequest)return;
+      this._streams=watchhub.streams||[];
+      this._debridMeta=watchhub.debrid||this._debridMeta;
+    }catch(e){
+      if(request!==this._sourceRequest)return;
+      errors.push("WatchHub: "+(e.message||"Could not load sources."));
+    }
+
+    if(request!==this._sourceRequest)return;
+    this._streamLoadingStage="other";
+    this.render();
+
+    try{
+      var other=await this.ws({
+        type:"nuvio/streams",
+        media_type:this._item.type,
+        video_id:videoId,
+        addon_scope:"other"
+      });
+      if(request!==this._sourceRequest)return;
+      this._streams=this._streams.concat(other.streams||[]);
+      this._debridMeta=other.debrid||this._debridMeta;
+    }catch(e){
+      if(request!==this._sourceRequest)return;
+      errors.push("Other addons: "+(e.message||"Could not load sources."));
+    }
+
+    if(request!==this._sourceRequest)return;
+    this._streamLoading=false;
+    this._streamLoadingStage="";
+    this._error=errors.join(" · ");
+    this.render();
+  }
+  sourceAddonNames(){
+    var names=[];
+    this._streams.forEach(s=>{
+      var name=String(s.addon||"Unknown addon");
+      if(!names.includes(name))names.push(name);
+    });
+    return names;
+  }
+  filteredSourceEntries(){
+    var names=this.sourceAddonNames();
+    if(this._addonFilter!=="all"&&!names.includes(this._addonFilter))this._addonFilter="all";
+    return this._streams
+      .map((stream,index)=>({stream,index}))
+      .filter(entry=>this._addonFilter==="all"||String(entry.stream.addon||"Unknown addon")===this._addonFilter);
+  }
+  toggleAddonFilter(){
+    this._addonFilterExpanded=!this._addonFilterExpanded;
+    this.render();
+  }
+  setAddonFilter(name){
+    this._addonFilter=String(name||"all");
+    this.render();
+  }
+  sourceFilterBar(){
+    if(!this._addonFilterExpanded)return "";
+    var names=this.sourceAddonNames();
+    var chip=(name,label)=>'<button class="source-filter-chip '+(this._addonFilter===name?"active":"")+'" data-addon-filter="'+this.esc(name)+'" aria-pressed="'+(this._addonFilter===name?"true":"false")+'">'+this.esc(label)+'</button>';
+    return '<div class="source-filter-bar" role="group" aria-label="Source addons">'+
+      chip("all","All")+
+      names.map(name=>chip(name,name)).join("")+
+    '</div>';
   }
   inferMime(url,filename,declared){
     var d=String(declared||"").trim().toLowerCase();
@@ -313,7 +404,7 @@ class NuvioCard extends HTMLElement {
       this._error="Configure your debrid provider and API key in Settings → Devices & services → Nuvio → Reconfigure.";
       this.render();return;
     }
-    var candidates=this._streams.map((s,i)=>({s,i})).filter(x=>!x.s.direct&&x.s.resolvable&&!x.s.requires_headers&&(x.s.info_hash||x.s.magnet_uri)).slice(0,6);
+    var candidates=this.filteredSourceEntries().map(x=>({s:x.stream,i:x.index})).filter(x=>!x.s.direct&&x.s.resolvable&&!x.s.requires_headers&&(x.s.info_hash||x.s.magnet_uri)).slice(0,6);
     for(var item of candidates)await this.resolveSource(item.i);
   }
   sourcePlaybackData(stream,inNuvio=false){
@@ -471,9 +562,51 @@ class NuvioCard extends HTMLElement {
   }
   connectedCallback(){this.syncHeroTimer();}
   header(){
-    var s=this._config.show_search===false?"":'<div class="search"><ha-icon icon="mdi:magnify"></ha-icon><input id="search" value="'+this.esc(this._query)+'" placeholder="Search Nuvio…"></div>';
-    var remote=this._config.show_remote===false?"":'<button class="ib remote-toggle-button '+(this._remoteExpanded?"remote-active":"")+'" title="Remote"><ha-icon icon="mdi:remote-tv"></ha-icon></button>';
-    return '<div class="header"><h2>'+this.esc(this._config.title)+'</h2><div class="tools">'+s+'<button class="ib" id="refresh" title="Refresh"><ha-icon icon="mdi:refresh"></ha-icon></button>'+remote+'</div></div>';
+    var onHome=this._view==="home";
+    var search=onHome&&this._config.show_search!==false
+      ? '<div class="search"><ha-icon icon="mdi:magnify"></ha-icon><input id="search" value="'+this.esc(this._query)+'" placeholder="Search Nuvio…"></div>'
+      : "";
+    var addons=this._view==="sources"
+      ? '<button class="ib toolbar-btn source-addon-toggle '+(this._addonFilterExpanded||this._addonFilter!=="all"?"toolbar-active":"")+'" id="addonsToggle" title="Filter sources by addon" aria-pressed="'+(this._addonFilterExpanded?"true":"false")+'"><ha-icon icon="mdi:filter-variant"></ha-icon><span>Addons</span></button>'
+      : "";
+    var remote=this._config.show_remote===false
+      ? ""
+      : '<button class="ib toolbar-btn remote-toggle-button '+(this._remoteExpanded?"remote-active":"")+'" title="Control" aria-label="Control"><ha-icon icon="mdi:remote-tv"></ha-icon><span>Control</span></button>';
+    return '<div class="header"><h2>'+this.esc(this._config.title||"Nuvio")+'</h2><div class="tools">'+search+
+      '<button class="ib toolbar-btn" id="refresh" title="Refresh" aria-label="Refresh"><ha-icon icon="mdi:refresh"></ha-icon><span>Refresh</span></button>'+
+      addons+remote+'</div></div>';
+  }
+  async refreshCurrent(){
+    if(this._view==="sources"){
+      await this.refreshSources();
+      return;
+    }
+    if(this._view==="search"){
+      await this.search();
+      return;
+    }
+    if(this._view==="catalog"&&this._catalogReload){
+      await this._catalogReload();
+      return;
+    }
+    if(this._view==="details"&&this._item&&this._item.manifest_url){
+      this._loading=true;this._error="";this.render();
+      try{
+        this._details=await this.ws({
+          type:"nuvio/details",
+          manifest_url:this._item.manifest_url,
+          media_type:this._item.type,
+          content_id:this._item.id
+        });
+        var seasons=this.seasons();
+        if(seasons.length&&!seasons.includes(this._season))this._season=seasons[0];
+      }catch(e){
+        this._error=e.message||"Could not refresh title details.";
+      }
+      this._loading=false;this.render();
+      return;
+    }
+    await this.loadHome(true);
   }
   home(){
     if(this._homeRetryTimer&&!this._sections.length&&!this._hero.length)return '<div class="status">Nuvio Home is still loading. Retrying automatically…</div>';
@@ -755,8 +888,9 @@ class NuvioCard extends HTMLElement {
   sourcesView(){
     var ep=this._streamContext,d=this._details||this._item,title=d.name||this._item.name||"Nuvio";
     var sub=ep?("S"+(ep.season||"")+" E"+(ep.episode||"")+" · "+(ep.title||"Episode")):"Movie";
+    var visible=this.filteredSourceEntries();
     var groups=new Map();
-    this._streams.forEach((s,n)=>{
+    visible.forEach(({stream:s,index:n})=>{
       var key=s.addon||"Unknown addon";
       if(!groups.has(key))groups.set(key,[]);
       groups.get(key).push({stream:s,index:n});
@@ -772,7 +906,6 @@ class NuvioCard extends HTMLElement {
         var unavailable=s.requires_headers?"Custom headers required":"Nuvio resolver required";
         var externalUrl=s.external_url||"";
         var torrentLink=s.magnet_uri||"";
-        var linkHtml="";
         var canResolve=!!s.resolvable&&!s.requires_headers&&(s.info_hash||s.magnet_uri);
         var resolving=this._resolving.has(n);
         var externalOnly=!!externalUrl&&!s.direct&&!canResolve;
@@ -790,7 +923,6 @@ class NuvioCard extends HTMLElement {
             '<div class="stream-badges">'+badgeHtml(s)+'</div>'+
             (secondary?'<div class="source-description">'+this.esc(secondary)+'</div>':"")+
             (filename?'<div class="source-filename">'+this.esc(filename)+'</div>':"")+
-            linkHtml+
           '</div>'+
           '<div class="source-actions">'+actionHtml+'</div>'+
         '</div>';
@@ -803,25 +935,37 @@ class NuvioCard extends HTMLElement {
         rows+
       '</section>';
     }).join("");
-    var unresolved=this._streams.filter(s=>!s.direct&&s.resolvable&&!s.requires_headers&&(s.info_hash||s.magnet_uri)).length;
+
+    var unresolved=visible.filter(x=>!x.stream.direct&&x.stream.resolvable&&!x.stream.requires_headers&&(x.stream.info_hash||x.stream.magnet_uri)).length;
     var debridControls=unresolved
       ? (this._debridMeta.configured
           ? '<button class="action resolveall" id="resolveAll">Resolve up to 6 links · '+this.esc((this._debridMeta.providers||[]).join(", ")||this._debridMeta.provider||"Nuvio debrid")+'</button>'
           : '<span class="debrid-note">Play uses Nuvio for the selected source or opens Nuvio\'s source picker when the source cannot be resolved here.</span>')
       : "";
-    var remoteButton=this._config.show_remote===false?"":'<button class="ib remote-toggle-button '+(this._remoteExpanded?"remote-active":"")+'" title="Remote"><ha-icon icon="mdi:remote-tv"></ha-icon></button>';
-    return '<div class="top source-top"><button class="back" id="backDetails">← '+this.esc(title)+'</button></div>'+
+    var filtered=this._addonFilter!=="all";
+    var summary=(filtered?visible.length+" of "+this._streams.length:this._streams.length)+" source"+((filtered?visible.length:this._streams.length)===1?"":"s")+" from "+groups.size+" addon"+(groups.size===1?"":"s")+(unresolved?' · '+unresolved+' resolvable':"");
+    var loadingText=this._streamLoadingStage==="watchhub"
+      ? "Loading WatchHub…"
+      : "Loading other addons…";
+    var sourceBody=(groupHtml?'<div class="sources">'+groupHtml+'</div>':"")+
+      (this._streamLoading?'<div class="status source-loading-status">'+loadingText+'</div>':"");
+    if(!this._streamLoading&&!groupHtml)sourceBody='<div class="status">No sources were returned'+(filtered?" for this addon":" by your configured Nuvio addons")+'.</div>';
+
+    return this.sourceFilterBar()+
+      '<div class="top source-top"><button class="back" id="backDetails">← '+this.esc(title)+'</button></div>'+
       this.sourceDetails()+
-      '<div class="top source-controls"><div class="source-title-row"><h3>Sources · '+this.esc(sub)+'</h3>'+remoteButton+'</div><div class="controls">'+this.playerSelect()+debridControls+'</div><div class="source-summary">'+this._streams.length+' source'+(this._streams.length===1?"":"s")+' from '+groups.size+' addon'+(groups.size===1?"":"s")+(unresolved?' · '+unresolved+' resolvable':"")+'</div></div>'+
-      (this._streamLoading?'<div class="status">Loading sources…</div>':(groupHtml?'<div class="sources">'+groupHtml+'</div>':'<div class="status">No sources were returned by your configured Nuvio addons.</div>'));
+      '<div class="top source-controls"><div class="source-title-row"><h3>Sources · '+this.esc(sub)+'</h3></div><div class="controls">'+this.playerSelect()+debridControls+'</div><div class="source-summary">'+summary+'</div></div>'+
+      sourceBody;
   }
   styles(){
-    return '<style>:host{display:block;--pw:min(150px,34vw)}ha-card{overflow:hidden;padding:0;color:var(--primary-text-color)}.header{display:flex;gap:12px;align-items:center;padding:18px 20px 8px}.header h2{margin:0;flex:1;font-size:22px}.tools,.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.search{display:flex;align-items:center;background:var(--secondary-background-color);border-radius:18px;padding:0 9px;min-width:220px}.search input{border:0;outline:0;background:transparent;color:var(--primary-text-color);padding:9px;width:100%}.ib,.back,.action,.season{border:0;cursor:pointer;background:var(--secondary-background-color);color:var(--primary-text-color);border-radius:18px;padding:9px 13px}section{padding:8px 0 12px}section h3{margin:6px 20px 10px}.home-row-head{display:flex;align-items:center;gap:10px;margin:6px 20px 10px}.catalog-title{flex:1;min-width:0;text-align:left;border:0;background:transparent;color:var(--primary-text-color);font:inherit;font-size:1.17em;font-weight:600;padding:0;cursor:pointer}.catalog-title span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.catalog-title small{font-size:11px;font-weight:400;color:var(--secondary-text-color)}.see-all{border:0;background:transparent;color:var(--primary-color);font:inherit;font-size:12px;font-weight:600;padding:5px 0 5px 8px;cursor:pointer;white-space:nowrap}.catalog-top h3{margin:12px 0 4px}.catalog-top small{font-weight:400;color:var(--secondary-text-color)}.rail{display:flex;gap:12px;overflow:auto;padding:0 20px 10px}.pc{width:var(--pw);min-width:var(--pw);border:0;background:none;color:inherit;text-align:left;padding:0;cursor:pointer}.poster{aspect-ratio:2/3;border-radius:12px;overflow:hidden;background:var(--secondary-background-color);position:relative}.poster img{width:100%;height:100%;object-fit:cover}.ph{height:100%;display:grid;place-items:center}.pt{font-weight:600;font-size:13px;margin-top:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.meta{display:flex;justify-content:space-between;gap:5px;color:var(--secondary-text-color);font-size:11px}.prog{position:absolute;left:6px;right:6px;bottom:6px;height:4px;background:#ffffff55}.prog i{display:block;height:100%;background:var(--primary-color)}.home-hero-stage{position:relative;padding:0 0 14px}.home-hero-card{position:relative;display:block;width:100%;height:340px;border:0;padding:0;overflow:hidden;background-size:cover;background-position:center;color:white;text-align:left;cursor:pointer}.home-hero-shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.88) 0%,rgba(0,0,0,.60) 37%,rgba(0,0,0,.12) 72%),linear-gradient(0deg,var(--card-background-color) 0%,transparent 38%)}.home-hero-copy{position:absolute;left:22px;bottom:30px;max-width:min(520px,60%);z-index:1}.home-hero-copy h2{margin:0 0 8px;font-size:30px}.home-hero-copy p{margin:10px 0 0;line-height:1.4;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.home-hero-logo{display:block;max-width:min(360px,75%);max-height:90px;object-fit:contain;object-position:left bottom;margin-bottom:10px}.home-hero-meta{font-size:13px;opacity:.9;margin-top:4px}.home-hero-nav{position:absolute;right:18px;bottom:26px;z-index:2;display:flex;align-items:center;gap:10px;padding:6px 9px;border-radius:24px;background:rgba(0,0,0,.55);color:white}.home-hero-dots{display:flex;gap:7px}.hero-arrow,.hero-pause{display:grid;place-items:center;width:32px;height:32px;padding:0;border:0;border-radius:50%;background:rgba(255,255,255,.12);color:white;cursor:pointer;font-size:26px}.hero-pause{font-size:15px}.hero-count{font-size:11px;white-space:nowrap}.home-hero-dot{width:8px;height:8px;border:0;border-radius:50%;padding:0;background:#ffffff66;cursor:pointer}.home-hero-dot.active{background:white;transform:scale(1.25)}.landscape-card{--pw:min(235px,53vw)}.landscape-card .poster{aspect-ratio:16/9}.collection-rail{align-items:flex-start}.collection-card{width:var(--pw);min-width:var(--pw);border:0;padding:0;background:none;color:inherit;cursor:pointer;font:inherit;text-align:left}.collection-card:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}.collection-tabs{display:flex;gap:8px;overflow:auto;padding:8px 20px}.collection-art{position:relative;aspect-ratio:1/1;border-radius:12px;overflow:hidden;background:var(--secondary-background-color)}.collection-card.shape-poster .collection-art{aspect-ratio:2/3}.collection-card.shape-landscape{width:min(235px,53vw);min-width:min(235px,53vw)}.collection-card.shape-landscape .collection-art{aspect-ratio:16/9}.collection-art img{width:100%;height:100%;object-fit:fill}.collection-emoji{height:100%;display:grid;place-items:center;font-size:42px;font-weight:700}.collection-title{position:absolute;left:0;right:0;bottom:0;padding:18px 8px 8px;text-align:center;font-size:12px;font-weight:700;color:white;background:linear-gradient(transparent,rgba(0,0,0,.8))}.lazy-rail{overflow:hidden}.lazy-card{width:var(--pw);min-width:var(--pw)}.lazy-poster{aspect-ratio:2/3;border-radius:12px;background:linear-gradient(100deg,var(--secondary-background-color) 25%,color-mix(in srgb,var(--secondary-background-color) 75%,var(--primary-text-color) 25%) 45%,var(--secondary-background-color) 65%);background-size:220% 100%;animation:nuvioShimmer 1.35s linear infinite}.lazy-line{height:12px;width:72%;border-radius:6px;margin-top:8px;background:var(--secondary-background-color)}.catalog-load-error{padding:8px 20px 20px;color:var(--secondary-text-color);font-size:12px}@keyframes nuvioShimmer{0%{background-position:180% 0}100%{background-position:-40% 0}}@media(prefers-reduced-motion:reduce){.lazy-poster{animation:none}}.status{padding:28px;text-align:center;color:var(--secondary-text-color)}.error{margin:10px 20px;padding:12px;border-radius:10px;background:var(--error-color);color:white}.top{padding:8px 20px}.grid{display:grid;grid-template-columns:repeat(var(--cols),minmax(0,1fr));gap:14px;padding:10px 20px 22px}.grid .pc{width:auto;min-width:0}.hero{height:270px;background-size:cover;background-position:center;position:relative}.shade{position:absolute;inset:0;background:linear-gradient(0deg,var(--card-background-color) 0%,transparent 90%)}.heroBack{position:absolute;top:16px;left:16px}.detail{position:relative;margin-top:-82px;padding:0 20px 22px}.detail h2{font-size:28px;margin:0 0 8px}.desc{max-width:850px;color:var(--secondary-text-color);line-height:1.45}.controls{margin:16px 0}.platform-note{flex-basis:100%;font-size:12px;color:var(--secondary-text-color);max-width:760px}.controls select{border:0;border-radius:18px;padding:9px 12px;background:var(--secondary-background-color);color:var(--primary-text-color)}.primary,.season.active{background:var(--primary-color);color:white}.seasons{display:flex;gap:8px;overflow:auto;margin:14px 0}.episodes{display:grid;gap:9px}.episode{display:grid;grid-template-columns:140px 1fr auto;gap:12px;align-items:center;width:100%;border:0;text-align:left;color:inherit;font:inherit;cursor:pointer;background:var(--secondary-background-color);padding:8px;border-radius:12px}.episode:hover,.episode:focus-visible{outline:2px solid color-mix(in srgb,var(--primary-color) 65%,transparent);outline-offset:1px}.episode img{width:140px;aspect-ratio:16/9;object-fit:cover;border-radius:8px}.episode h4,.episode p{margin:0}.episode p{font-size:12px;color:var(--secondary-text-color);margin-top:5px}.episode-chevron{font-size:28px;color:var(--secondary-text-color);padding:0 8px}.sources{display:grid;gap:18px;padding:0 20px 22px}.source-group{padding:0}.source-group-head{display:flex;align-items:center;gap:10px;margin:0 0 8px}.source-group-head img{width:34px;height:34px;object-fit:contain;border-radius:8px;background:var(--secondary-background-color)}.source-group-head h3{margin:0;font-size:16px}.source-group-head span,.source-summary{font-size:12px;color:var(--secondary-text-color)}.source-row{display:flex;gap:12px;align-items:center;justify-content:space-between;background:var(--secondary-background-color);padding:12px;border-radius:12px;margin-bottom:8px}.source-main{min-width:0;display:flex;flex:1;flex-direction:column;gap:6px}.source-label{font-weight:650;white-space:normal;overflow-wrap:anywhere}.source-description,.source-filename,.resolver{font-size:12px;color:var(--secondary-text-color);overflow-wrap:anywhere}.source-filename{opacity:.8}.stream-badges{display:flex;flex-wrap:wrap;gap:5px}.stream-badge{display:inline-flex;align-items:center;min-height:20px;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:650;background:var(--card-background-color);border:1px solid var(--divider-color);white-space:nowrap}.badge-resolution{background:color-mix(in srgb,var(--primary-color) 20%,var(--card-background-color));border-color:color-mix(in srgb,var(--primary-color) 55%,var(--divider-color))}.badge-hdr,.badge-audio{background:color-mix(in srgb,var(--accent-color,var(--primary-color)) 14%,var(--card-background-color))}.badge-size,.badge-language{font-weight:500;color:var(--secondary-text-color)}.source-actions{flex:0 0 auto;max-width:260px;text-align:right;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.source-top{padding-top:16px;padding-bottom:6px}.source-controls{padding-top:4px}.source-context{display:grid;grid-template-columns:auto minmax(0,1fr);gap:18px;align-items:center;margin:4px 20px 10px;padding:14px;border-radius:16px;background:linear-gradient(135deg,color-mix(in srgb,var(--secondary-background-color) 92%,transparent),color-mix(in srgb,var(--card-background-color) 96%,transparent));border:1px solid var(--divider-color);overflow:hidden}.source-context-art{overflow:hidden;border-radius:12px;background:var(--secondary-background-color);box-shadow:0 6px 18px rgba(0,0,0,.18)}.source-context-art img{display:block;width:100%;height:100%;object-fit:cover}.source-context-art.movie-art{width:112px;aspect-ratio:2/3}.source-context-art.episode-art{width:min(240px,30vw);aspect-ratio:16/9}.source-context-copy{min-width:0}.source-context-kicker{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--secondary-text-color);margin-bottom:4px}.source-context-copy h2{margin:0 0 7px;font-size:24px;line-height:1.15}.source-context-meta{font-size:12px;color:var(--secondary-text-color);line-height:1.4}.source-context-copy p{margin:10px 0 0;max-width:850px;color:var(--secondary-text-color);line-height:1.45;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}.source-title-row{display:flex;align-items:center;gap:8px;margin:8px 0}.source-title-row h3{margin:0}.remote-active{background:var(--primary-color)!important;color:white!important}.source-summary{margin-top:-8px;margin-bottom:6px}.debrid-note{font-size:12px;color:var(--secondary-text-color);max-width:520px}.resolvesource:disabled{opacity:.65;cursor:wait}.resolveall{font-size:12px}.nuvio-layout{position:relative;display:block;min-width:0}.nuvio-main{width:100%;min-width:0}.remote-shell{width:176px;border:1px solid var(--divider-color);border-radius:24px;padding:12px;background:color-mix(in srgb,var(--card-background-color) 94%,transparent);backdrop-filter:blur(18px);box-shadow:0 12px 36px rgba(0,0,0,.26)}.remote-head{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:700;color:var(--secondary-text-color);margin-bottom:10px}.remote-close{width:26px;height:26px;border:0;border-radius:13px;background:var(--secondary-background-color);color:var(--primary-text-color);display:grid;place-items:center;cursor:pointer}.remote-close ha-icon{--mdc-icon-size:16px}.wake-btn{width:100%;height:34px;border:0;border-radius:17px;background:var(--secondary-background-color);color:var(--primary-text-color);display:flex;align-items:center;justify-content:center;gap:6px;font-size:11px;cursor:pointer;margin-bottom:10px}.wake-btn ha-icon{--mdc-icon-size:18px}.remote-ring{position:relative;width:132px;height:132px;margin:0 auto 10px;border-radius:50%;background:radial-gradient(circle at center,var(--secondary-background-color) 0 34%,color-mix(in srgb,var(--secondary-background-color) 82%,var(--primary-color) 18%) 35% 100%);box-shadow:inset 0 0 0 1px var(--divider-color)}.remote-ring button{position:absolute;border:0;background:transparent;color:var(--primary-text-color);display:grid;place-items:center;cursor:pointer}.ring-btn{width:44px;height:44px;border-radius:50%!important}.ring-btn ha-icon{--mdc-icon-size:28px}.ring-btn.up{top:2px;left:44px}.ring-btn.down{bottom:2px;left:44px}.ring-btn.left{left:2px;top:44px}.ring-btn.right{right:2px;top:44px}.ring-ok{width:48px;height:48px;left:42px;top:42px;border-radius:50%!important;background:var(--primary-color)!important;color:white!important;font-size:11px;font-weight:800;box-shadow:0 3px 10px rgba(0,0,0,.22)}.remote-ring button:active,.wake-btn:active,.remote-footer button:active{transform:scale(.96)}.remote-footer{display:grid;grid-template-columns:1fr 1fr;gap:8px}.remote-footer button{height:38px;border:0;border-radius:14px;background:var(--secondary-background-color);color:var(--primary-text-color);display:flex;align-items:center;justify-content:center;gap:5px;font-size:11px;cursor:pointer}.remote-footer ha-icon{--mdc-icon-size:18px}.resolveall{font-size:12px}@media(max-width:700px){:host{--pw:120px}.remote-dialog{top:180px}.remote-shell{width:160px;padding:10px}.remote-ring{width:120px;height:120px}.ring-btn.up{left:38px}.ring-btn.down{left:38px}.ring-btn.left{top:38px}.ring-btn.right{top:38px}.ring-ok{left:36px;top:36px}.header{flex-direction:column;align-items:stretch}.search{min-width:0;flex:1}.grid{grid-template-columns:repeat(3,minmax(0,1fr))}.episode{grid-template-columns:95px 1fr}.episode img{width:95px}.playep{grid-column:2}.source-context{grid-template-columns:92px minmax(0,1fr);gap:12px;margin:4px 12px 10px;padding:10px}.source-context-art.movie-art{width:92px}.source-context-art.episode-art{width:92px;aspect-ratio:16/9}.source-context-copy h2{font-size:19px}.source-context-copy p{font-size:12px;-webkit-line-clamp:3}.source-row{align-items:flex-start;flex-direction:column}.source-actions{max-width:none;width:100%;text-align:left}.source-actions .action{width:100%}.home-hero-card{height:250px}.home-hero-copy{left:16px;bottom:22px;max-width:75%}.home-hero-copy h2{font-size:24px}.home-hero-nav{right:12px;bottom:20px;gap:7px}.home-hero-copy{bottom:80px}.home-hero-copy p{display:none}.hero{height:220px}}</style>';
+    return '<style>:host{display:block;--pw:min(150px,34vw)}ha-card{overflow:hidden;padding:0;color:var(--primary-text-color)}.header{display:flex;gap:12px;align-items:center;padding:16px 20px 12px;border-bottom:1px solid var(--divider-color);background:var(--card-background-color)}.header h2{margin:0;flex:1;min-width:0;font-size:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tools,.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.toolbar-btn{display:inline-flex;align-items:center;gap:6px}.toolbar-btn ha-icon{--mdc-icon-size:19px}.toolbar-active{background:color-mix(in srgb,var(--primary-color) 18%,var(--secondary-background-color))!important}.search{display:flex;align-items:center;background:var(--secondary-background-color);border-radius:18px;padding:0 9px;min-width:220px}.search input{border:0;outline:0;background:transparent;color:var(--primary-text-color);padding:9px;width:100%}.ib,.back,.action,.season{border:0;cursor:pointer;background:var(--secondary-background-color);color:var(--primary-text-color);border-radius:18px;padding:9px 13px}section{padding:8px 0 12px}section h3{margin:6px 20px 10px}.home-row-head{display:flex;align-items:center;gap:10px;margin:6px 20px 10px}.catalog-title{flex:1;min-width:0;text-align:left;border:0;background:transparent;color:var(--primary-text-color);font:inherit;font-size:1.17em;font-weight:600;padding:0;cursor:pointer}.catalog-title span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.catalog-title small{font-size:11px;font-weight:400;color:var(--secondary-text-color)}.see-all{border:0;background:transparent;color:var(--primary-color);font:inherit;font-size:12px;font-weight:600;padding:5px 0 5px 8px;cursor:pointer;white-space:nowrap}.catalog-top h3{margin:12px 0 4px}.catalog-top small{font-weight:400;color:var(--secondary-text-color)}.rail{display:flex;gap:12px;overflow:auto;padding:0 20px 10px}.pc{width:var(--pw);min-width:var(--pw);border:0;background:none;color:inherit;text-align:left;padding:0;cursor:pointer}.poster{aspect-ratio:2/3;border-radius:12px;overflow:hidden;background:var(--secondary-background-color);position:relative}.poster img{width:100%;height:100%;object-fit:cover}.ph{height:100%;display:grid;place-items:center}.pt{font-weight:600;font-size:13px;margin-top:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.meta{display:flex;justify-content:space-between;gap:5px;color:var(--secondary-text-color);font-size:11px}.prog{position:absolute;left:6px;right:6px;bottom:6px;height:4px;background:#ffffff55}.prog i{display:block;height:100%;background:var(--primary-color)}.home-hero-stage{position:relative;padding:0 0 14px}.home-hero-card{position:relative;display:block;width:100%;height:340px;border:0;padding:0;overflow:hidden;background-size:cover;background-position:center;color:white;text-align:left;cursor:pointer}.home-hero-shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.88) 0%,rgba(0,0,0,.60) 37%,rgba(0,0,0,.12) 72%),linear-gradient(0deg,var(--card-background-color) 0%,transparent 38%)}.home-hero-copy{position:absolute;left:22px;bottom:30px;max-width:min(520px,60%);z-index:1}.home-hero-copy h2{margin:0 0 8px;font-size:30px}.home-hero-copy p{margin:10px 0 0;line-height:1.4;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.home-hero-logo{display:block;max-width:min(360px,75%);max-height:90px;object-fit:contain;object-position:left bottom;margin-bottom:10px}.home-hero-meta{font-size:13px;opacity:.9;margin-top:4px}.home-hero-nav{position:absolute;right:18px;bottom:26px;z-index:2;display:flex;align-items:center;gap:10px;padding:6px 9px;border-radius:24px;background:rgba(0,0,0,.55);color:white}.home-hero-dots{display:flex;gap:7px}.hero-arrow,.hero-pause{display:grid;place-items:center;width:32px;height:32px;padding:0;border:0;border-radius:50%;background:rgba(255,255,255,.12);color:white;cursor:pointer;font-size:26px}.hero-pause{font-size:15px}.hero-count{font-size:11px;white-space:nowrap}.home-hero-dot{width:8px;height:8px;border:0;border-radius:50%;padding:0;background:#ffffff66;cursor:pointer}.home-hero-dot.active{background:white;transform:scale(1.25)}.landscape-card{--pw:min(235px,53vw)}.landscape-card .poster{aspect-ratio:16/9}.collection-rail{align-items:flex-start}.collection-card{width:var(--pw);min-width:var(--pw);border:0;padding:0;background:none;color:inherit;cursor:pointer;font:inherit;text-align:left}.collection-card:focus-visible{outline:2px solid var(--primary-color);outline-offset:3px}.collection-tabs{display:flex;gap:8px;overflow:auto;padding:8px 20px}.collection-art{position:relative;aspect-ratio:1/1;border-radius:12px;overflow:hidden;background:var(--secondary-background-color)}.collection-card.shape-poster .collection-art{aspect-ratio:2/3}.collection-card.shape-landscape{width:min(235px,53vw);min-width:min(235px,53vw)}.collection-card.shape-landscape .collection-art{aspect-ratio:16/9}.collection-art img{width:100%;height:100%;object-fit:fill}.collection-emoji{height:100%;display:grid;place-items:center;font-size:42px;font-weight:700}.collection-title{position:absolute;left:0;right:0;bottom:0;padding:18px 8px 8px;text-align:center;font-size:12px;font-weight:700;color:white;background:linear-gradient(transparent,rgba(0,0,0,.8))}.lazy-rail{overflow:hidden}.lazy-card{width:var(--pw);min-width:var(--pw)}.lazy-poster{aspect-ratio:2/3;border-radius:12px;background:linear-gradient(100deg,var(--secondary-background-color) 25%,color-mix(in srgb,var(--secondary-background-color) 75%,var(--primary-text-color) 25%) 45%,var(--secondary-background-color) 65%);background-size:220% 100%;animation:nuvioShimmer 1.35s linear infinite}.lazy-line{height:12px;width:72%;border-radius:6px;margin-top:8px;background:var(--secondary-background-color)}.catalog-load-error{padding:8px 20px 20px;color:var(--secondary-text-color);font-size:12px}@keyframes nuvioShimmer{0%{background-position:180% 0}100%{background-position:-40% 0}}@media(prefers-reduced-motion:reduce){.lazy-poster{animation:none}}.status{padding:28px;text-align:center;color:var(--secondary-text-color)}.error{margin:10px 20px;padding:12px;border-radius:10px;background:var(--error-color);color:white}.top{padding:8px 20px}.grid{display:grid;grid-template-columns:repeat(var(--cols),minmax(0,1fr));gap:14px;padding:10px 20px 22px}.grid .pc{width:auto;min-width:0}.hero{height:270px;background-size:cover;background-position:center;position:relative}.shade{position:absolute;inset:0;background:linear-gradient(0deg,var(--card-background-color) 0%,transparent 90%)}.heroBack{position:absolute;top:16px;left:16px}.detail{position:relative;margin-top:-82px;padding:0 20px 22px}.detail h2{font-size:28px;margin:0 0 8px}.desc{max-width:850px;color:var(--secondary-text-color);line-height:1.45}.controls{margin:16px 0}.platform-note{flex-basis:100%;font-size:12px;color:var(--secondary-text-color);max-width:760px}.controls select{border:0;border-radius:18px;padding:9px 12px;background:var(--secondary-background-color);color:var(--primary-text-color)}.primary,.season.active{background:var(--primary-color);color:white}.seasons{display:flex;gap:8px;overflow:auto;margin:14px 0}.episodes{display:grid;gap:9px}.episode{display:grid;grid-template-columns:140px 1fr auto;gap:12px;align-items:center;width:100%;border:0;text-align:left;color:inherit;font:inherit;cursor:pointer;background:var(--secondary-background-color);padding:8px;border-radius:12px}.episode:hover,.episode:focus-visible{outline:2px solid color-mix(in srgb,var(--primary-color) 65%,transparent);outline-offset:1px}.episode img{width:140px;aspect-ratio:16/9;object-fit:cover;border-radius:8px}.episode h4,.episode p{margin:0}.episode p{font-size:12px;color:var(--secondary-text-color);margin-top:5px}.episode-chevron{font-size:28px;color:var(--secondary-text-color);padding:0 8px}.sources{display:grid;gap:18px;padding:0 20px 22px}.source-group{padding:0}.source-group-head{display:flex;align-items:center;gap:10px;margin:0 0 8px}.source-group-head img{width:34px;height:34px;object-fit:contain;border-radius:8px;background:var(--secondary-background-color)}.source-group-head h3{margin:0;font-size:16px}.source-group-head span,.source-summary{font-size:12px;color:var(--secondary-text-color)}.source-row{display:flex;gap:12px;align-items:center;justify-content:space-between;background:var(--secondary-background-color);padding:12px;border-radius:12px;margin-bottom:8px}.source-main{min-width:0;display:flex;flex:1;flex-direction:column;gap:6px}.source-label{font-weight:650;white-space:normal;overflow-wrap:anywhere}.source-description,.source-filename,.resolver{font-size:12px;color:var(--secondary-text-color);overflow-wrap:anywhere}.source-filename{opacity:.8}.stream-badges{display:flex;flex-wrap:wrap;gap:5px}.stream-badge{display:inline-flex;align-items:center;min-height:20px;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:650;background:var(--card-background-color);border:1px solid var(--divider-color);white-space:nowrap}.badge-resolution{background:color-mix(in srgb,var(--primary-color) 20%,var(--card-background-color));border-color:color-mix(in srgb,var(--primary-color) 55%,var(--divider-color))}.badge-hdr,.badge-audio{background:color-mix(in srgb,var(--accent-color,var(--primary-color)) 14%,var(--card-background-color))}.badge-size,.badge-language{font-weight:500;color:var(--secondary-text-color)}.source-actions{flex:0 0 auto;max-width:260px;text-align:right;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.source-filter-bar{display:flex;gap:8px;overflow:auto;padding:10px 20px 4px;scrollbar-width:thin}.source-filter-chip{border:0;cursor:pointer;background:var(--secondary-background-color);color:var(--primary-text-color);border-radius:18px;padding:8px 13px;white-space:nowrap;font:inherit;font-size:12px}.source-filter-chip.active{background:var(--primary-color);color:white}.source-top{padding-top:12px;padding-bottom:6px}.source-controls{padding-top:4px}.source-loading-status{padding-top:8px}.source-context{display:grid;grid-template-columns:auto minmax(0,1fr);gap:18px;align-items:center;margin:4px 20px 10px;padding:14px;border-radius:16px;background:linear-gradient(135deg,color-mix(in srgb,var(--secondary-background-color) 92%,transparent),color-mix(in srgb,var(--card-background-color) 96%,transparent));border:1px solid var(--divider-color);overflow:hidden}.source-context-art{overflow:hidden;border-radius:12px;background:var(--secondary-background-color);box-shadow:0 6px 18px rgba(0,0,0,.18)}.source-context-art img{display:block;width:100%;height:100%;object-fit:cover}.source-context-art.movie-art{width:112px;aspect-ratio:2/3}.source-context-art.episode-art{width:min(240px,30vw);aspect-ratio:16/9}.source-context-copy{min-width:0}.source-context-kicker{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--secondary-text-color);margin-bottom:4px}.source-context-copy h2{margin:0 0 7px;font-size:24px;line-height:1.15}.source-context-meta{font-size:12px;color:var(--secondary-text-color);line-height:1.4}.source-context-copy p{margin:10px 0 0;max-width:850px;color:var(--secondary-text-color);line-height:1.45;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}.source-title-row{display:flex;align-items:center;gap:8px;margin:8px 0}.source-title-row h3{margin:0}.remote-active{background:var(--primary-color)!important;color:white!important}.source-summary{margin-top:-8px;margin-bottom:6px}.debrid-note{font-size:12px;color:var(--secondary-text-color);max-width:520px}.resolvesource:disabled{opacity:.65;cursor:wait}.resolveall{font-size:12px}.nuvio-layout{position:relative;display:block;min-width:0}.nuvio-main{width:100%;min-width:0}.remote-shell{width:176px;border:1px solid var(--divider-color);border-radius:24px;padding:12px;background:color-mix(in srgb,var(--card-background-color) 94%,transparent);backdrop-filter:blur(18px);box-shadow:0 12px 36px rgba(0,0,0,.26)}.remote-head{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:700;color:var(--secondary-text-color);margin-bottom:10px}.remote-close{width:26px;height:26px;border:0;border-radius:13px;background:var(--secondary-background-color);color:var(--primary-text-color);display:grid;place-items:center;cursor:pointer}.remote-close ha-icon{--mdc-icon-size:16px}.wake-btn{width:100%;height:34px;border:0;border-radius:17px;background:var(--secondary-background-color);color:var(--primary-text-color);display:flex;align-items:center;justify-content:center;gap:6px;font-size:11px;cursor:pointer;margin-bottom:10px}.wake-btn ha-icon{--mdc-icon-size:18px}.remote-ring{position:relative;width:132px;height:132px;margin:0 auto 10px;border-radius:50%;background:radial-gradient(circle at center,var(--secondary-background-color) 0 34%,color-mix(in srgb,var(--secondary-background-color) 82%,var(--primary-color) 18%) 35% 100%);box-shadow:inset 0 0 0 1px var(--divider-color)}.remote-ring button{position:absolute;border:0;background:transparent;color:var(--primary-text-color);display:grid;place-items:center;cursor:pointer}.ring-btn{width:44px;height:44px;border-radius:50%!important}.ring-btn ha-icon{--mdc-icon-size:28px}.ring-btn.up{top:2px;left:44px}.ring-btn.down{bottom:2px;left:44px}.ring-btn.left{left:2px;top:44px}.ring-btn.right{right:2px;top:44px}.ring-ok{width:48px;height:48px;left:42px;top:42px;border-radius:50%!important;background:var(--primary-color)!important;color:white!important;font-size:11px;font-weight:800;box-shadow:0 3px 10px rgba(0,0,0,.22)}.remote-ring button:active,.wake-btn:active,.remote-footer button:active{transform:scale(.96)}.remote-footer{display:grid;grid-template-columns:1fr 1fr;gap:8px}.remote-footer button{height:38px;border:0;border-radius:14px;background:var(--secondary-background-color);color:var(--primary-text-color);display:flex;align-items:center;justify-content:center;gap:5px;font-size:11px;cursor:pointer}.remote-footer ha-icon{--mdc-icon-size:18px}.resolveall{font-size:12px}@media(max-width:700px){:host{--pw:120px}.remote-dialog{top:180px}.remote-shell{width:160px;padding:10px}.remote-ring{width:120px;height:120px}.ring-btn.up{left:38px}.ring-btn.down{left:38px}.ring-btn.left{top:38px}.ring-btn.right{top:38px}.ring-ok{left:36px;top:36px}.header{flex-direction:column;align-items:stretch}.search{min-width:0;flex:1}.grid{grid-template-columns:repeat(3,minmax(0,1fr))}.episode{grid-template-columns:95px 1fr}.episode img{width:95px}.playep{grid-column:2}.source-context{grid-template-columns:92px minmax(0,1fr);gap:12px;margin:4px 12px 10px;padding:10px}.source-context-art.movie-art{width:92px}.source-context-art.episode-art{width:92px;aspect-ratio:16/9}.source-context-copy h2{font-size:19px}.source-context-copy p{font-size:12px;-webkit-line-clamp:3}.source-row{align-items:flex-start;flex-direction:column}.source-actions{max-width:none;width:100%;text-align:left}.source-actions .action{width:100%}.home-hero-card{height:250px}.home-hero-copy{left:16px;bottom:22px;max-width:75%}.home-hero-copy h2{font-size:24px}.home-hero-nav{right:12px;bottom:20px;gap:7px}.home-hero-copy{bottom:80px}.home-hero-copy p{display:none}.hero{height:220px}}</style>';
   }
   wire(){
     var r=this.shadowRoot,q=r.querySelector("#search");
     if(q){q.addEventListener("input",e=>this._query=e.target.value);q.addEventListener("keydown",e=>{if(e.key==="Enter")this.search();});}
-    r.querySelector("#refresh")?.addEventListener("click",()=>this.loadHome(true));
+    r.querySelector("#refresh")?.addEventListener("click",()=>this.refreshCurrent());
+    r.querySelector("#addonsToggle")?.addEventListener("click",()=>this.toggleAddonFilter());
+    r.querySelectorAll("[data-addon-filter]").forEach(b=>b.addEventListener("click",()=>this.setAddonFilter(b.dataset.addonFilter)));
     r.querySelectorAll("[data-remote-key]").forEach(b=>b.addEventListener("click",()=>this.remoteKey(b.dataset.remoteKey)));
     r.querySelectorAll(".remote-toggle-button").forEach(b=>b.addEventListener("click",()=>this.toggleRemote()));
     r.querySelector("#back")?.addEventListener("click",()=>{this._view=this._view==="details"?(this._returnView||"home"):"home";this._error="";this.render();});
@@ -852,7 +996,7 @@ class NuvioCard extends HTMLElement {
     var content=this._config.show_remote===false
       ? body
       : '<div class="nuvio-layout">'+this.remotePanel()+'<main class="nuvio-main">'+body+'</main></div>';
-    this.shadowRoot.innerHTML=this.styles()+'<ha-card>'+(this._view==="home"?this.header():"")+(this._error?'<div class="error">'+this.esc(this._error)+'</div>':"")+content+'</ha-card>';this.wire();
+    this.shadowRoot.innerHTML=this.styles()+'<ha-card>'+this.header()+(this._error?'<div class="error">'+this.esc(this._error)+'</div>':"")+content+'</ha-card>';this.wire();
     this.observeLazyCatalogs();
     this.syncRemotePortal();
     this.updateRemoteButtons();
