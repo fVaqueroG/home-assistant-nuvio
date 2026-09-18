@@ -188,6 +188,12 @@ A locally entered debrid token in Nuvio's Home Assistant reconfigure screen is
 only an optional override/fallback; it is not required when the linked Nuvio
 profile already has a supported synced credential.
 
+## Streaming provider filtering
+
+WatchHub provider links can be filtered from **Settings → Devices & services → Nuvio → Reconfigure → Streaming providers**. The same whitelist also filters provider folders in the synchronized **Streaming** collection so the Home row and title source list stay consistent.
+
+The default whitelist is **Netflix, Prime Video, Disney+, and Max**. Apple TV+, Paramount+, Peacock, Hulu, and Crunchyroll are also available. Provider names are normalized (for example, `Amazon Video` → Prime Video and `HBO Max` → Max), with the external URL hostname used as a fallback. Leaving the selection empty disables filtering and shows every WatchHub provider.
+
 ## Debrid link resolution
 
 Nuvio synchronizes provider credentials separately from the ordinary profile
