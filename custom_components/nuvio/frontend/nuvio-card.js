@@ -579,9 +579,21 @@ class NuvioCard extends HTMLElement {
     var remote=this._config.show_remote===false
       ? ""
       : '<button class="ib toolbar-btn remote-toggle-button '+(this._remoteExpanded?"remote-active":"")+'" title="Control" aria-label="Control"><ha-icon icon="mdi:remote-tv"></ha-icon><span>Control</span></button>';
+    var home='<button class="ib toolbar-btn '+(onHome?"toolbar-active":"")+'" id="homeTop" title="Home" aria-label="Home"><ha-icon icon="mdi:home"></ha-icon><span>Home</span></button>';
     return '<div class="header"><h2>'+this.esc(this._config.title||"Nuvio")+'</h2><div class="tools">'+search+
+      home+
       '<button class="ib toolbar-btn" id="refresh" title="Refresh" aria-label="Refresh"><ha-icon icon="mdi:refresh"></ha-icon><span>Refresh</span></button>'+
       addons+remote+'</div></div>';
+  }
+  async goHome(){
+    this._view="home";
+    this._error="";
+    this._addonFilterExpanded=false;
+    if(!this._loaded){
+      await this.loadHome(false);
+      return;
+    }
+    this.render();
   }
   async refreshCurrent(){
     if(this._view==="sources"){
@@ -973,6 +985,7 @@ class NuvioCard extends HTMLElement {
   wire(){
     var r=this.shadowRoot,q=r.querySelector("#search");
     if(q){q.addEventListener("input",e=>this._query=e.target.value);q.addEventListener("keydown",e=>{if(e.key==="Enter")this.search();});}
+    r.querySelector("#homeTop")?.addEventListener("click",()=>this.goHome());
     r.querySelector("#refresh")?.addEventListener("click",()=>this.refreshCurrent());
     r.querySelector("#addonsToggle")?.addEventListener("click",()=>this.toggleAddonFilter());
     r.querySelectorAll("[data-addon-filter]").forEach(b=>b.addEventListener("click",()=>this.setAddonFilter(b.dataset.addonFilter)));
