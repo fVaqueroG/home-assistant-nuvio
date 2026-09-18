@@ -315,21 +315,36 @@ def provider_content_id(provider: str, external_url: str) -> str | None:
                 return match.group(1)
 
     if provider == "disney":
-        match = re.search(r"(?:entity-|/entity/)([a-z0-9-]{8,})", raw, re.IGNORECASE)
-        if match:
-            return match.group(1)
-        match = re.search(
-            r"/([a-f0-9]{8,}(?:-[a-f0-9]{4,}){2,})/?$",
-            path,
-            re.IGNORECASE,
-        )
-        if match:
-            return match.group(1)
+        provider_id = provider_content_id(provider, raw_url)
+        requests: list[tuple[str, dict[str, Any]]] = []
 
-    if provider == "apple":
-        match = re.search(r"(umc\.cmc\.[a-z0-9.]+)", raw, re.IGNORECASE)
-        if match:
-            return match.group(1)
+        for app_id in WEBOS_PROVIDER_APP_IDS.get("disney", ()):
+            if not raw_url:
+                continue
+
+            # Preserve the exact destination returned by the authenticated
+            # JustWatch account. Do not rewrite /browse/entity/... into a
+            # guessed /video/... URL: real-TV testing showed that rewrite does
+            # not navigate to the selected title on this LG build.
+            params: dict[str, Any] = {
+                "contentTarget": raw_url,
+                "target": raw_url,
+            }
+            if provider_id:
+                # Different Disney+ webOS builds have inspected either of
+                # these id keys. Sending both in the same launch avoids relying
+                # on a second request after webOS has already accepted the first.
+                params["contentId"] = provider_id
+                params["entityId"] = provider_id
+
+            requests.append(
+                (
+                    "com.webos.applicationManager/launch",
+                    {"id": app_id, "params": params},
+                )
+            )
+
+        return requests
 
     if provider == "max":
         for key in ("id", "contentId", "contentid"):
