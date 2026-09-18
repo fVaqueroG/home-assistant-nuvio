@@ -1696,6 +1696,9 @@ def _stream_presentation(
     probatio.Required("type"): "nuvio/streams",
     probatio.Required("media_type"): probatio.In(["movie", "series"]),
     probatio.Required("video_id"): str,
+    probatio.Optional("addon_scope", default="all"): probatio.In(
+        ["all", "watchhub", "other"]
+    ),
 })
 @websocket_api.async_response
 async def ws_streams(hass, connection, msg) -> None:
@@ -1714,6 +1717,7 @@ async def ws_streams(hass, connection, msg) -> None:
             msg["media_type"],
             msg["video_id"],
             watchhub_country=watchhub_country,
+            addon_scope=msg["addon_scope"],
         ):
             behavior = stream.get("behaviorHints")
             if not isinstance(behavior, dict):
