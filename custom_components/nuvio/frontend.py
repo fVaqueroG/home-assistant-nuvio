@@ -304,6 +304,13 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
     account = entry.runtime_data.get(DATA_ACCOUNT_API)
     profile_id = int(entry.data.get(CONF_PROFILE_ID, 1))
 
+    async def home_call(coro, timeout: float, fallback: Any):
+        """Bound optional Home calls so one slow addon cannot stall the card."""
+        try:
+            return await asyncio.wait_for(coro, timeout=timeout)
+        except (TimeoutError, NuvioApiError, NuvioAuthError):
+            return fallback
+
     home_settings: dict[str, Any] = {}
     profile_settings: dict[str, Any] = {}
     collections: list[dict[str, Any]] = []
@@ -313,12 +320,12 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
 
     if account is not None:
         results = await asyncio.gather(
-            account.async_library(profile_id),
-            account.async_watch_progress(profile_id),
-            account.async_home_catalog_settings(profile_id),
-            account.async_profile_settings_blob(profile_id),
-            account.async_collections(profile_id),
-            account.async_watched_items(profile_id),
+            home_call(account.async_library(profile_id), 4.0, []),
+            home_call(account.async_watch_progress(profile_id), 4.0, []),
+            home_call(account.async_home_catalog_settings(profile_id), 4.0, {}),
+            home_call(account.async_profile_settings_blob(profile_id), 4.0, {}),
+            home_call(account.async_collections(profile_id), 4.0, []),
+            home_call(account.async_watched_items(profile_id), 4.0, []),
             return_exceptions=True,
         )
         if not isinstance(results[0], Exception):
@@ -359,7 +366,7 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
     # at 24 items before See All.  The Smart-TV Modern implementation uses 15.
     row_limit = 15 if selected_layout == "modern" else 24
 
-    addons = await api.async_addons(refresh=refresh)
+    addons = await home_call(api.async_addons(refresh=refresh), 8.0, [])
     addon_by_id = {_addon_id(addon): addon for addon in addons}
 
     catalog_specs: list[tuple[Addon, dict[str, Any], str, str, str, int]] = []
@@ -408,8 +415,11 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
                 return None
         try:
             async with semaphore:
-                metas = await api.async_catalog(addon, media_type, catalog_id)
-        except NuvioApiError:
+                metas = await asyncio.wait_for(
+                    api.async_catalog(addon, media_type, catalog_id),
+                    timeout=7.0,
+                )
+        except (NuvioApiError, TimeoutError):
             return None
 
         items = _dedupe_catalog_items(
@@ -697,8 +707,11 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
             for addon in candidates:
                 try:
                     async with semaphore:
-                        return addon, await api.async_meta(addon, content_type, content_id)
-                except NuvioApiError:
+                        return addon, await asyncio.wait_for(
+                            api.async_meta(addon, content_type, content_id),
+                            timeout=1.75,
+                        )
+                except (NuvioApiError, TimeoutError):
                     continue
             # Some addons expose TV metadata under series even when sync state
             # identifies the content as tv/anime.
@@ -706,8 +719,11 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
                 for addon in candidates:
                     try:
                         async with semaphore:
-                            return addon, await api.async_meta(addon, "series", content_id)
-                    except NuvioApiError:
+                            return addon, await asyncio.wait_for(
+                                api.async_meta(addon, "series", content_id),
+                                timeout=1.75,
+                            )
+                    except (NuvioApiError, TimeoutError):
                         continue
             return None, None
 
@@ -824,13 +840,22 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
             ),
             reverse=True,
         )[:32]
-        next_up_items = [
-            item
-            for item in await asyncio.gather(
-                *(build_next_up(content_id, history) for content_id, history in recent_series)
-            )
-            if item is not None
+        next_up_tasks = [
+            asyncio.create_task(build_next_up(content_id, history))
+            for content_id, history in recent_series
         ]
+        next_up_items: list[dict[str, Any]] = []
+        if next_up_tasks:
+            done, pending = await asyncio.wait(next_up_tasks, timeout=3.5)
+            for task in pending:
+                task.cancel()
+            for task in done:
+                try:
+                    item = task.result()
+                except Exception:
+                    item = None
+                if item is not None:
+                    next_up_items.append(item)
 
         combined: list[dict[str, Any]] = in_progress_items + next_up_items
         deduped: list[dict[str, Any]] = []
@@ -970,14 +995,32 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
                 return item
             try:
                 async with semaphore:
-                    meta = await api.async_meta(addon, media_type, content_id)
-            except NuvioApiError:
+                    meta = await asyncio.wait_for(
+                        api.async_meta(addon, media_type, content_id),
+                        timeout=1.5,
+                    )
+            except (NuvioApiError, TimeoutError):
                 return item
             enriched = _item(meta, media_type, manifest_url)
             # Preserve catalog-only fields if the full meta endpoint omits them.
             return {**item, **{key: value for key, value in enriched.items() if value not in (None, "", [])}}
 
-        hero_items = list(await asyncio.gather(*(enrich_hero_item(item) for item in hero_items)))
+        hero_tasks = [asyncio.create_task(enrich_hero_item(item)) for item in hero_items]
+        if hero_tasks:
+            done, pending = await asyncio.wait(hero_tasks, timeout=2.5)
+            for task in pending:
+                task.cancel()
+            enriched_by_id: dict[str, dict[str, Any]] = {}
+            for task in done:
+                try:
+                    enriched = task.result()
+                except Exception:
+                    continue
+                enriched_by_id[str(enriched.get("id") or "")] = enriched
+            hero_items = [
+                enriched_by_id.get(str(item.get("id") or ""), item)
+                for item in hero_items
+            ]
 
     registry = async_get_entity_registry(hass)
     players: list[dict[str, Any]] = []
