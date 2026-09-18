@@ -2,7 +2,7 @@ class NuvioCard extends HTMLElement {
   constructor(){
     super(); this.attachShadow({mode:"open"});
     this._config={}; this._hass=null; this._loaded=false; this._loading=false;
-    this._sections=[]; this._hero=[]; this._heroIndex=0; this._homePrefs={}; this._results=[]; this._catalogSection=null; this._catalogItems=[]; this._catalogLoading=false; this._catalogLoadingMore=false; this._catalogVisibleCount=0; this._catalogPaging=null; this._catalogObserver=null; this._resetCatalogScroll=false; this._catalogReload=null; this._returnView="home"; this._playersMeta=[]; this._playerId=""; this._streams=[]; this._streamLoading=false; this._streamLoadingStage=""; this._streamContext=null; this._sourceRequest=0; this._addonFilter="all"; this._addonFilterExpanded=false; this._watchProviders=[]; this._watchProviderMeta={configured:false}; this._watchProvidersLoading=false; this._debridMeta={configured:false,provider:""}; this._resolving=new Set(); this._lazyCatalogLoads=new Set(); this._lazyObserver=null; this._remoteExpanded=false; this._view="home"; this._item=null; this._details=null; this._season=null; this._query=""; this._error="";
+    this._sections=[]; this._hero=[]; this._heroIndex=0; this._homePrefs={}; this._results=[]; this._catalogSection=null; this._catalogItems=[]; this._catalogLoading=false; this._catalogLoadingMore=false; this._catalogVisibleCount=0; this._catalogPaging=null; this._catalogObserver=null; this._catalogScrollTop=0; this._resetCatalogScroll=false; this._catalogReload=null; this._returnView="home"; this._playersMeta=[]; this._playerId=""; this._streams=[]; this._streamLoading=false; this._streamLoadingStage=""; this._streamContext=null; this._sourceRequest=0; this._addonFilter="all"; this._addonFilterExpanded=false; this._watchProviders=[]; this._watchProviderMeta={configured:false}; this._watchProvidersLoading=false; this._debridMeta={configured:false,provider:""}; this._resolving=new Set(); this._lazyCatalogLoads=new Set(); this._lazyObserver=null; this._remoteExpanded=false; this._view="home"; this._item=null; this._details=null; this._season=null; this._query=""; this._error="";
   }
   static getStubConfig(){ return {title:"Nuvio",columns:6,show_remote:true,remote_side:"left"}; }
   setConfig(c){ this._config=Object.assign({title:"Nuvio",columns:6,show_search:true,show_remote:true,remote_side:"left"},c||{}); this.render(); }
@@ -1249,7 +1249,9 @@ class NuvioCard extends HTMLElement {
   render(){
     if(!this.shadowRoot)return;
     var oldScroller=this.shadowRoot.querySelector(".catalog-scroll");
-    var scrollTop=this._resetCatalogScroll?0:(oldScroller?oldScroller.scrollTop:0);
+    if(oldScroller)this._catalogScrollTop=oldScroller.scrollTop;
+    if(this._resetCatalogScroll)this._catalogScrollTop=0;
+    var scrollTop=this._catalogScrollTop||0;
     this._resetCatalogScroll=false;
     var body=this._view==="details"?this.detailsView():(this._view==="sources"?this.sourcesView():(this._view==="search"?this.searchView():(this._view==="catalog"?this.catalogView():this.home())));
     var content=this._config.show_remote===false
