@@ -223,12 +223,13 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                 refresh_token=existing_refresh,
             )
             identity = await api.async_validate_auth()
+            tokens = api.session_tokens
             return {
                 CONF_CONNECT_JUSTWATCH_ACCOUNT: True,
                 CONF_JUSTWATCH_EMAIL: identity.get("email")
                 or str(existing.get(CONF_JUSTWATCH_EMAIL, "") or ""),
-                CONF_JUSTWATCH_ACCESS_TOKEN: api._access_token,
-                CONF_JUSTWATCH_REFRESH_TOKEN: api._refresh_token,
+                CONF_JUSTWATCH_ACCESS_TOKEN: tokens.get("access_token", ""),
+                CONF_JUSTWATCH_REFRESH_TOKEN: tokens.get("refresh_token", ""),
             }
 
         raise JustWatchAuthError(
