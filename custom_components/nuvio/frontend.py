@@ -1755,7 +1755,12 @@ async def ws_streams(hass, connection, msg) -> None:
                 request_headers = {}
 
             presentation = _stream_presentation(stream, behavior, client_resolve)
-            if watchhub_series_fallback and is_watchhub:
+            watchhub_series_level = bool(
+                is_watchhub
+                and msg["media_type"] == "series"
+                and external_url
+            )
+            if watchhub_series_level:
                 presentation["badges"] = [
                     {"kind": "availability", "label": "Series-level"},
                     *presentation["badges"],
@@ -1774,6 +1779,7 @@ async def ws_streams(hass, connection, msg) -> None:
                     "watchhub_series_fallback": bool(
                         watchhub_series_fallback and is_watchhub
                     ),
+                    "watchhub_series_level": watchhub_series_level,
                     "info_hash": stream.get("infoHash")
                     or client_resolve.get("infoHash"),
                     "magnet_uri": client_resolve.get("magnetUri"),
