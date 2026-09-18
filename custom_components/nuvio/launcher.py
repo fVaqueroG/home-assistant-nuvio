@@ -8,6 +8,7 @@ from typing import Any
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from .const import NUVIO_ACTIVITY, NUVIO_WEBOS_APP_ID
+from .providers import PROVIDER_ALIASES, streaming_provider_key
 
 
 def deep_link(media_type: str, content_id: str) -> str:
@@ -224,42 +225,7 @@ def webos_launch_payload(
 
 
 
-_PROVIDER_ALIASES: dict[str, tuple[str, ...]] = {
-    "netflix": ("netflix", "netflixstandardwithads"),
-    "prime": ("amazonprimevideo", "primevideo", "amazonvideo", "amazon", "prime"),
-    "disney": ("disneyplus", "disney"),
-    "max": ("hbomax", "max"),
-    "paramount": ("paramountplus", "paramount"),
-    "apple": ("appletvplus", "appletv", "apple"),
-    "crunchyroll": ("crunchyroll",),
-    "vix": ("vixpremium", "vix"),
-    "claro": ("clarovideo", "claro"),
-}
-
-_ANDROID_PROVIDER_PACKAGES: dict[str, tuple[str, ...]] = {
-    "netflix": ("com.netflix.ninja",),
-    "prime": ("com.amazon.amazonvideo.livingroom",),
-    "disney": ("com.disney.disneyplus",),
-    "apple": ("com.apple.atve.androidtv.appletv",),
-    # Max changed Android TV package names across generations/regions.
-    "max": ("com.wbd.hbomax", "com.wbd.stream"),
-    "crunchyroll": ("com.crunchyroll.crunchyroid",),
-    "paramount": ("com.cbs.ott",),
-    "vix": ("com.univision.prendetv",),
-}
-
-_WEBOS_PROVIDER_APP_IDS: dict[str, tuple[str, ...]] = {
-    "netflix": ("netflix",),
-    "prime": ("amazon",),
-    "disney": ("com.disney.disneyplus-prod",),
-    # Both ids have existed on LG TVs depending on Max/HBO app generation.
-    "max": ("com.wbd.stream", "hbo-go-2"),
-    "apple": ("com.apple.appletv", "com.apple.tv"),
-    "crunchyroll": ("crunchyroll",),
-    # Paramount's id has varied by regional build. Failed ids fall back to the
-    # installed-source match in __init__.py instead of opening a browser.
-    "paramount": ("paramountplus", "com.paramountplus", "com.cbs.ott"),
-}
+_PROVIDER_ALIASES = PROVIDER_ALIASES
 
 
 def _provider_norm(value: str | None) -> str:
@@ -268,35 +234,8 @@ def _provider_norm(value: str | None) -> str:
 
 
 def provider_key(provider_name: str | None, external_url: str | None = None) -> str | None:
-    """Return a canonical streaming-provider key from a label and/or URL."""
-    name = _provider_norm(provider_name)
-    raw_url = str(external_url or "").strip()
-    parsed = urlparse(raw_url)
-    host = parsed.netloc.casefold()
-    path = parsed.path.casefold()
-    combined = _provider_norm(f"{host}{path}")
-
-    host_rules = (
-        ("netflix", ("netflix.com",)),
-        ("prime", ("primevideo.com", "watch.amazon.", "amazon.com", "amazon.com.mx")),
-        ("disney", ("disneyplus.com",)),
-        ("max", ("max.com", "hbomax.com")),
-        ("paramount", ("paramountplus.com",)),
-        ("apple", ("tv.apple.com",)),
-        ("crunchyroll", ("crunchyroll.com",)),
-        ("vix", ("vix.com",)),
-        ("claro", ("clarovideo.com",)),
-    )
-    for key, needles in host_rules:
-        if any(needle in host for needle in needles):
-            return key
-
-    for key, aliases in _PROVIDER_ALIASES.items():
-        if any(alias == name or (len(alias) >= 4 and alias in name) for alias in aliases):
-            return key
-        if any(alias == combined or (len(alias) >= 4 and alias in combined) for alias in aliases):
-            return key
-    return None
+    """Return a canonical or generic streaming-provider key."""
+    return streaming_provider_key(provider_name, external_url)
 
 
 def provider_source_match(provider: str, sources: list[str]) -> str | None:
