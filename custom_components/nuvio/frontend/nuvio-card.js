@@ -387,7 +387,9 @@ class NuvioCard extends HTMLElement {
       var access=(provider.access||[]).join(" · ");
       var deepSource=String(provider.deep_link_source||"");
       var source=exact
-        ? (deepSource==="justwatch"?"JustWatch offer":(deepSource==="thetvdb"?"TheTVDB exact link":"Provider link"))
+        ? (deepSource==="justwatch"
+            ? (provider.justwatch_authenticated?"JustWatch account":"JustWatch offer")
+            : (deepSource==="thetvdb"?"TheTVDB exact link":"Provider link"))
         : (watchhubIndex>=0?"WatchHub link":"Availability only");
       var hint=playable
         ? "Play with "+provider.name+" · "+source
