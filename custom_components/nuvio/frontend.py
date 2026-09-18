@@ -28,12 +28,13 @@ from .debrid import DebridNotCached, DebridNotConfigured, DebridResolveError
 from .const import CONF_PROFILE_ID, DATA_ACCOUNT_API, DATA_API, DATA_DEBRID_RESOLVER, DOMAIN
 
 CARD_URL = "/nuvio/nuvio-card.js"
-CARD_VERSION = "0.4.20"
+CARD_VERSION = "0.4.21"
 CARD_RESOURCE_URL = f"{CARD_URL}?v={CARD_VERSION}"
 CARD_FILE = Path(__file__).parent / "frontend" / "nuvio-card.js"
 DATA_FRONTEND_REGISTERED = "frontend_registered"
 DATA_HOME_CACHE = "home_cache"
 HOME_CACHE_TTL = 120.0
+HOME_EAGER_CATALOGS = 4
 
 
 def _entry(hass: HomeAssistant):
@@ -302,6 +303,8 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
 
     entry = _entry(hass)
     api = entry.runtime_data[DATA_API]
+    if refresh:
+        api.clear_catalog_cache()
     account = entry.runtime_data.get(DATA_ACCOUNT_API)
     profile_id = int(entry.data.get(CONF_PROFILE_ID, 1))
     home_incomplete = False
@@ -409,6 +412,28 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
 
     semaphore = asyncio.Semaphore(8)
     loaded_sections: dict[str, dict[str, Any]] = {}
+    enabled_catalog_spec_by_key = {spec[4]: spec for spec in catalog_specs}
+
+    def catalog_section(
+        spec: tuple[Addon, dict[str, Any], str, str, str, int],
+        *,
+        items: list[dict[str, Any]] | None = None,
+        lazy: bool = True,
+    ) -> dict[str, Any]:
+        addon, catalog, media_type, catalog_id, key, _manifest_index = spec
+        return {
+            "id": key,
+            "kind": "catalog",
+            "name": home_prefs["custom_titles"].get(key)
+            or str(catalog.get("name") or catalog_id),
+            "addon": addon.name,
+            "addon_id": _addon_id(addon),
+            "manifest_url": addon.manifest_url,
+            "media_type": media_type,
+            "catalog_id": catalog_id,
+            "items": items or [],
+            "lazy": lazy,
+        }
 
     async def load_catalog_spec(
         spec: tuple[Addon, dict[str, Any], str, str, str, int],
@@ -448,18 +473,7 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
         )
         if not items:
             return None
-        section = {
-            "id": key,
-            "kind": "catalog",
-            "name": home_prefs["custom_titles"].get(key)
-            or str(catalog.get("name") or catalog_id),
-            "addon": addon.name,
-            "addon_id": _addon_id(addon),
-            "manifest_url": addon.manifest_url,
-            "media_type": media_type,
-            "catalog_id": catalog_id,
-            "items": items,
-        }
+        section = catalog_section(spec, items=items, lazy=False)
         loaded_sections[key] = section
         return section
 
@@ -481,8 +495,9 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
         *,
         include_if_disabled: bool = False,
         budget: float = 2.25,
+        mark_incomplete: bool = True,
     ) -> list[dict[str, Any] | None]:
-        """Return fast catalog results and let the card retry slower rows."""
+        """Return catalog results that finish within a bounded initial budget."""
         nonlocal home_incomplete
         tasks = [
             asyncio.create_task(
@@ -494,7 +509,8 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
             return []
         done, pending = await asyncio.wait(tasks, timeout=budget)
         if pending:
-            home_incomplete = True
+            if mark_incomplete:
+                home_incomplete = True
             for task in pending:
                 task.cancel()
             await asyncio.gather(*pending, return_exceptions=True)
@@ -506,9 +522,28 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
                 results.append(None)
         return results
 
-    # Return fast Home rows first. Slower catalogs are picked up by the card's
-    # bounded automatic retries, while successful results stay in the API cache.
-    loaded_home = await load_catalog_batch(catalog_specs)
+    # Match NuvioTV's Home strategy: every catalog row is represented
+    # immediately, while only the first four visible catalogs are fetched
+    # eagerly. Remaining rows are lazy placeholders that the card loads as
+    # they approach the viewport.
+    ordered_catalog_keys: list[str] = []
+    seen_catalog_keys: set[str] = set()
+    for key in home_prefs["order"]:
+        if key in enabled_catalog_spec_by_key and key not in seen_catalog_keys:
+            seen_catalog_keys.add(key)
+            ordered_catalog_keys.append(key)
+    ordered_catalog_keys.extend(
+        spec[4] for spec in catalog_specs if spec[4] not in seen_catalog_keys
+    )
+    eager_specs = [
+        enabled_catalog_spec_by_key[key]
+        for key in ordered_catalog_keys[:HOME_EAGER_CATALOGS]
+    ]
+    loaded_home = await load_catalog_batch(
+        eager_specs,
+        budget=1.25,
+        mark_incomplete=False,
+    )
     for section in loaded_home:
         if section:
             loaded_sections[section["id"]] = section
@@ -1007,6 +1042,10 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
                 added_collections.add(collection["collection_id"])
             continue
         section = loaded_sections.get(key)
+        if section is None:
+            spec = enabled_catalog_spec_by_key.get(key)
+            if spec is not None:
+                section = catalog_section(spec)
         if section is not None:
             sections.append(section)
 
@@ -1036,7 +1075,11 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
         remainder = 7 % max(1, total_rows)
         seen_hero: set[str] = set()
         for index, row in enumerate(hero_rows):
+            if len(hero_items) >= 7:
+                break
             slot = base_slot + (1 if index < remainder else 0)
+            if slot <= 0:
+                continue
             candidates = [item for item in row.get("items", []) if has_hero_artwork(item)]
             if not candidates and hero_catalog_keys:
                 candidates = list(row.get("items", []))
@@ -1047,7 +1090,7 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
                 seen_hero.add(identity)
                 hero_items.append(item)
                 slot -= 1
-                if slot <= 0:
+                if slot <= 0 or len(hero_items) >= 7:
                     break
 
     if hero_items and not home_incomplete:
