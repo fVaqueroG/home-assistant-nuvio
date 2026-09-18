@@ -661,16 +661,20 @@ class NuvioCard extends HTMLElement {
         var filename=s.filename&&s.filename!==label?s.filename:"";
         var unavailable=s.requires_headers?"Custom headers required":"Nuvio resolver required";
         var directUrl=s.url||"";
+        var externalUrl=s.external_url||"";
         var torrentLink=s.magnet_uri||"";
         var linkHtml="";
         var canResolve=!!s.resolvable&&!s.requires_headers&&(s.info_hash||s.magnet_uri);
         var resolving=this._resolving.has(n);
+        var externalOnly=!!externalUrl&&!s.direct&&!canResolve;
         var nuvioButton='<button class="action nuvioplay" data-source-index="'+n+'">'+((s.direct||canResolve)?"▶ Play in Nuvio":"Open in Nuvio")+'</button>';
-        var actionHtml=s.direct
-          ? '<button class="action primary playsource" data-source-index="'+n+'">▶ Play on TV</button>'+nuvioButton+'<button class="action copylink" data-source-index="'+n+'">Copy link</button>'
-          : canResolve
-            ? '<button class="action primary playdirect" data-source-index="'+n+'" '+(resolving?"disabled":"")+'>'+(resolving?"Resolving…":"▶ Play on TV")+'</button>'+nuvioButton+'<button class="action resolvesource" data-source-index="'+n+'" '+(resolving?"disabled":"")+'">Resolve only</button>'+(torrentLink?'<button class="action copytorrent" data-source-index="'+n+'">Copy magnet</button>':"")
-            : nuvioButton+'<span class="resolver">'+this.esc(unavailable)+'</span>'+(torrentLink?'<button class="action copytorrent" data-source-index="'+n+'">Copy magnet</button>':"");
+        var actionHtml=externalOnly
+          ? '<button class="action nuvioplay" data-source-index="'+n+'">Open title in Nuvio</button><button class="action copyexternal" data-source-index="'+n+'">Copy provider link</button><span class="resolver">External provider link</span>'
+          : s.direct
+            ? '<button class="action primary playsource" data-source-index="'+n+'">▶ Play on TV</button>'+nuvioButton+'<button class="action copylink" data-source-index="'+n+'">Copy stream link</button>'
+            : canResolve
+              ? '<button class="action primary playdirect" data-source-index="'+n+'" '+(resolving?"disabled":"")+'>'+(resolving?"Resolving…":"▶ Play on TV")+'</button>'+nuvioButton+'<button class="action resolvesource" data-source-index="'+n+'" '+(resolving?"disabled":"")+'">Resolve only</button>'+(torrentLink?'<button class="action copytorrent" data-source-index="'+n+'">Copy magnet</button>':"")
+              : nuvioButton+'<span class="resolver">'+this.esc(unavailable)+'</span>'+(torrentLink?'<button class="action copytorrent" data-source-index="'+n+'">Copy magnet</button>':"");
         return '<div class="source-row">'+
           '<div class="source-main">'+
             '<div class="source-label">'+this.esc(label)+'</div>'+
@@ -724,6 +728,7 @@ class NuvioCard extends HTMLElement {
     r.querySelector("#resolveAll")?.addEventListener("click",()=>this.resolveVisibleSources());
     r.querySelectorAll("button.openlink").forEach(b=>b.addEventListener("click",()=>this.openSourceLink(this._streams[Number(b.dataset.sourceIndex)])));
     r.querySelectorAll(".copylink").forEach(b=>b.addEventListener("click",()=>this.copyText((this._streams[Number(b.dataset.sourceIndex)]||{}).url)));
+    r.querySelectorAll(".copyexternal").forEach(b=>b.addEventListener("click",()=>this.copyText((this._streams[Number(b.dataset.sourceIndex)]||{}).external_url)));
     r.querySelectorAll(".copytorrent").forEach(b=>b.addEventListener("click",()=>this.copyText((this._streams[Number(b.dataset.sourceIndex)]||{}).magnet_uri)));
     r.querySelector("#backDetails")?.addEventListener("click",()=>{this._view="details";this._error="";this.render();});
     r.querySelectorAll(".collection-card").forEach(b=>b.addEventListener("click",()=>{var s=this._sections[Number(b.dataset.sectionIndex)];if(s)this.openCollection(s.items[Number(b.dataset.folderIndex)],s);}));
