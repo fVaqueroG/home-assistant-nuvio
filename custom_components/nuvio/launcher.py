@@ -572,10 +572,14 @@ def webos_provider_launch_requests(
         provider_id = netflix_content_id(external_url)
         payload: dict[str, Any] = {"id": "netflix"}
         if provider_id:
-            payload["contentId"] = (
+            netflix_target = (
                 "m=http%3A%2F%2Fapi.netflix.com%2Fcatalog%2Ftitles%2Fmovies%2F"
                 f"{provider_id}&source_type=4"
             )
+            payload["contentId"] = netflix_target
+            # ConnectSDK-compatible webOS launchers commonly duplicate the
+            # Netflix content id inside params as well as at the top level.
+            payload["params"] = {"contentId": netflix_target}
         if media_type:
             payload["mediaType"] = media_type
         if content_id:
