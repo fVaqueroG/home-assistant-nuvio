@@ -236,14 +236,20 @@ Availability data is supplied by **JustWatch via TMDB**. Exact external/provider
 
 ## Provider launch compatibility
 
-Real-TV testing is authoritative for provider launch support. Apple TV direct title/episode launching is confirmed working on LG webOS, and Netflix movie title IDs remain usable. Netflix series offers can still be show-level, while Prime Video, Disney+, Max, Crunchyroll, and Paramount+ have been observed opening/reopening the app without honoring the requested title target.
+Real-TV testing is authoritative for provider launch support. Apple TV direct title/episode launching is confirmed working on LG webOS and is deliberately left on its existing application-manager path.
 
-Nuvio therefore uses two LG webOS paths:
+For Netflix, Prime Video, Disney+, Max, Crunchyroll, and Paramount+, Nuvio now adapts the LG launch strategy used by **smartest-tv**:
 
-- **Direct provider launch** for Apple TV and Netflix movies. For Netflix episode offers whose JustWatch URL contains an episode-specific `/watch/<id>` playable ID, Nuvio first launches Netflix through `com.webos.applicationManager/launch` with the exact `/watch/<id>` URL as `params.contentTarget`. If webOS rejects that request, it falls back to Netflix's legacy `system.launcher/launch` content-id contract.
-- **LG native content search** for Prime Video, Disney+, Max, Crunchyroll, Paramount+, and Netflix episode offers that only contain a show-level `/title/<id>` URL. Episode searches include the series title, `SxxExx`, and episode title when available.
+- JustWatch `standardWebURL` values are unwrapped when JustWatch supplied an affiliate redirect, so the TV receives the provider's own URL.
+- The target provider app is cleanly closed, Nuvio waits 2 seconds, then launches it again. This follows smartest-tv's proven Netflix behavior and is also applied experimentally to the other providers that have ignored title parameters while already running.
+- The first LG request mirrors `aiowebostv.launch_app_with_content_id()`: `system.launcher/launch` with only `id` and `contentId`.
+- Netflix uses `m=https://www.netflix.com/watch/<videoId>&source_type=4` when a numeric Netflix ID is available.
+- Prime Video, Disney+, Max, Crunchyroll, and Paramount+ receive the resolved provider URL itself as `contentId`.
+- The older Nuvio provider-specific parameter bundle remains a service-level fallback only if the minimal request is rejected by webOS.
+- LG native content search remains the final fallback when direct launch requests are rejected.
 
-The native-search path launches LG's built-in `com.webos.app.search` with the title already populated. If that search app is unavailable on a firmware version, Nuvio falls back to the provider-specific launch attempt and finally Home Assistant's installed-app source match.
+For Netflix episodes, an episode-specific JustWatch `/watch/<id>` offer can therefore be handed directly to Netflix as its own video ID. A show-level `/title/<id>` episode offer is still treated as insufficiently specific and uses the native-search fallback rather than pretending it identifies the requested episode.
+
 
 ## WatchHub provider launching
 
