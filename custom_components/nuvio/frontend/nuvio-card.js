@@ -695,7 +695,7 @@ class NuvioCard extends HTMLElement {
       ? ""
       : '<button class="ib toolbar-btn remote-toggle-button '+(this._remoteExpanded?"remote-active":"")+'" title="Control" aria-label="Control"><ha-icon icon="mdi:remote-tv"></ha-icon><span>Control</span></button>';
     var home='<button class="ib toolbar-btn '+(onHome?"toolbar-active":"")+'" id="homeTop" title="Home" aria-label="Home"><ha-icon icon="mdi:home"></ha-icon><span>Home</span></button>';
-    return '<div class="header"><div class="header-title"><h2>'+this.esc(this._config.title||"Nuvio")+'</h2><span class="card-version">v0.4.50</span></div><div class="tools">'+search+
+    return '<div class="header"><div class="header-title"><h2>'+this.esc(this._config.title||"Nuvio")+'</h2><span class="card-version">v0.4.51</span></div><div class="tools">'+search+
       home+
       '<button class="ib toolbar-btn" id="refresh" title="Refresh" aria-label="Refresh"><ha-icon icon="mdi:refresh"></ha-icon><span>Refresh</span></button>'+
       addons+remote+'</div></div>';
@@ -866,7 +866,7 @@ class NuvioCard extends HTMLElement {
         #nuvio-remote-portal .nuvio-ring-down{bottom:2px;left:44px}
         #nuvio-remote-portal .nuvio-ring-left{left:2px;top:44px}
         #nuvio-remote-portal .nuvio-ring-right{right:2px;top:44px}
-        #nuvio-remote-portal .nuvio-ring-btn span{font-size:28px;line-height:1}
+        #nuvio-remote-portal .nuvio-ring-btn ha-icon{--mdc-icon-size:32px;width:32px;height:32px}
         #nuvio-remote-portal .nuvio-ring-ok{
           width:48px;height:48px;left:42px;top:42px;border-radius:50%;
           background:#03a9d9;border:0;color:white;font-size:11px;font-weight:800;
@@ -910,11 +910,11 @@ class NuvioCard extends HTMLElement {
         </div>
         <button class="nuvio-wake-btn" data-remote-key="wake"><span>▣</span><span>Wake</span></button>
         <div class="nuvio-remote-ring">
-          <button class="nuvio-ring-btn nuvio-ring-up" data-remote-key="up" title="Up"><span>⌃</span></button>
-          <button class="nuvio-ring-btn nuvio-ring-left" data-remote-key="left" title="Left"><span>‹</span></button>
+          <button class="nuvio-ring-btn nuvio-ring-up" data-remote-key="up" title="Up" aria-label="Up"><ha-icon icon="mdi:chevron-up"></ha-icon></button>
+          <button class="nuvio-ring-btn nuvio-ring-left" data-remote-key="left" title="Left" aria-label="Left"><ha-icon icon="mdi:chevron-left"></ha-icon></button>
           <button class="nuvio-ring-ok" data-remote-key="ok" title="OK">OK</button>
-          <button class="nuvio-ring-btn nuvio-ring-right" data-remote-key="right" title="Right"><span>›</span></button>
-          <button class="nuvio-ring-btn nuvio-ring-down" data-remote-key="down" title="Down"><span>⌄</span></button>
+          <button class="nuvio-ring-btn nuvio-ring-right" data-remote-key="right" title="Right" aria-label="Right"><ha-icon icon="mdi:chevron-right"></ha-icon></button>
+          <button class="nuvio-ring-btn nuvio-ring-down" data-remote-key="down" title="Down" aria-label="Down"><ha-icon icon="mdi:chevron-down"></ha-icon></button>
         </div>
         <div class="nuvio-number-pad" role="group" aria-label="Number pad">
           <button data-remote-key="1" title="1" aria-label="1">1</button>
@@ -1146,4 +1146,4 @@ class NuvioCard extends HTMLElement {
 if(!customElements.get("nuvio-card"))customElements.define("nuvio-card",NuvioCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==="nuvio-card"))window.customCards.push({type:"nuvio-card",name:"Nuvio",description:"Browse, search and play your Nuvio catalog.",preview:true});
-console.info("NUVIO-CARD v0.4.50");
+console.info("NUVIO-CARD v0.4.51");

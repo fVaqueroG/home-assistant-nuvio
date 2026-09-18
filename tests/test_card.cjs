@@ -10,6 +10,12 @@ const context=vm.createContext({window,document:window.document,HTMLElement:wind
   setTimeout:fn=>{timeouts.set(++timerId,fn);return timerId;},clearTimeout:id=>timeouts.delete(id),
   setInterval:(fn)=>{timers.set(++timerId,fn);return timerId;},clearInterval:id=>timers.delete(id)});
 vm.runInContext(readFileSync('custom_components/nuvio/frontend/nuvio-card.js','utf8'),context);
+const cardSource=readFileSync('custom_components/nuvio/frontend/nuvio-card.js','utf8');
+assert.match(cardSource,/mdi:chevron-up/);
+assert.match(cardSource,/mdi:chevron-down/);
+assert.match(cardSource,/mdi:chevron-left/);
+assert.match(cardSource,/mdi:chevron-right/);
+assert.doesNotMatch(cardSource,/data-remote-key="up"[^\n]*⌃/);
 const flush=()=>new Promise(r=>setImmediate(r));
 (async()=>{
  const card=window.document.createElement('nuvio-card');window.document.body.append(card);
