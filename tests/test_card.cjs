@@ -20,6 +20,10 @@ assert.match(cardSource,/nuvio-ring-up ha-icon\{transform:translateY\(-6px\)\}/)
 assert.match(cardSource,/ring-btn\.right ha-icon\{transform:translateX\(6px\)\}/);
 assert.equal((cardSource.match(/paginate:true/g)||[]).length,0);
 assert.match(cardSource,/async loadMoreCatalog\(\)/);
+assert.match(cardSource,/refreshCatalogGrid\(\)/);
+assert.match(cardSource,/grid\.innerHTML=visible\.map/);
+assert.doesNotMatch(cardSource,/this\._catalogVisibleCount=Math\.min\(this\._catalogItems\.length,this\._catalogVisibleCount\+chunk\);\s*this\.render\(\)/);
+assert.match(cardSource,/scroller\.scrollTop=this\._catalogScrollTop/);
 assert.match(cardSource,/catalog-sentinel/);
 assert.match(cardSource,/IntersectionObserver/);
 assert.match(cardSource,/skip:this\._catalogPaging\.nextSkip/);
