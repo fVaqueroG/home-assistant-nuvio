@@ -14,12 +14,14 @@ CONF_EMAIL: Final = "email"
 CONF_DEBRID_PROVIDER: Final = "debrid_provider"
 CONF_DEBRID_API_KEY: Final = "debrid_api_key"
 CONF_STREAMING_PROVIDERS: Final = "streaming_providers"
+CONF_WATCHHUB_COUNTRY: Final = "watchhub_country"
 
 DEFAULT_MANIFEST_URL: Final = "https://v3-cinemeta.strem.io/manifest.json"
 DEFAULT_PACKAGE_NAME: Final = "com.nuvio.app"
 DEFAULT_PROFILE_ID: Final = 1
 DEFAULT_DEBRID_PROVIDER: Final = "none"
 DEFAULT_STREAMING_PROVIDERS: Final = ("netflix", "prime", "disney", "max")
+DEFAULT_WATCHHUB_COUNTRY: Final = "US"
 NUVIO_ACTIVITY: Final = "com.nuvio.tv.MainActivity"
 NUVIO_WEBOS_APP_ID: Final = "space.nuvio.webos"
 
