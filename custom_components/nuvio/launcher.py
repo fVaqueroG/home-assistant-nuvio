@@ -282,10 +282,13 @@ def provider_source_match(provider: str, sources: list[str]) -> str | None:
     for source in sources:
         normalized = _provider_norm(source)
         for alias in aliases:
-            if normalized == alias:
+            normalized_alias = _provider_norm(alias)
+            if normalized == normalized_alias:
                 score = 100
-            elif len(alias) >= 3 and (alias in normalized or normalized in alias):
-                score = min(len(normalized), len(alias))
+            elif len(normalized_alias) >= 3 and (
+                normalized_alias in normalized or normalized in normalized_alias
+            ):
+                score = min(len(normalized), len(normalized_alias))
             else:
                 continue
             if score > best_score:
