@@ -354,12 +354,16 @@ class NuvioCard extends HTMLElement {
       });
       return;
     }
-    var index=this.watchHubSourceIndex(provider);
-    if(index>=0){
-      await this.playInNuvioIndex(index);
-      return;
+    if(!(this._watchProviderMeta||{}).justwatch_authenticated){
+      var index=this.watchHubSourceIndex(provider);
+      if(index>=0){
+        await this.playInNuvioIndex(index);
+        return;
+      }
     }
-    this._error=(provider.name||"This provider")+" is available for the configured country, but JustWatch, TheTVDB, and WatchHub did not supply a usable provider link.";
+    this._error=(this._watchProviderMeta||{}).justwatch_authenticated
+      ? (provider.name||"This provider")+" is available, but your JustWatch account did not return a usable provider link."
+      : (provider.name||"This provider")+" is available for the configured country, but JustWatch, TheTVDB, and WatchHub did not supply a usable provider link.";
     this.render();
   }
   watchHubSourceIndex(provider){
@@ -382,18 +386,21 @@ class NuvioCard extends HTMLElement {
       : "Movie availability";
     var cards=providers.map((provider,providerIndex)=>{
       var watchhubIndex=this.watchHubSourceIndex(provider);
+      var accountAuthoritative=!!meta.justwatch_authenticated;
       var exact=!!provider.deep_link;
-      var playable=exact||watchhubIndex>=0;
+      var playable=exact||(!accountAuthoritative&&watchhubIndex>=0);
       var access=(provider.access||[]).join(" · ");
       var deepSource=String(provider.deep_link_source||"");
       var source=exact
         ? (deepSource==="justwatch"
             ? (provider.justwatch_authenticated?"JustWatch account":"JustWatch offer")
             : (deepSource==="thetvdb"?"TheTVDB exact link":"Provider link"))
-        : (watchhubIndex>=0?"WatchHub link":"Availability only");
+        : (!accountAuthoritative&&watchhubIndex>=0?"WatchHub link":"Availability only");
       var hint=playable
         ? "Play with "+provider.name+" · "+source
-        : provider.name+" is available here, but no usable provider link was returned.";
+        : accountAuthoritative
+          ? provider.name+" is available here, but your JustWatch account did not return a usable provider link."
+          : provider.name+" is available here, but no usable provider link was returned.";
       var logo=provider.logo_url
         ? '<img src="'+this.esc(provider.logo_url)+'" alt="">'
         : '<div class="watch-provider-fallback">'+this.esc(String(provider.name||"?").slice(0,2).toUpperCase())+'</div>';
