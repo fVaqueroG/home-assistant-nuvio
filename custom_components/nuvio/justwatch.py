@@ -39,7 +39,7 @@ query NuvioSearch(
         content(country: $country, language: $language) {
           title
           originalReleaseYear
-          ... on MovieOrShowContent {
+          ... on MovieOrShowOrSeasonContent {
             externalIds {
               imdbId
               tmdbId
