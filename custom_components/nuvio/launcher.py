@@ -471,7 +471,7 @@ def _webos_provider_params(
     if content_id:
         params["sourceContentId"] = content_id
     if video_id:
-        params["videoId"] = video_id
+        params["sourceVideoId"] = video_id
     if season is not None:
         params["season"] = season
     if episode is not None:
@@ -487,7 +487,7 @@ def _webos_provider_params(
         elif provider == "apple":
             params["adamId"] = provider_id
         elif provider == "max":
-            params["providerVideoId"] = provider_id
+            params["videoId"] = provider_id
         elif provider == "crunchyroll":
             params["mediaId"] = provider_id
     return params
@@ -506,21 +506,13 @@ def webos_provider_launch_requests(
 ) -> list[tuple[str, dict[str, Any]]]:
     """Return ordered LG webOS launch attempts for one provider title."""
     if provider == "netflix":
-        content_id = netflix_content_id(external_url)
-        if content_id:
-            return [
-                (
-                    "system.launcher/launch",
-                    {
-                        "id": "netflix",
-                        "contentId": (
-                            "m=http%3A%2F%2Fapi.netflix.com%2Fcatalog%2Ftitles%2Fmovies%2F"
-                            f"{content_id}&source_type=4"
-                        ),
-                    },
-                )
-            ]
+        provider_id = netflix_content_id(external_url)
         payload: dict[str, Any] = {"id": "netflix"}
+        if provider_id:
+            payload["contentId"] = (
+                "m=http%3A%2F%2Fapi.netflix.com%2Fcatalog%2Ftitles%2Fmovies%2F"
+                f"{provider_id}&source_type=4"
+            )
         if media_type:
             payload["mediaType"] = media_type
         if content_id:
