@@ -103,6 +103,7 @@ PLAY_PROVIDER_SCHEMA = probatio.Schema(
         probatio.Required(ATTR_EXTERNAL_URL): cv.url,
         probatio.Optional(ATTR_PROVIDER_NAME): cv.string,
         probatio.Optional(ATTR_MEDIA_TYPE): probatio.In(["movie", "series"]),
+        probatio.Optional(ATTR_TITLE): cv.string,
         probatio.Optional(ATTR_CONTENT_ID): cv.string,
         probatio.Optional(ATTR_VIDEO_ID): cv.string,
         probatio.Optional(ATTR_SEASON): probatio.Coerce(int),
