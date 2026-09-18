@@ -14,7 +14,9 @@
           "debrid_api_key": "Clave API / token de debrid",
           "streaming_providers": "Proveedores de streaming",
           "watchhub_country": "País de WatchHub",
-          "tmdb_access_token": "Token de acceso de lectura de TMDB"
+          "tmdb_access_token": "Token de acceso de lectura de TMDB",
+          "tvdb_api_key": "Clave API de TheTVDB",
+          "tvdb_subscriber_pin": "PIN de suscriptor de TheTVDB"
         },
         "data_description": {
           "package_name": "Usa com.nuvio.app para la versión de Play Store o com.nuvio.tv para la mayoría de versiones de GitHub/sideload.",
@@ -24,7 +26,9 @@
           "debrid_api_key": "Opcional cuando la cuenta de Nuvio ya tiene debrid sincronizado. Se guarda solo en Home Assistant si se proporciona.",
           "streaming_providers": "Elige los proveedores de WatchHub que quieres mostrar. La lista incluye un catálogo amplio de servicios, proveedores detectados en tu colección Streaming sincronizada de Nuvio y también permite escribir un proveedor que no aparezca. Déjalo vacío para mostrar todos.",
           "watchhub_country": "Filtra la disponibilidad de WatchHub al país seleccionado. De forma predeterminada usa el país configurado en Home Assistant.",
-          "tmdb_access_token": "Opcional. Habilita la fila de proveedores disponibles con datos de TMDB/JustWatch. Usa el mismo país y los mismos proveedores seleccionados arriba."
+          "tmdb_access_token": "Opcional. Habilita la fila de proveedores disponibles con datos de TMDB/JustWatch. Usa el mismo país y los mismos proveedores seleccionados arriba.",
+          "tvdb_api_key": "Opcional pero recomendado. Permite resolver IDs remotos y enlaces exactos de película/episodio desde TheTVDB.",
+          "tvdb_subscriber_pin": "Opcional. Úsalo si tu clave de TheTVDB requiere un PIN de suscriptor."
         }
       },
       "reconfigure": {
@@ -38,7 +42,9 @@
           "package_name": "Paquete de Nuvio para Android",
           "streaming_providers": "Proveedores de streaming",
           "watchhub_country": "País de WatchHub",
-          "tmdb_access_token": "Token de acceso de lectura de TMDB"
+          "tmdb_access_token": "Token de acceso de lectura de TMDB",
+          "tvdb_api_key": "Clave API de TheTVDB",
+          "tvdb_subscriber_pin": "PIN de suscriptor de TheTVDB"
         },
         "data_description": {
           "profile_id": "El perfil 1 es el perfil principal. Usa 2–5 para otro perfil.",
@@ -48,7 +54,9 @@
           "package_name": "Usa com.nuvio.tv para la app completa oficial o com.nuviodebug.com para la compilación de prueba del fork compatible con reproducción directa desde Home Assistant.",
           "streaming_providers": "Elige los proveedores de WatchHub que quieres mostrar. La lista incluye un catálogo amplio de servicios, proveedores detectados en tu colección Streaming sincronizada de Nuvio y también permite escribir un proveedor que no aparezca. Déjalo vacío para mostrar todos.",
           "watchhub_country": "Filtra la disponibilidad de WatchHub al país seleccionado. De forma predeterminada usa el país configurado en Home Assistant.",
-          "tmdb_access_token": "Opcional. Habilita la fila de proveedores disponibles con datos de TMDB/JustWatch. Usa el mismo país y los mismos proveedores seleccionados arriba."
+          "tmdb_access_token": "Opcional. Habilita la fila de proveedores disponibles con datos de TMDB/JustWatch. Usa el mismo país y los mismos proveedores seleccionados arriba.",
+          "tvdb_api_key": "Opcional pero recomendado. Permite resolver IDs remotos y enlaces exactos de película/episodio desde TheTVDB.",
+          "tvdb_subscriber_pin": "Opcional. Úsalo si tu clave de TheTVDB requiere un PIN de suscriptor."
         }
       },
       "device": {
@@ -67,7 +75,8 @@
       "login_pending": "Nuvio aún no ha aprobado este código. Autorízalo e intenta Continuar nuevamente.",
       "login_connection_failed": "No se pudo comprobar la autorización de Nuvio. Revisa la conexión e inténtalo nuevamente.",
       "debrid_key_required": "Ingresa una clave API/token para el proveedor de debrid seleccionado.",
-      "tmdb_token_invalid": "TMDB rechazó el token de acceso. Usa un API Read Access Token válido."
+      "tmdb_token_invalid": "TMDB rechazó el token de acceso. Usa un API Read Access Token válido.",
+      "tvdb_credentials_invalid": "TheTVDB rechazó la clave API o el PIN."
     },
     "abort": {
       "single_instance_allowed": "Nuvio ya está configurado",
