@@ -542,10 +542,45 @@ def webos_provider_launch_requests(
         episode_title=episode_title,
     )
     requests: list[tuple[str, dict[str, Any]]] = []
+    target = str(params.get("contentTarget") or external_url or "").strip()
+
+    # Netflix has its own special contentId format above. Apple TV is already
+    # confirmed working through applicationManager/launch on the user's TV, so
+    # preserve that path. For the providers below, prefer system.launcher/launch
+    # and send the exact title target in BOTH contentId and params.contentTarget.
+    # This matches the Prime Video launch contract used successfully by the
+    # companion Streaming Browser Card and gives older/newer webOS launchers
+    # both forms they are known to inspect.
+    prefer_system_launcher = provider in {
+        "prime",
+        "disney",
+        "max",
+        "crunchyroll",
+        "paramount",
+    }
+
     for app_id in app_ids:
-        # applicationManager/launch passes params directly to the target app.
-        # This avoids system.launcher/open, which would send WatchHub URLs to
-        # the LG browser rather than the installed streaming app.
+        if prefer_system_launcher:
+            payload: dict[str, Any] = {
+                "id": app_id,
+                "params": dict(params),
+            }
+            if target:
+                payload["contentId"] = target
+            requests.append(("system.launcher/launch", payload))
+            # Keep applicationManager as a fallback for app-id / firmware
+            # combinations where system.launcher rejects the request entirely.
+            requests.append(
+                (
+                    "com.webos.applicationManager/launch",
+                    {
+                        "id": app_id,
+                        "params": dict(params),
+                    },
+                )
+            )
+            continue
+
         requests.append(
             (
                 "com.webos.applicationManager/launch",
