@@ -149,7 +149,7 @@ class NuvioCard extends HTMLElement {
         if(source.provider&&source.provider!=="addon")throw new Error("This folder source is not an addon catalog.");
         var base=source.addonBaseUrl||source.addon_base_url||source.baseUrl||source.base_url||source.addonUrl||source.url||"";
         var manifest=base?(base.replace(/\/+$/,"").endsWith("manifest.json")?base:base.replace(/\/+$/,"")+"/manifest.json"):"";
-        var result=await this.ws({type:"nuvio/catalog",manifest_url:manifest,addon_id:source.addonId||source.addon_id||"",media_type:type,catalog_id:source.catalogId||source.catalog_id||"",genre:source.genre||"",hide_unreleased:this._homePrefs.hide_unreleased_content===true});
+        var result=await this.ws({type:"nuvio/catalog",manifest_url:manifest,addon_id:source.addonId||source.addon_id||"",media_type:type,catalog_id:source.catalogId||source.catalog_id||"",genre:source.genre||"",hide_unreleased:this._homePrefs.hide_unreleased_content===true,paginate:true});
         tab.items=result.items||[];
       }catch(e){tab.error=e.message||"Could not load this catalog.";}
       return tab;
@@ -189,7 +189,8 @@ class NuvioCard extends HTMLElement {
         manifest_url:section.manifest_url,
         media_type:section.media_type||"movie",
         catalog_id:section.catalog_id,
-        hide_unreleased:this._homePrefs.hide_unreleased_content===true
+        hide_unreleased:this._homePrefs.hide_unreleased_content===true,
+        paginate:true
       });
       if(request!==this._catalogRequest)return;
       this._catalogItems=r.items||[];
@@ -695,7 +696,7 @@ class NuvioCard extends HTMLElement {
       ? ""
       : '<button class="ib toolbar-btn remote-toggle-button '+(this._remoteExpanded?"remote-active":"")+'" title="Control" aria-label="Control"><ha-icon icon="mdi:remote-tv"></ha-icon><span>Control</span></button>';
     var home='<button class="ib toolbar-btn '+(onHome?"toolbar-active":"")+'" id="homeTop" title="Home" aria-label="Home"><ha-icon icon="mdi:home"></ha-icon><span>Home</span></button>';
-    return '<div class="header"><div class="header-title"><h2>'+this.esc(this._config.title||"Nuvio")+'</h2><span class="card-version">v0.4.53</span></div><div class="tools">'+search+
+    return '<div class="header"><div class="header-title"><h2>'+this.esc(this._config.title||"Nuvio")+'</h2><span class="card-version">v0.4.54</span></div><div class="tools">'+search+
       home+
       '<button class="ib toolbar-btn" id="refresh" title="Refresh" aria-label="Refresh"><ha-icon icon="mdi:refresh"></ha-icon><span>Refresh</span></button>'+
       addons+remote+'</div></div>';
@@ -1146,4 +1147,4 @@ class NuvioCard extends HTMLElement {
 if(!customElements.get("nuvio-card"))customElements.define("nuvio-card",NuvioCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==="nuvio-card"))window.customCards.push({type:"nuvio-card",name:"Nuvio",description:"Browse, search and play your Nuvio catalog.",preview:true});
-console.info("NUVIO-CARD v0.4.53");
+console.info("NUVIO-CARD v0.4.54");
