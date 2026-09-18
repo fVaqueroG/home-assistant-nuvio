@@ -27,7 +27,6 @@ from homeassistant.helpers.entity_registry import async_get as async_get_entity_
 from .account import NuvioAuthError
 from .api import Addon, NuvioApiError
 from .debrid import DebridNotCached, DebridNotConfigured, DebridResolveError
-from .tvdb import TvdbApiError
 from .providers import (
     normalize_provider_text,
     normalize_selected_provider,
@@ -468,8 +467,6 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
     addons = await addons_task
     if not addons:
         addons = api.cached_addons
-    addon_by_id = {_addon_id(addon): addon for addon in addons}
-
     catalog_specs: list[tuple[Addon, dict[str, Any], str, str, str, int]] = []
     default_catalog_keys: list[str] = []
     catalog_spec_by_key: dict[str, tuple[Addon, dict[str, Any], str, str, str, int]] = {}
