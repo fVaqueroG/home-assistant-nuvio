@@ -690,7 +690,9 @@ def webos_provider_launch_requests(
                 "action": "open",
                 "url": raw_url,
             }
-            if provider_id and re.search(r"/watch/", urlparse(raw_url).path, re.IGNORECASE):
+            if provider_id and re.search(
+                r"/watch/", urlparse(raw_url).path, re.IGNORECASE
+            ):
                 custom_params.update(
                     {
                         "action": "play",
