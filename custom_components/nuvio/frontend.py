@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import time
 from typing import Any
+from urllib.parse import urlencode
 
 import probatio
 from homeassistant.components import frontend, websocket_api
@@ -27,7 +28,7 @@ from .debrid import DebridNotCached, DebridNotConfigured, DebridResolveError
 from .const import CONF_PROFILE_ID, DATA_ACCOUNT_API, DATA_API, DATA_DEBRID_RESOLVER, DOMAIN
 
 CARD_URL = "/nuvio/nuvio-card.js"
-CARD_VERSION = "0.4.17"
+CARD_VERSION = "0.4.18"
 CARD_RESOURCE_URL = f"{CARD_URL}?v={CARD_VERSION}"
 CARD_FILE = Path(__file__).parent / "frontend" / "nuvio-card.js"
 DATA_FRONTEND_REGISTERED = "frontend_registered"
@@ -1128,9 +1129,11 @@ async def ws_home(hass, connection, msg) -> None:
 
 @websocket_api.websocket_command({
     probatio.Required("type"): "nuvio/catalog",
-    probatio.Required("manifest_url"): str,
+    probatio.Optional("manifest_url", default=""): str,
+    probatio.Optional("addon_id", default=""): str,
     probatio.Required("media_type"): str,
     probatio.Required("catalog_id"): str,
+    probatio.Optional("genre", default=""): str,
     probatio.Optional("hide_unreleased", default=False): bool,
 })
 @websocket_api.async_response
@@ -1139,16 +1142,32 @@ async def ws_catalog(hass, connection, msg) -> None:
     try:
         api = _entry(hass).runtime_data[DATA_API]
         addon: Addon | None = None
-        for candidate in await api.async_addons():
-            if candidate.manifest_url == msg["manifest_url"]:
+        addons = await api.async_addons()
+        for candidate in addons:
+            if (msg["manifest_url"] and candidate.manifest_url == msg["manifest_url"]) or (
+                not msg["manifest_url"] and _addon_id(candidate) == msg["addon_id"]
+            ):
                 addon = candidate
                 break
+        # Imported folders can retain an old addon ID after an addon migration.
+        # Resolve an exact, unambiguous catalog match among configured addons.
+        if addon is None and not msg["manifest_url"]:
+            matches = [candidate for candidate in addons if any(
+                str(catalog.get("id")) == msg["catalog_id"]
+                and str(catalog.get("type")) == msg["media_type"]
+                for catalog in candidate.manifest.get("catalogs", [])
+                if isinstance(catalog, dict)
+            )]
+            if len(matches) == 1:
+                addon = matches[0]
         if addon is None:
             raise NuvioApiError("The addon for this catalog is no longer configured")
+        genre = str(msg.get("genre") or "").strip()
         metas = await api.async_catalog(
             addon,
             str(msg["media_type"]),
             str(msg["catalog_id"]),
+            extra=urlencode({"genre": genre}) if genre.lower() not in {"", "none", "all"} else None,
         )
         items = _dedupe_catalog_items(
             metas,

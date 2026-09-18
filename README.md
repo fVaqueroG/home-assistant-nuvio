@@ -248,3 +248,22 @@ remote_side: left   # left or right
 
 Set `remote_side: right` to place the controller on the right side of the
 card, or `show_remote: false` to hide it.
+
+### Collection folders and featured banner
+
+Click any collection tile (for example **Streaming → Netflix**) to open its
+saved addon catalogs. Use **All** or an individual source tab, then select a
+title; **Back** returns to the same folder. Catalog headings and **See all**
+open regular addon catalogs. Missing sources report an error without hiding
+results from the other sources.
+
+The featured banner rotates every seven seconds, with previous/next arrows
+and a pause button. Rotation pauses on hover, keyboard focus, and hidden tabs,
+and respects reduced-motion preferences. Optional card YAML settings:
+
+```yaml
+hero_autorotate: true
+hero_interval: 7 # seconds, minimum 3
+```
+
+Frontend regression checks: `npm ci --prefix tests && node tests/test_card.cjs`.
