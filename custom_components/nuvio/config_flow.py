@@ -499,6 +499,28 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
         user_input: dict[str, Any] | None = None,
     ) -> probatio.Schema:
         values = user_input or {}
+
+        def suggested(key: str, default: str = "") -> str:
+            """Keep stored credentials visible/persistent in masked fields."""
+            if key in values:
+                return str(values.get(key) or "")
+            return str(entry.data.get(key, default) or "")
+
+        selected_provider = str(
+            values.get(
+                CONF_DEBRID_PROVIDER,
+                entry.data.get(CONF_DEBRID_PROVIDER, DEFAULT_DEBRID_PROVIDER),
+            )
+        )
+        existing_provider = str(
+            entry.data.get(CONF_DEBRID_PROVIDER, DEFAULT_DEBRID_PROVIDER)
+        )
+        debrid_suggested = (
+            suggested(CONF_DEBRID_API_KEY)
+            if selected_provider == existing_provider
+            else ""
+        )
+
         return probatio.Schema(
             {
                 probatio.Required(
@@ -542,9 +564,18 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_MANAGE_JUSTWATCH_ACCOUNT,
                     default=values.get(CONF_MANAGE_JUSTWATCH_ACCOUNT, False),
                 ): bool,
-                probatio.Optional(CONF_TMDB_ACCESS_TOKEN, default=""): _debrid_key_selector(),
-                probatio.Optional(CONF_TVDB_API_KEY, default=""): _debrid_key_selector(),
-                probatio.Optional(CONF_TVDB_SUBSCRIBER_PIN, default=""): _debrid_key_selector(),
+                probatio.Optional(
+                    CONF_TMDB_ACCESS_TOKEN,
+                    description={"suggested_value": suggested(CONF_TMDB_ACCESS_TOKEN)},
+                ): _debrid_key_selector(),
+                probatio.Optional(
+                    CONF_TVDB_API_KEY,
+                    description={"suggested_value": suggested(CONF_TVDB_API_KEY)},
+                ): _debrid_key_selector(),
+                probatio.Optional(
+                    CONF_TVDB_SUBSCRIBER_PIN,
+                    description={"suggested_value": suggested(CONF_TVDB_SUBSCRIBER_PIN)},
+                ): _debrid_key_selector(),
                 probatio.Required(
                     CONF_DEBRID_PROVIDER,
                     default=values.get(
@@ -554,10 +585,16 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                 ): selector.SelectSelector(
                     selector.SelectSelectorConfig(options=DEBRID_OPTIONS)
                 ),
-                probatio.Optional(CONF_DEBRID_API_KEY, default=""): _debrid_key_selector(),
+                probatio.Optional(
+                    CONF_DEBRID_API_KEY,
+                    description={"suggested_value": debrid_suggested},
+                ): _debrid_key_selector(),
                 probatio.Required(
                     CONF_CONNECT_ACCOUNT,
-                    default=values.get(CONF_CONNECT_ACCOUNT, True),
+                    default=values.get(
+                        CONF_CONNECT_ACCOUNT,
+                        bool(entry.data.get(CONF_REFRESH_TOKEN)),
+                    ),
                 ): bool,
             }
         )
