@@ -55,6 +55,7 @@ class NuvioApi:
         self._session = session
         self.manifest_urls = [normalize_manifest_url(url) for url in manifest_urls]
         self._addons: list[Addon] | None = None
+        self._addons_load_task: asyncio.Task[list[Addon]] | None = None
         self._catalog_cache: dict[tuple[str, str, str, str | None], tuple[float, list[dict[str, Any]]]] = {}
         self._meta_cache: dict[tuple[str, str, str], tuple[float, dict[str, Any]]] = {}
         self._catalog_ttl = 300.0
@@ -72,35 +73,69 @@ class NuvioApi:
         return data
 
     async def async_addons(self, *, refresh: bool = False) -> list[Addon]:
-        """Load configured addon manifests."""
+        """Load configured addon manifests without cancelling shared discovery."""
         cached_by_url = {addon.manifest_url: addon for addon in self._addons or []}
         if not refresh and all(url in cached_by_url for url in self.manifest_urls):
             return [cached_by_url[url] for url in self.manifest_urls]
 
-        async def load_manifest(manifest_url: str):
-            if not refresh and manifest_url in cached_by_url:
-                return cached_by_url[manifest_url], None
-            try:
-                manifest = await self._get_json(manifest_url)
-                addon = Addon(manifest_url, addon_base_url(manifest_url), manifest)
-                # Keep completed manifests if Home's time budget cancels a
-                # slower sibling. One slow addon must not hide every catalog.
-                by_url = {item.manifest_url: item for item in self._addons or []}
-                by_url[manifest_url] = addon
-                self._addons = [by_url[url] for url in self.manifest_urls if url in by_url]
-                return addon, None
-            except NuvioApiError as err:
-                return None, str(err)
+        async def load_all() -> list[Addon]:
+            starting_cache = {
+                addon.manifest_url: addon for addon in self._addons or []
+            }
 
-        loaded = await asyncio.gather(
-            *(load_manifest(manifest_url) for manifest_url in self.manifest_urls)
-        )
-        addons = [addon for addon, _ in loaded if addon is not None]
-        errors = [error for _, error in loaded if error]
-        if not addons:
-            raise NuvioApiError("; ".join(errors) or "No addon manifests configured")
-        self._addons = addons
-        return addons
+            async def load_manifest(manifest_url: str):
+                if not refresh and manifest_url in starting_cache:
+                    return starting_cache[manifest_url], None
+                try:
+                    manifest = await self._get_json(manifest_url)
+                    addon = Addon(
+                        manifest_url,
+                        addon_base_url(manifest_url),
+                        manifest,
+                    )
+                    # Publish each completed manifest immediately. Home can use
+                    # partial discovery while slower manifests keep loading.
+                    by_url = {
+                        item.manifest_url: item for item in self._addons or []
+                    }
+                    by_url[manifest_url] = addon
+                    self._addons = [
+                        by_url[url] for url in self.manifest_urls if url in by_url
+                    ]
+                    return addon, None
+                except NuvioApiError as err:
+                    return None, str(err)
+
+            loaded = await asyncio.gather(
+                *(load_manifest(manifest_url) for manifest_url in self.manifest_urls)
+            )
+            by_url = {item.manifest_url: item for item in self._addons or []}
+            errors: list[str] = []
+            for addon, error in loaded:
+                if addon is not None:
+                    by_url[addon.manifest_url] = addon
+                if error:
+                    errors.append(error)
+            addons = [by_url[url] for url in self.manifest_urls if url in by_url]
+            if not addons:
+                raise NuvioApiError(
+                    "; ".join(errors) or "No addon manifests configured"
+                )
+            self._addons = addons
+            return addons
+
+        task = self._addons_load_task
+        if task is None or task.done():
+            task = asyncio.create_task(load_all())
+            # Home uses a short timeout around async_addons(). Shielding below
+            # means that timeout cancels only the waiter, not this shared task.
+            # Retrieve a terminal exception even if no later caller awaits it.
+            task.add_done_callback(
+                lambda done: None if done.cancelled() else done.exception()
+            )
+            self._addons_load_task = task
+
+        return await asyncio.shield(task)
 
     @property
     def cached_addons(self) -> list[Addon]:

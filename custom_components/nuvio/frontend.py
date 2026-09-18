@@ -28,7 +28,7 @@ from .debrid import DebridNotCached, DebridNotConfigured, DebridResolveError
 from .const import CONF_PROFILE_ID, DATA_ACCOUNT_API, DATA_API, DATA_DEBRID_RESOLVER, DOMAIN
 
 CARD_URL = "/nuvio/nuvio-card.js"
-CARD_VERSION = "0.4.21"
+CARD_VERSION = "0.4.22"
 CARD_RESOURCE_URL = f"{CARD_URL}?v={CARD_VERSION}"
 CARD_FILE = Path(__file__).parent / "frontend" / "nuvio-card.js"
 DATA_FRONTEND_REGISTERED = "frontend_registered"
@@ -1571,13 +1571,22 @@ async def ws_streams(hass, connection, msg) -> None:
                 client_resolve = {}
 
             direct_url = None
-            for candidate in (stream.get("url"), stream.get("externalUrl")):
-                if not isinstance(candidate, str):
-                    continue
+            candidate = stream.get("url")
+            if isinstance(candidate, str):
                 stripped = candidate.lstrip().lower()
                 if stripped.startswith(("http://", "https://")):
                     direct_url = candidate
-                    break
+
+            # Stremio's externalUrl is a provider/navigation link, not a media
+            # stream.  Treating WatchHub links such as watch.amazon.com as
+            # playable video makes webOS media.viewer/open reject them and
+            # makes Nuvio's internal HTML media element report FORMAT_ERR.
+            external_url = None
+            candidate = stream.get("externalUrl")
+            if isinstance(candidate, str):
+                stripped = candidate.lstrip().lower()
+                if stripped.startswith(("http://", "https://")):
+                    external_url = candidate
 
             proxy_headers = behavior.get("proxyHeaders")
             if not isinstance(proxy_headers, dict):
@@ -1595,6 +1604,8 @@ async def ws_streams(hass, connection, msg) -> None:
                     "title": stream.get("title"),
                     "description": stream.get("description"),
                     "url": direct_url,
+                    "external_url": external_url,
+                    "external": bool(external_url) and not bool(direct_url),
                     "info_hash": stream.get("infoHash")
                     or client_resolve.get("infoHash"),
                     "magnet_uri": client_resolve.get("magnetUri"),
