@@ -28,12 +28,12 @@ from .debrid import DebridNotCached, DebridNotConfigured, DebridResolveError
 from .const import CONF_PROFILE_ID, DATA_ACCOUNT_API, DATA_API, DATA_DEBRID_RESOLVER, DOMAIN
 
 CARD_URL = "/nuvio/nuvio-card.js"
-CARD_VERSION = "0.4.19"
+CARD_VERSION = "0.4.20"
 CARD_RESOURCE_URL = f"{CARD_URL}?v={CARD_VERSION}"
 CARD_FILE = Path(__file__).parent / "frontend" / "nuvio-card.js"
 DATA_FRONTEND_REGISTERED = "frontend_registered"
 DATA_HOME_CACHE = "home_cache"
-HOME_CACHE_TTL = 30.0
+HOME_CACHE_TTL = 120.0
 
 
 def _entry(hass: HomeAssistant):
@@ -318,7 +318,7 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
     # Manifest discovery is independent of account/profile sync; start it now
     # so slow account endpoints do not add serial delay to Home startup.
     addons_task = asyncio.create_task(
-        home_call(api.async_addons(refresh=refresh), 6.0, [])
+        home_call(api.async_addons(refresh=refresh), 3.0, [])
     )
 
     home_settings: dict[str, Any] = {}
@@ -330,12 +330,12 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
 
     if account is not None:
         results = await asyncio.gather(
-            home_call(account.async_library(profile_id), 4.0, []),
-            home_call(account.async_watch_progress(profile_id), 4.0, []),
-            home_call(account.async_home_catalog_settings(profile_id), 4.0, {}),
-            home_call(account.async_profile_settings_blob(profile_id), 4.0, {}),
-            home_call(account.async_collections(profile_id), 4.0, []),
-            home_call(account.async_watched_items(profile_id), 4.0, []),
+            home_call(account.async_library(profile_id), 2.5, []),
+            home_call(account.async_watch_progress(profile_id), 2.5, []),
+            home_call(account.async_home_catalog_settings(profile_id), 2.5, {}),
+            home_call(account.async_profile_settings_blob(profile_id), 2.5, {}),
+            home_call(account.async_collections(profile_id), 2.5, []),
+            home_call(account.async_watched_items(profile_id), 2.5, []),
             return_exceptions=True,
         )
         if not isinstance(results[0], Exception):
@@ -428,8 +428,13 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
         try:
             async with semaphore:
                 metas = await asyncio.wait_for(
-                    api.async_catalog(addon, media_type, catalog_id),
-                    timeout=7.0,
+                    api.async_catalog(
+                        addon,
+                        media_type,
+                        catalog_id,
+                        refresh=refresh,
+                    ),
+                    timeout=5.0,
                 )
         except (NuvioApiError, TimeoutError):
             return None
@@ -466,15 +471,44 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
         try:
             return await asyncio.wait_for(
                 load_catalog_spec(spec, include_if_disabled=include_if_disabled),
-                timeout=6.0,
+                timeout=4.5,
             )
         except (TimeoutError, NuvioApiError):
             return None
 
-    # Load Home rows concurrently, but never let a stalled addon hold the card.
-    loaded_home = await asyncio.gather(
-        *(bounded_catalog_load(spec) for spec in catalog_specs)
-    )
+    async def load_catalog_batch(
+        specs: list[tuple[Addon, dict[str, Any], str, str, str, int]],
+        *,
+        include_if_disabled: bool = False,
+        budget: float = 2.25,
+    ) -> list[dict[str, Any] | None]:
+        """Return fast catalog results and let the card retry slower rows."""
+        nonlocal home_incomplete
+        tasks = [
+            asyncio.create_task(
+                bounded_catalog_load(spec, include_if_disabled=include_if_disabled)
+            )
+            for spec in specs
+        ]
+        if not tasks:
+            return []
+        done, pending = await asyncio.wait(tasks, timeout=budget)
+        if pending:
+            home_incomplete = True
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+        results: list[dict[str, Any] | None] = []
+        for task in done:
+            try:
+                results.append(task.result())
+            except Exception:
+                results.append(None)
+        return results
+
+    # Return fast Home rows first. Slower catalogs are picked up by the card's
+    # bounded automatic retries, while successful results stay in the API cache.
+    loaded_home = await load_catalog_batch(catalog_specs)
     for section in loaded_home:
         if section:
             loaded_sections[section["id"]] = section
@@ -487,8 +521,10 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
             for key in hero_catalog_keys
             if key in catalog_spec_by_key
         ]
-        hero_loaded = await asyncio.gather(
-            *(bounded_catalog_load(spec, include_if_disabled=True) for spec in hero_specs)
+        hero_loaded = await load_catalog_batch(
+            hero_specs,
+            include_if_disabled=True,
+            budget=0.75 if home_incomplete else 1.5,
         )
         for section in hero_loaded:
             if section:
@@ -872,9 +908,14 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
         ]
         next_up_items: list[dict[str, Any]] = []
         if next_up_tasks:
-            done, pending = await asyncio.wait(next_up_tasks, timeout=2.0)
+            done, pending = await asyncio.wait(
+                next_up_tasks,
+                timeout=0.5 if home_incomplete else 1.5,
+            )
             for task in pending:
                 task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
             for task in done:
                 try:
                     item = task.result()
@@ -1009,7 +1050,7 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
                 if slot <= 0:
                     break
 
-    if hero_items:
+    if hero_items and not home_incomplete:
         addon_by_manifest = {addon.manifest_url: addon for addon in addons}
 
         async def enrich_hero_item(item: dict[str, Any]) -> dict[str, Any]:
@@ -1036,6 +1077,8 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
             done, pending = await asyncio.wait(hero_tasks, timeout=1.5)
             for task in pending:
                 task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
             enriched_by_id: dict[str, dict[str, Any]] = {}
             for task in done:
                 try:

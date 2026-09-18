@@ -52,14 +52,14 @@ const flush=()=>new Promise(r=>setImmediate(r));
  // Empty cold-start responses recover without a browser reload.
  const cold=window.document.createElement('nuvio-card');window.document.body.append(cold);cold.setConfig({show_remote:false});
  const recovered={sections:[{kind:'collection',name:'Streaming',items:[]}],hero:{items:[]}};
- let requests=0;cold.ws=async()=>++requests===1?{sections:[],hero:{items:[]}}:recovered;
+ let requests=0,retryMessages=[];cold.ws=async m=>{retryMessages.push(m);return ++requests===1?{sections:[],hero:{items:[]}}:recovered;};
  cold.hass={states:{}};await flush();assert.equal(requests,1);assert.ok(cold._homeRetryTimer);assert.match(cold.home(),/Retrying automatically/);
  cold.hass={states:{}};assert.equal(requests,1);
- let retryTimer=cold._homeRetryTimer,retryFn=timeouts.get(retryTimer);timeouts.delete(retryTimer);retryFn();await flush();assert.equal(cold._sections.length,1);assert.equal(cold._homeRetryCount,0);
+ let retryTimer=cold._homeRetryTimer,retryFn=timeouts.get(retryTimer);timeouts.delete(retryTimer);retryFn();await flush();assert.equal(cold._sections.length,1);assert.equal(cold._homeRetryCount,0);assert.equal(retryMessages[1].refresh,false);
  cold.ws=async()=>({sections:[],hero:{items:[]}});await cold.loadHome(true);assert.equal(cold._sections.length,1);
  cold.remove();assert.equal(cold._homeRetryTimer,null);
  const empty=window.document.createElement('nuvio-card');window.document.body.append(empty);empty.setConfig({show_remote:false});empty.ws=async()=>({sections:[]});empty.hass={states:{}};await flush();
  for(let i=0;i<3;i++){let id=empty._homeRetryTimer,fn=timeouts.get(id);timeouts.delete(id);fn();await flush();}
  assert.equal(empty._homeRetryTimer,null);assert.equal(empty._homeRetryCount,3);empty.remove();assert.equal(timeouts.size,0);
- console.log('PASS: empty Home recovery, retained content, bounded retries, plus 8 collection rows, source tabs, details/back, regular catalogs, stable HA updates, hero arrows/rotation/pause, partial failures, request races, timer cleanup');
+ console.log('PASS: progressive Home recovery, cached automatic retries, retained content, bounded retries, plus 8 collection rows, source tabs, details/back, regular catalogs, stable HA updates, hero arrows/rotation/pause, partial failures, request races, timer cleanup');
 })().catch(e=>{console.error(e);process.exitCode=1;});
