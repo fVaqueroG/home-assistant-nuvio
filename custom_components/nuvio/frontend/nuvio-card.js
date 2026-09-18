@@ -2,7 +2,7 @@ class NuvioCard extends HTMLElement {
   constructor(){
     super(); this.attachShadow({mode:"open"});
     this._config={}; this._hass=null; this._loaded=false; this._loading=false;
-    this._sections=[]; this._hero=[]; this._heroIndex=0; this._homePrefs={}; this._results=[]; this._playersMeta=[]; this._playerId=""; this._streams=[]; this._streamLoading=false; this._streamContext=null; this._debridMeta={configured:false,provider:""}; this._resolving=new Set(); this._remoteExpanded=false; this._view="home"; this._item=null; this._details=null; this._season=null; this._query=""; this._error="";
+    this._sections=[]; this._hero=[]; this._heroIndex=0; this._homePrefs={}; this._results=[]; this._catalogSection=null; this._catalogItems=[]; this._catalogLoading=false; this._returnView="home"; this._playersMeta=[]; this._playerId=""; this._streams=[]; this._streamLoading=false; this._streamContext=null; this._debridMeta={configured:false,provider:""}; this._resolving=new Set(); this._remoteExpanded=false; this._view="home"; this._item=null; this._details=null; this._season=null; this._query=""; this._error="";
   }
   static getStubConfig(){ return {title:"Nuvio",columns:6,show_remote:true,remote_side:"left"}; }
   setConfig(c){ this._config=Object.assign({title:"Nuvio",columns:6,show_search:true,show_remote:true,remote_side:"left"},c||{}); this.render(); }
@@ -27,6 +27,7 @@ class NuvioCard extends HTMLElement {
     this._loading=false;this.render();
   }
   async selectItem(item){
+    this._returnView=this._view==="catalog"?"catalog":(this._view==="search"?"search":"home");
     this._item=item;this._details=null;this._season=item.season==null?null:Number(item.season);this._view="details";this._error="";this.render();
     if(!item.manifest_url)return;
     this._loading=true;this.render();
@@ -35,6 +36,40 @@ class NuvioCard extends HTMLElement {
       var ss=this.seasons(); if(ss.length&&!ss.includes(this._season))this._season=ss[0];
     }catch(e){this._error=e.message||"Could not load title details.";}
     this._loading=false;this.render();
+  }
+  async openCatalog(section){
+    if(!section||section.kind!=="catalog")return;
+    this._catalogSection=section;
+    this._catalogItems=Array.isArray(section.items)?section.items.slice():[];
+    this._catalogLoading=true;
+    this._view="catalog";
+    this._error="";
+    this.render();
+    try{
+      if(!section.manifest_url)throw new Error("This catalog is missing its addon reference. Refresh the card once after updating Nuvio.");
+      var r=await this.ws({
+        type:"nuvio/catalog",
+        manifest_url:section.manifest_url,
+        media_type:section.media_type||"movie",
+        catalog_id:section.catalog_id,
+        hide_unreleased:this._homePrefs.hide_unreleased_content===true
+      });
+      this._catalogItems=r.items||[];
+    }catch(e){
+      this._error=e.message||"Could not open this catalog.";
+    }
+    this._catalogLoading=false;
+    this.render();
+  }
+  catalogView(){
+    var s=this._catalogSection||{},cols=Number(this._config.columns)||6;
+    var title=this.homeRowTitle(s)||s.name||"Catalog";
+    var addon=s.addon?' <small>· '+this.esc(s.addon)+'</small>':"";
+    return '<div class="top catalog-top"><button class="back" id="back">← Home</button><h3>'+this.esc(title)+addon+'</h3></div>'+
+      (this._catalogLoading?'<div class="status">Loading catalog…</div>':
+        (this._catalogItems.length?
+          '<div class="grid catalog-grid" style="--cols:'+cols+'">'+this._catalogItems.map((x,i)=>this.card(x,"catalog",i)).join("")+'</div>':
+          '<div class="status">No titles were returned by this catalog.</div>'));
   }
   seasons(){var v=(this._details&&this._details.videos)||[];return [...new Set(v.map(x=>Number(x.season)).filter(Number.isFinite))].sort((a,b)=>a-b);}
   playData(ep){
