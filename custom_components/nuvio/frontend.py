@@ -309,6 +309,7 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
     collections: list[dict[str, Any]] = []
     library: list[dict[str, Any]] = []
     progress: list[dict[str, Any]] = []
+    watched_items: list[dict[str, Any]] = []
 
     if account is not None:
         results = await asyncio.gather(
@@ -317,6 +318,7 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
             account.async_home_catalog_settings(profile_id),
             account.async_profile_settings_blob(profile_id),
             account.async_collections(profile_id),
+            account.async_watched_items(profile_id),
             return_exceptions=True,
         )
         if not isinstance(results[0], Exception):
@@ -329,8 +331,11 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
             profile_settings = results[3]
         if not isinstance(results[4], Exception):
             collections = results[4]
+        if not isinstance(results[5], Exception):
+            watched_items = results[5]
 
     layout = _layout_settings(profile_settings)
+    trakt_settings = _feature_settings(profile_settings, "trakt_settings")
     home_prefs = _home_catalog_preferences(home_settings)
 
     selected_layout = str(layout.get("selected_layout") or "MODERN").strip().casefold()
@@ -530,12 +535,61 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
 
     sections: list[dict[str, Any]] = []
 
-    if continue_watching_enabled and progress:
+    if continue_watching_enabled:
         lib_index = {
             (str(x.get("content_type")), str(x.get("content_id"))): x for x in library
         }
+
+        def timestamp_ms(raw: Any) -> float:
+            try:
+                value = float(raw or 0)
+                # Nuvio stores epoch milliseconds. Be tolerant of epoch seconds.
+                return value * 1000 if 0 < value < 10_000_000_000 else value
+            except (TypeError, ValueError):
+                parsed = _parse_release_instant(raw)
+                return parsed.timestamp() * 1000 if parsed else 0.0
+
+        days_cap_raw = _decode_synced_value(
+            trakt_settings.get("continue_watching_days_cap", 60)
+        )
+        try:
+            days_cap = int(days_cap_raw)
+        except (TypeError, ValueError):
+            days_cap = 60
+        cutoff_ms = (
+            None
+            if days_cap == 0
+            else datetime.now(tz=timezone.utc).timestamp() * 1000
+            - max(7, min(365, days_cap)) * 86_400_000
+        )
+        show_unaired_next_up = _decode_synced_value(
+            layout.get("show_unaired_next_up", True)
+        ) is not False
+        prefer_furthest = _decode_synced_value(
+            layout.get("next_up_from_furthest_episode", True)
+        ) is not False
+        continue_sort_mode = str(
+            _decode_synced_value(layout.get("continue_watching_sort_mode", "DEFAULT"))
+            or "DEFAULT"
+        ).strip().upper()
+        dismissed_raw = _decode_synced_value(
+            trakt_settings.get("dismissed_next_up_keys", [])
+        )
+        if isinstance(dismissed_raw, (list, set, tuple)):
+            dismissed_next_up = {
+                str(value).strip().split("|", 1)[0]
+                for value in dismissed_raw
+                if str(value).strip()
+            }
+        else:
+            dismissed_next_up = set()
+
         active: list[dict[str, Any]] = []
         for item in progress:
+            if cutoff_ms is not None and timestamp_ms(
+                item.get("last_watched") or item.get("updated_at") or item.get("updatedAt")
+            ) < cutoff_ms:
+                continue
             try:
                 duration = int(item.get("duration") or item.get("duration_ms") or 0)
                 position = int(item.get("position") or item.get("position_ms") or 0)
@@ -545,24 +599,21 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
                 continue
             active.append(item)
 
-        def progress_sort_value(item: dict[str, Any]) -> float:
-            raw = (
-                item.get("last_watched")
-                or item.get("updated_at")
-                or item.get("updatedAt")
-                or 0
-            )
-            try:
-                return float(raw)
-            except (TypeError, ValueError):
-                parsed = _parse_release_instant(raw)
-                return parsed.timestamp() if parsed else 0.0
-
-        active.sort(key=progress_sort_value, reverse=True)
-        continue_items: list[dict[str, Any]] = []
-        for progress_item in active[:50]:
+        active.sort(
+            key=lambda item: timestamp_ms(
+                item.get("last_watched") or item.get("updated_at") or item.get("updatedAt")
+            ),
+            reverse=True,
+        )
+        in_progress_items: list[dict[str, Any]] = []
+        in_progress_series_ids: set[str] = set()
+        for progress_item in active[:300]:
             media_type = str(progress_item.get("content_type") or "movie")
             content_id = str(progress_item.get("content_id") or "")
+            if not content_id:
+                continue
+            if media_type.casefold() in {"series", "tv", "anime"}:
+                in_progress_series_ids.add(content_id)
             meta = lib_index.get((media_type, content_id), {})
             addon_base = meta.get("addon_base_url") or progress_item.get("addon_base_url")
             item = _item(
@@ -573,6 +624,7 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
                     "name": (
                         meta.get("name")
                         or meta.get("title")
+                        or progress_item.get("name")
                         or progress_item.get("title")
                         or content_id
                     ),
@@ -582,6 +634,7 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
                         or progress_item.get("background")
                         or progress_item.get("backdrop")
                     ),
+                    "logo": meta.get("logo") or progress_item.get("logo"),
                 },
                 media_type,
                 f"{str(addon_base).rstrip('/')}/manifest.json" if addon_base else None,
@@ -599,16 +652,240 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
                     or progress_item.get("position_ms"),
                     "duration": progress_item.get("duration")
                     or progress_item.get("duration_ms"),
+                    "_cw_kind": "in_progress",
+                    "_cw_sort": timestamp_ms(
+                        progress_item.get("last_watched")
+                        or progress_item.get("updated_at")
+                        or progress_item.get("updatedAt")
+                    ),
+                    "_cw_has_aired": True,
                 }
             )
-            continue_items.append(item)
-        if continue_items:
+            in_progress_items.append(item)
+
+        # Nuvio derives Next Up from watched episode history, then resolves each
+        # series against addon metadata. Limit to the same 32 expensive lookups
+        # used by the TV app.
+        watched_by_series: dict[str, list[dict[str, Any]]] = {}
+        for watched in watched_items:
+            content_type = str(watched.get("content_type") or "").casefold()
+            content_id = str(watched.get("content_id") or "").strip()
+            if content_type not in {"series", "tv", "anime"} or not content_id:
+                continue
+            if cutoff_ms is not None and timestamp_ms(watched.get("watched_at")) < cutoff_ms:
+                continue
+            try:
+                season = int(watched.get("season"))
+                episode = int(watched.get("episode"))
+            except (TypeError, ValueError):
+                continue
+            if season <= 0 or episode <= 0:
+                continue
+            watched_by_series.setdefault(content_id, []).append(watched)
+
+        async def resolve_series_meta(
+            content_id: str, content_type: str, saved: dict[str, Any]
+        ) -> tuple[Addon | None, dict[str, Any] | None]:
+            preferred_base = str(saved.get("addon_base_url") or "").rstrip("/")
+            preferred = next(
+                (addon for addon in addons if addon.base_url.rstrip("/") == preferred_base),
+                None,
+            )
+            candidates = ([preferred] if preferred is not None else []) + [
+                addon for addon in addons if addon is not preferred
+            ]
+            for addon in candidates:
+                try:
+                    async with semaphore:
+                        return addon, await api.async_meta(addon, content_type, content_id)
+                except NuvioApiError:
+                    continue
+            # Some addons expose TV metadata under series even when sync state
+            # identifies the content as tv/anime.
+            if content_type != "series":
+                for addon in candidates:
+                    try:
+                        async with semaphore:
+                            return addon, await api.async_meta(addon, "series", content_id)
+                    except NuvioApiError:
+                        continue
+            return None, None
+
+        next_up_semaphore = asyncio.Semaphore(4)
+        now_utc = datetime.now(tz=timezone.utc)
+
+        async def build_next_up(
+            content_id: str, history: list[dict[str, Any]]
+        ) -> dict[str, Any] | None:
+            if content_id in dismissed_next_up or content_id in in_progress_series_ids:
+                return None
+            sorted_history = sorted(
+                history,
+                key=lambda entry: (
+                    int(entry.get("season") or 0),
+                    int(entry.get("episode") or 0),
+                ),
+            )
+            if not sorted_history:
+                return None
+            if prefer_furthest:
+                seed = sorted_history[-1]
+            else:
+                seed = max(
+                    sorted_history,
+                    key=lambda entry: timestamp_ms(entry.get("watched_at")),
+                )
+            seed_season = int(seed.get("season") or 0)
+            seed_episode = int(seed.get("episode") or 0)
+            content_type = str(seed.get("content_type") or "series")
+            saved = (
+                lib_index.get((content_type, content_id))
+                or lib_index.get(("series", content_id))
+                or lib_index.get(("tv", content_id))
+                or {}
+            )
+            async with next_up_semaphore:
+                addon, meta = await resolve_series_meta(content_id, content_type, saved)
+            if addon is None or not isinstance(meta, dict):
+                return None
+
+            videos = [
+                video
+                for video in meta.get("videos") or []
+                if isinstance(video, dict)
+                and video.get("available") is not False
+                and video.get("season") is not None
+                and video.get("episode") is not None
+            ]
+            normalized_videos: list[tuple[int, int, dict[str, Any]]] = []
+            for video in videos:
+                try:
+                    season = int(video.get("season"))
+                    episode = int(video.get("episode"))
+                except (TypeError, ValueError):
+                    continue
+                if season <= 0 or episode <= 0:
+                    continue
+                normalized_videos.append((season, episode, video))
+            normalized_videos.sort(key=lambda value: (value[0], value[1]))
+            next_entry = next(
+                (
+                    value
+                    for value in normalized_videos
+                    if (value[0], value[1]) > (seed_season, seed_episode)
+                ),
+                None,
+            )
+            if next_entry is None:
+                return None
+            season, episode, video = next_entry
+            released_raw = video.get("released")
+            released_at = _parse_release_instant(released_raw)
+            has_aired = released_at is None or released_at <= now_utc
+            if not has_aired and not show_unaired_next_up:
+                return None
+
+            manifest_url = addon.manifest_url
+            item = _item(meta, str(meta.get("type") or content_type or "series"), manifest_url)
+            item.update(
+                {
+                    "season": season,
+                    "episode": episode,
+                    "video_id": video.get("id")
+                    or f"{content_id}:{season}:{episode}",
+                    "episode_title": video.get("title"),
+                    "episode_description": video.get("overview"),
+                    "episode_thumbnail": video.get("thumbnail"),
+                    "released": released_raw,
+                    "has_aired": has_aired,
+                    "position": 0,
+                    "duration": 0,
+                    "_cw_kind": "next_up",
+                    "_cw_has_aired": has_aired,
+                    "_cw_sort": (
+                        released_at.timestamp() * 1000
+                        if has_aired and released_at is not None
+                        else timestamp_ms(seed.get("watched_at"))
+                    ),
+                    "_cw_release": (
+                        released_at.timestamp() * 1000 if released_at is not None else 0
+                    ),
+                }
+            )
+            if not item.get("name"):
+                item["name"] = str(seed.get("title") or content_id)
+            return item
+
+        recent_series = sorted(
+            watched_by_series.items(),
+            key=lambda pair: max(
+                (timestamp_ms(value.get("watched_at")) for value in pair[1]),
+                default=0,
+            ),
+            reverse=True,
+        )[:32]
+        next_up_items = [
+            item
+            for item in await asyncio.gather(
+                *(build_next_up(content_id, history) for content_id, history in recent_series)
+            )
+            if item is not None
+        ]
+
+        combined: list[dict[str, Any]] = in_progress_items + next_up_items
+        deduped: list[dict[str, Any]] = []
+        seen_content: set[str] = set()
+        for item in combined:
+            content_id = str(item.get("id") or "")
+            if content_id and content_id in seen_content:
+                continue
+            if content_id:
+                seen_content.add(content_id)
+            deduped.append(item)
+
+        if continue_sort_mode == "STREAMING_STYLE":
+            released_items = [item for item in deduped if item.get("_cw_has_aired") is not False]
+            unreleased_items = [item for item in deduped if item.get("_cw_has_aired") is False]
+            released_items.sort(key=lambda item: float(item.get("_cw_sort") or 0), reverse=True)
+            unreleased_items.sort(
+                key=lambda item: float(item.get("_cw_release") or float("inf"))
+            )
+            main_cw = released_items + unreleased_items
+            upcoming_cw: list[dict[str, Any]] = []
+        elif continue_sort_mode == "SPLIT_UPCOMING":
+            main_cw = [item for item in deduped if item.get("_cw_has_aired") is not False]
+            upcoming_cw = [item for item in deduped if item.get("_cw_has_aired") is False]
+            main_cw.sort(key=lambda item: float(item.get("_cw_sort") or 0), reverse=True)
+            upcoming_cw.sort(
+                key=lambda item: float(item.get("_cw_release") or float("inf"))
+            )
+        else:
+            main_cw = deduped
+            main_cw.sort(key=lambda item: float(item.get("_cw_sort") or 0), reverse=True)
+            upcoming_cw = []
+
+        for item in main_cw + upcoming_cw:
+            item.pop("_cw_kind", None)
+            item.pop("_cw_has_aired", None)
+            item.pop("_cw_sort", None)
+            item.pop("_cw_release", None)
+
+        if main_cw:
             sections.append(
                 {
                     "id": "continue_watching",
                     "kind": "continue",
                     "name": "Continue Watching",
-                    "items": continue_items,
+                    "items": main_cw,
+                }
+            )
+        if upcoming_cw:
+            sections.append(
+                {
+                    "id": "upcoming_section",
+                    "kind": "upcoming",
+                    "name": "Upcoming",
+                    "items": upcoming_cw,
                 }
             )
 
