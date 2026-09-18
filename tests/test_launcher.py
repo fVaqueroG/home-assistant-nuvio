@@ -242,6 +242,43 @@ def test_paramount_provider_targets() -> None:
     assert requests[0][1]["params"]["contentId"] == "abcDEF123"
 
 
+def test_webos_provider_episode_context_and_app_maps() -> None:
+    requests = webos_provider_launch_requests(
+        "disney",
+        "https://www.disneyplus.com/browse/entity-12345678-1234-1234-1234-123456789abc",
+        media_type="series",
+        content_id="tt123",
+        video_id="tt123:2:4",
+        season=2,
+        episode=4,
+        episode_title="Episode Four",
+    )
+    assert requests
+    command, payload = requests[0]
+    assert command == "com.webos.applicationManager/launch"
+    assert payload["id"] == "com.disney.disneyplus-prod"
+    assert payload["params"]["sourceContentId"] == "tt123"
+    assert payload["params"]["sourceVideoId"] == "tt123:2:4"
+    assert payload["params"]["season"] == 2
+    assert payload["params"]["episode"] == 4
+    assert payload["params"]["episodeTitle"] == "Episode Four"
+
+    netflix = webos_provider_launch_requests(
+        "netflix",
+        "https://www.netflix.com/title/80014749",
+        media_type="series",
+        content_id="tt2861424",
+        video_id="tt2861424:9:1",
+        season=9,
+        episode=1,
+    )[0][1]
+    assert netflix["id"] == "netflix"
+    assert netflix["sourceContentId"] == "tt2861424"
+    assert netflix["videoId"] == "tt2861424:9:1"
+    assert netflix["season"] == 9
+    assert netflix["episode"] == 1
+
+
 def test_generic_provider_has_no_hardcoded_webos_payload() -> None:
     assert webos_provider_launch_payload(
         "unknown", "https://example.com/title"
