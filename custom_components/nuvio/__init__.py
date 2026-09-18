@@ -50,10 +50,13 @@ from .const import (
     CONF_PROFILE_ID,
     CONF_REFRESH_TOKEN,
     CONF_TMDB_ACCESS_TOKEN,
+    CONF_TVDB_API_KEY,
+    CONF_TVDB_SUBSCRIBER_PIN,
     DATA_ACCOUNT_API,
     DATA_API,
     DATA_DEBRID_RESOLVER,
     DATA_TMDB_API,
+    DATA_TVDB_API,
     DEFAULT_PACKAGE_NAME,
     DOMAIN,
     SERVICE_OPEN,
@@ -77,6 +80,7 @@ from .launcher import (
 from .frontend import async_register_frontend
 from .debrid import DebridResolver
 from .tmdb import TmdbWatchApi
+from .tvdb import TvdbApi
 
 type NuvioConfigEntry = ConfigEntry[dict[str, Any]]
 
@@ -234,6 +238,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
         DATA_TMDB_API: TmdbWatchApi(
             session,
             entry.data.get(CONF_TMDB_ACCESS_TOKEN, ""),
+        ),
+        DATA_TVDB_API: TvdbApi(
+            session,
+            entry.data.get(CONF_TVDB_API_KEY, ""),
+            entry.data.get(CONF_TVDB_SUBSCRIBER_PIN, ""),
         ),
     }
 
