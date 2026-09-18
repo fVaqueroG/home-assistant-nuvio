@@ -70,7 +70,7 @@ from .launcher import (
     provider_source_match,
     stream_intent_command,
     webos_launch_payload,
-    webos_provider_launch_payload,
+    webos_provider_launch_requests,
 )
 from .frontend import async_register_frontend
 from .debrid import DebridResolver
@@ -612,22 +612,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
                 )
 
             for entity_id in webos_ids:
-                exact_payload = (
-                    webos_provider_launch_payload(provider, external_url)
+                launch_requests = (
+                    webos_provider_launch_requests(provider, external_url)
                     if provider
-                    else None
+                    else []
                 )
-                if exact_payload is not None:
-                    await hass.services.async_call(
-                        "webostv",
-                        "command",
-                        {
-                            ATTR_ENTITY_ID: [entity_id],
-                            "command": "system.launcher/launch",
-                            "payload": exact_payload,
-                        },
-                        blocking=True,
-                    )
+                launched = False
+                for command, payload in launch_requests:
+                    try:
+                        await hass.services.async_call(
+                            "webostv",
+                            "command",
+                            {
+                                ATTR_ENTITY_ID: [entity_id],
+                                "command": command,
+                                "payload": payload,
+                            },
+                            blocking=True,
+                        )
+                    except HomeAssistantError:
+                        # App ids can vary across regions/generations. Try the
+                        # next known id before falling back to HA source launch.
+                        continue
+                    launched = True
+                    break
+                if launched:
                     continue
 
                 state = hass.states.get(entity_id)
