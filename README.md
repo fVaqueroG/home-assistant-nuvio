@@ -73,6 +73,19 @@ Android also receives the selected HA profile id and stream metadata. webOS
 queues the launch through profile/PIN selection when necessary, then enters the
 player after the profile is activated.
 
+### Nuvio Home mirroring
+
+The bundled card mirrors the active Nuvio profile's synchronized Home composition:
+
+- Home catalog order, disabled catalogs, and custom row titles
+- pinned and ordered collection rows with their folder artwork/tile shapes
+- Hero visibility and selected Hero catalog sources
+- Continue Watching visibility, card-layout preferences, and episode thumbnails
+- Nuvio watched-history based Next Up / Upcoming rows and Continue Watching sort mode
+- release filtering, poster labels, catalog type suffixes, and Modern landscape-poster preference
+
+The Home Assistant header/player/remote controls remain HA-specific. When Nuvio is configured to use an external tracking provider such as Trakt or Simkl for watch progress, provider-local progress that is not present in Nuvio's sync API can still make the app's dynamic Continue Watching row differ from the card.
+
 ## Lovelace card
 
 Version 0.3.0 adds a bundled dashboard card. After updating the integration and
