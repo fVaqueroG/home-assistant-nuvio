@@ -178,10 +178,12 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
 
         # Preferred path: sign in once with email/password, then persist only
         # Firebase renewable tokens. The password is never written to entry.data.
-        if email or password:
-            if not email or not password:
+        # On later reconfiguration, the prefilled email alone must not force a
+        # new login; the existing renewable session is reused below.
+        if password:
+            if not email:
                 raise JustWatchAuthError(
-                    "Enter both JustWatch email and password"
+                    "Enter the JustWatch email together with the password"
                 )
             api = JustWatchGraphQLApi(session)
             auth = await api.async_sign_in(email, password)
@@ -209,6 +211,11 @@ class NuvioConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_JUSTWATCH_REFRESH_TOKEN
                 ]
             return data
+
+        if email and not existing:
+            raise JustWatchAuthError(
+                "Enter the JustWatch password for the initial connection"
+            )
 
         existing_refresh = str(
             existing.get(CONF_JUSTWATCH_REFRESH_TOKEN, "") or ""
