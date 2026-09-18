@@ -13,7 +13,8 @@
           "debrid_provider": "Debrid provider",
           "debrid_api_key": "Debrid API key / token",
           "streaming_providers": "Streaming providers",
-          "watchhub_country": "WatchHub country"
+          "watchhub_country": "WatchHub country",
+          "tmdb_access_token": "TMDB API Read Access Token"
         },
         "data_description": {
           "package_name": "Use com.nuvio.app for Play Store builds or com.nuvio.tv for most GitHub/sideload builds.",
@@ -22,7 +23,8 @@
           "debrid_provider": "Optional. With a linked Nuvio account, Home Assistant automatically uses supported debrid credentials synced for the profile. Select a provider here only as a local override.",
           "debrid_api_key": "Optional when your Nuvio account already has synced debrid. Stored only in Home Assistant when provided.",
           "streaming_providers": "Choose the WatchHub providers you want to show. The list includes a broad provider catalog, providers discovered from your synced Nuvio Streaming collection, and also lets you type a provider that is not listed. Leave it empty to show all.",
-          "watchhub_country": "Filters WatchHub availability to the selected country. Defaults to the country configured in Home Assistant."
+          "watchhub_country": "Filters WatchHub availability to the selected country. Defaults to the country configured in Home Assistant.",
+          "tmdb_access_token": "Optional. Enables the available-provider row using TMDB/JustWatch data. It uses the same country and streaming-provider selections above."
         }
       },
       "reconfigure": {
@@ -35,7 +37,8 @@
           "debrid_api_key": "Debrid API key / token",
           "package_name": "Android Nuvio package",
           "streaming_providers": "Streaming providers",
-          "watchhub_country": "WatchHub country"
+          "watchhub_country": "WatchHub country",
+          "tmdb_access_token": "TMDB API Read Access Token"
         },
         "data_description": {
           "profile_id": "Profile 1 is the primary profile. Use 2–5 for another profile.",
@@ -44,7 +47,8 @@
           "debrid_api_key": "Leave blank to use Nuvio-synced credentials or keep an existing local override.",
           "package_name": "Use com.nuvio.tv for the normal full app, or com.nuviodebug.com for the fork test build that supports exact Home Assistant player launches.",
           "streaming_providers": "Choose the WatchHub providers you want to show. The list includes a broad provider catalog, providers discovered from your synced Nuvio Streaming collection, and also lets you type a provider that is not listed. Leave it empty to show all.",
-          "watchhub_country": "Filters WatchHub availability to the selected country. Defaults to the country configured in Home Assistant."
+          "watchhub_country": "Filters WatchHub availability to the selected country. Defaults to the country configured in Home Assistant.",
+          "tmdb_access_token": "Optional. Enables the available-provider row using TMDB/JustWatch data. It uses the same country and streaming-provider selections above."
         }
       },
       "device": {
@@ -62,7 +66,8 @@
       "login_start_failed": "Could not start Nuvio account authorization",
       "login_pending": "Nuvio has not approved this code yet. Authorize it and try Continue again.",
       "login_connection_failed": "Could not check the Nuvio authorization. Check the connection and try again.",
-      "debrid_key_required": "Enter an API key/token for the selected debrid provider."
+      "debrid_key_required": "Enter an API key/token for the selected debrid provider.",
+      "tmdb_token_invalid": "TMDB rejected the access token. Use a valid API Read Access Token."
     },
     "abort": {
       "single_instance_allowed": "Nuvio is already configured",
