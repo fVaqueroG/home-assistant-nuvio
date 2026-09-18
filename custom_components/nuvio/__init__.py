@@ -53,6 +53,8 @@ from .const import (
     CONF_TMDB_ACCESS_TOKEN,
     CONF_TVDB_API_KEY,
     CONF_TVDB_SUBSCRIBER_PIN,
+    CONF_JUSTWATCH_ACCESS_TOKEN,
+    CONF_JUSTWATCH_REFRESH_TOKEN,
     DATA_ACCOUNT_API,
     DATA_API,
     DATA_DEBRID_RESOLVER,
@@ -207,6 +209,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
             },
         )
 
+    async def justwatch_token_updated(token_data: dict[str, str]) -> None:
+        """Persist rotated JustWatch Firebase tokens."""
+        data = {
+            **entry.data,
+            CONF_JUSTWATCH_ACCESS_TOKEN: token_data.get("access_token")
+            or entry.data.get(CONF_JUSTWATCH_ACCESS_TOKEN, ""),
+            CONF_JUSTWATCH_REFRESH_TOKEN: token_data.get("refresh_token")
+            or entry.data.get(CONF_JUSTWATCH_REFRESH_TOKEN, ""),
+        }
+        hass.config_entries.async_update_entry(entry, data=data)
+
     synced_debrid_credentials: dict[str, str] = {}
     if refresh_token := entry.data.get(CONF_REFRESH_TOKEN):
         account_api = NuvioAccountApi(
@@ -250,7 +263,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
             entry.data.get(CONF_TVDB_API_KEY, ""),
             entry.data.get(CONF_TVDB_SUBSCRIBER_PIN, ""),
         ),
-        DATA_JUSTWATCH_API: JustWatchGraphQLApi(session),
+        DATA_JUSTWATCH_API: JustWatchGraphQLApi(
+            session,
+            access_token=entry.data.get(CONF_JUSTWATCH_ACCESS_TOKEN),
+            refresh_token=entry.data.get(CONF_JUSTWATCH_REFRESH_TOKEN),
+            token_updated=justwatch_token_updated,
+        ),
     }
 
     if not hass.services.has_service(DOMAIN, SERVICE_OPEN):
