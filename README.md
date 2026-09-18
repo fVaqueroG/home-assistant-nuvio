@@ -194,6 +194,10 @@ WatchHub currently exposes streaming-provider availability for series at the **s
 
 Nuvio still sends the selected `video_id`, season, episode, and episode title to provider launchers as contextual hints. WatchHub series-provider rows are labeled **Series-level** so the UI does not imply that the returned provider URL is episode-specific.
 
+## Persistent reconfiguration
+
+Reconfiguring Nuvio preserves the existing integration data and credentials. TMDB, TheTVDB, and local debrid credentials are shown back as masked suggested values instead of blank fields, and leaving them unchanged keeps the stored values. Streaming-provider selections, country, package/profile settings, linked Nuvio account state, and the saved JustWatch renewable session also remain intact unless they are explicitly changed or disconnected.
+
 ## JustWatch account session
 
 Nuvio can use your **signed-in JustWatch account as the authoritative provider-link source**.
@@ -258,7 +262,7 @@ For Netflix, Prime Video, Disney+, Max, Crunchyroll, and Paramount+, Nuvio now a
 - The first LG request mirrors `aiowebostv.launch_app_with_content_id()`: `system.launcher/launch` with only `id` and `contentId`.
 - Netflix uses `m=https://www.netflix.com/watch/<videoId>&source_type=4` when a numeric Netflix ID is available.
 - Prime Video, Crunchyroll, and Paramount+ receive the resolved provider URL itself as `contentId`.
-- **Disney+** uses the LG Application Manager deep-link contract directly. Nuvio first tries app id `cdp-uwp-native` with `params.contentTarget=https://www.disneyplus.com/video/<UUID>` when a Disney UUID can be extracted, then retries the original JustWatch Disney URL and the installed `com.disney.disneyplus-prod` app-id variant.
+- **Disney+** uses the LG Application Manager with the installed LG app id `com.disney.disneyplus-prod`. Nuvio preserves the exact authenticated JustWatch destination as `params.contentTarget`/`target` and includes the extracted Disney UUID as both `contentId` and `entityId` when available. It no longer rewrites JustWatch URLs to a guessed `/video/<UUID>` path.
 - **Max** uses the LG Application Manager directly. Nuvio first tries `com.wbd.stream` with `params.contentId=<Max content id>`, then retries the provider URL as `params.contentTarget`. Legacy fallbacks include `com.hbo.hbomax` and `hbo-go-2`. For `play.max.com/video/watch/<videoId>/<editId>` links, the first UUID is treated as the playable Max content/video id.
 - The older Nuvio provider-specific parameter bundle remains a service-level fallback for providers that still use the generic launcher path.
 - LG native content search remains the final fallback when direct launch requests are rejected.
