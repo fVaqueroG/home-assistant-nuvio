@@ -14,6 +14,8 @@ from custom_components.nuvio.launcher import (
     webos_launch_payload,
     webos_provider_launch_payload,
     webos_provider_launch_requests,
+    webos_provider_prefers_native_search,
+    webos_provider_search_query,
 )
 
 
@@ -283,6 +285,61 @@ def test_webos_provider_episode_context_and_app_maps() -> None:
     assert netflix["videoId"] == "tt2861424:9:1"
     assert netflix["season"] == 9
     assert netflix["episode"] == 1
+
+
+def test_webos_native_provider_search_query() -> None:
+    assert (
+        webos_provider_search_query(
+            "Severance",
+            media_type="series",
+            season=2,
+            episode=4,
+            episode_title="Woe's Hollow",
+        )
+        == "Severance S02E04 Woe's Hollow"
+    )
+    assert webos_provider_search_query("Project Hail Mary", media_type="movie") == (
+        "Project Hail Mary"
+    )
+
+
+def test_webos_native_provider_search_policy() -> None:
+    for provider in ("prime", "disney", "max", "crunchyroll", "paramount"):
+        assert webos_provider_prefers_native_search(
+            provider,
+            "https://example.com/title",
+            title="A Title",
+            media_type="movie",
+        )
+
+    assert not webos_provider_prefers_native_search(
+        "apple",
+        "https://tv.apple.com/movie/example/umc.cmc.example",
+        title="A Title",
+        media_type="movie",
+    )
+    assert not webos_provider_prefers_native_search(
+        "netflix",
+        "https://www.netflix.com/watch/81234567",
+        title="A Show",
+        media_type="series",
+        season=1,
+        episode=2,
+    )
+    assert webos_provider_prefers_native_search(
+        "netflix",
+        "https://www.netflix.com/title/80014749",
+        title="A Show",
+        media_type="series",
+        season=1,
+        episode=2,
+    )
+    assert not webos_provider_prefers_native_search(
+        "prime",
+        "https://watch.amazon.com/detail?gti=abc",
+        title="",
+        media_type="movie",
+    )
 
 
 def test_generic_provider_has_no_hardcoded_webos_payload() -> None:
