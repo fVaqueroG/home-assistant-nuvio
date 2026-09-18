@@ -26,6 +26,7 @@ from homeassistant.helpers.entity_registry import async_get as async_get_entity_
 from .account import NuvioAuthError
 from .api import Addon, NuvioApiError
 from .debrid import DebridNotCached, DebridNotConfigured, DebridResolveError
+from .tmdb import TmdbApiError
 from .providers import (
     normalize_provider_text,
     normalize_selected_provider,
@@ -38,6 +39,7 @@ from .const import (
     DATA_ACCOUNT_API,
     DATA_API,
     DATA_DEBRID_RESOLVER,
+    DATA_TMDB_API,
     DEFAULT_STREAMING_PROVIDERS,
     DEFAULT_WATCHHUB_COUNTRY,
     DOMAIN,
@@ -1896,6 +1898,67 @@ async def ws_resolve_stream(hass, connection, msg) -> None:
 
 
 @websocket_api.websocket_command({
+    probatio.Required("type"): "nuvio/watch_providers",
+    probatio.Required("media_type"): probatio.In(["movie", "series"]),
+    probatio.Required("content_id"): str,
+    probatio.Optional("season"): probatio.Coerce(int),
+})
+@websocket_api.async_response
+async def ws_watch_providers(hass, connection, msg) -> None:
+    """Return configured-country streaming availability from TMDB/JustWatch."""
+    try:
+        entry = _entry(hass)
+        api = entry.runtime_data.get(DATA_TMDB_API)
+        region = str(
+            entry.data.get(CONF_WATCHHUB_COUNTRY)
+            or getattr(hass.config, "country", None)
+            or DEFAULT_WATCHHUB_COUNTRY
+        ).upper()
+        if api is None or not api.configured:
+            connection.send_result(
+                msg["id"],
+                {
+                    "configured": False,
+                    "region": region,
+                    "scope": None,
+                    "providers": [],
+                    "link": None,
+                    "attribution": None,
+                },
+            )
+            return
+
+        result = await api.async_watch_providers(
+            media_type=msg["media_type"],
+            content_id=msg["content_id"],
+            region=region,
+            season=msg.get("season"),
+        )
+        selected = _selected_streaming_providers(entry)
+        providers: list[dict[str, Any]] = []
+        for raw in result.get("providers") or []:
+            if not isinstance(raw, dict):
+                continue
+            provider = dict(raw)
+            key = streaming_provider_key(provider.get("name"))
+            if selected and key not in selected:
+                continue
+            provider["provider_key"] = key
+            providers.append(provider)
+
+        connection.send_result(
+            msg["id"],
+            {
+                **result,
+                "providers": providers,
+                "attribution": "Availability data by JustWatch via TMDB",
+            },
+        )
+    except TmdbApiError as err:
+        connection.send_error(msg["id"], "tmdb_error", str(err))
+
+
+@websocket_api.websocket_command({
     probatio.Required("type"): "nuvio/details",
     probatio.Required("manifest_url"): str,
     probatio.Required("media_type"): probatio.In(["movie", "series"]),
@@ -1987,5 +2050,6 @@ async def async_register_frontend(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_search)
     websocket_api.async_register_command(hass, ws_streams)
     websocket_api.async_register_command(hass, ws_resolve_stream)
+    websocket_api.async_register_command(hass, ws_watch_providers)
     websocket_api.async_register_command(hass, ws_details)
     data[DATA_FRONTEND_REGISTERED] = True
