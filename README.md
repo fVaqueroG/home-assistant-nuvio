@@ -194,6 +194,21 @@ WatchHub currently exposes streaming-provider availability for series at the **s
 
 Nuvio still sends the selected `video_id`, season, episode, and episode title to provider launchers as contextual hints. WatchHub series-provider rows are labeled **Series-level** so the UI does not imply that the returned provider URL is episode-specific.
 
+## Unofficial JustWatch offer links
+
+Nuvio can now query JustWatch's current **unofficial web GraphQL endpoint** directly, without a JustWatch account or paid partner API token. This integration uses only public title/season/episode offer data and does not log in to or scrape a user's JustWatch account.
+
+For the **Available on** row, TMDB/JustWatch availability remains the country/provider authority. Playback-link resolution is now:
+
+1. **Unofficial JustWatch GraphQL offer URL** for the exact movie or, when available, exact episode.
+2. **TheTVDB** provider remote URL when configured and JustWatch has no usable offer URL.
+3. **WatchHub** provider URL as the final fallback.
+4. Availability-only icon when none of those sources provides a usable URL.
+
+For episodes, Nuvio searches the JustWatch show, resolves the requested season and episode node, and uses that episode's own offers rather than silently substituting a show-level URL. This is specifically intended to improve exact-episode launches where WatchHub only returns the series page.
+
+The JustWatch GraphQL endpoint is unofficial and can change without notice. Any JustWatch request failure is isolated: Sources and the provider row continue using TMDB, TheTVDB, and WatchHub fallbacks rather than failing the card.
+
 ## TMDB / JustWatch availability row
 
 Optionally configure a **TMDB API Read Access Token** from **Settings → Devices & services → Nuvio → Reconfigure** to add an **Available on** provider-logo row above Sources.
