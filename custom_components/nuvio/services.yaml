@@ -166,6 +166,23 @@ play_source:
       selector:
         text:
 
+
+play_provider:
+  name: Play streaming provider
+  description: Open an external streaming-platform title in the provider's installed TV app.
+  target:
+    entity:
+      domain: media_player
+  fields:
+    external_url:
+      required: true
+      selector:
+        text:
+          type: url
+    provider_name:
+      selector:
+        text:
+
 remote_key:
   name: Remote key
   description: Send a navigation key to the selected Android TV or LG webOS media player.
