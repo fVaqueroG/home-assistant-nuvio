@@ -559,7 +559,7 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
         cutoff_ms = (
             None
             if days_cap == 0
-            else datetime.now(tz=timezone.utc).timestamp() * 1000
+            else datetime.now(tz=UTC).timestamp() * 1000
             - max(7, min(365, days_cap)) * 86_400_000
         )
         show_unaired_next_up = _decode_synced_value(
@@ -712,7 +712,7 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
             return None, None
 
         next_up_semaphore = asyncio.Semaphore(4)
-        now_utc = datetime.now(tz=timezone.utc)
+        now_utc = datetime.now(tz=UTC)
 
         async def build_next_up(
             content_id: str, history: list[dict[str, Any]]
