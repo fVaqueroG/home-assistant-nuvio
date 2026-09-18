@@ -282,6 +282,12 @@ def _dedupe_catalog_items(
 
 
 async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]:
+    """Return the same Home composition Nuvio builds for the active profile.
+
+    The TV apps use three synchronized sources for Home: profile layout settings,
+    Home catalog settings, and collections.  Keep the Lovelace card aligned with
+    those sources instead of inventing a separate Home ordering.
+    """
     domain_data = hass.data.setdefault(DOMAIN, {})
     cached = domain_data.get(DATA_HOME_CACHE)
     now_monotonic = time.monotonic()
@@ -291,14 +297,14 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
     entry = _entry(hass)
     api = entry.runtime_data[DATA_API]
     account = entry.runtime_data.get(DATA_ACCOUNT_API)
-    sections: list[dict[str, Any]] = []
+    profile_id = int(entry.data.get(CONF_PROFILE_ID, 1))
+
     home_settings: dict[str, Any] = {}
     profile_settings: dict[str, Any] = {}
     collections: list[dict[str, Any]] = []
-    profile_id = int(entry.data.get(CONF_PROFILE_ID, 1))
-
     library: list[dict[str, Any]] = []
     progress: list[dict[str, Any]] = []
+
     if account is not None:
         results = await asyncio.gather(
             account.async_library(profile_id),
@@ -321,19 +327,209 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
 
     layout = _layout_settings(profile_settings)
     home_prefs = _home_catalog_preferences(home_settings)
+
+    selected_layout = str(layout.get("selected_layout") or "MODERN").strip().casefold()
+    continue_watching_enabled = _decode_synced_value(
+        layout.get("continue_watching_enabled", True)
+    ) is not False
+    hero_section_enabled = _decode_synced_value(
+        layout.get("hero_section_enabled", True)
+    ) is not False
+    hero_catalog_keys = _home_string_list(layout.get("hero_catalog_keys"))
+    if not hero_catalog_keys:
+        hero_catalog_keys = _home_string_list(layout.get("hero_catalog_key"))
+
     hide_unreleased = (
         bool(home_settings.get("hide_unreleased_content"))
         if "hide_unreleased_content" in home_settings
-        else bool(layout.get("hide_unreleased_content", False))
+        else bool(_decode_synced_value(layout.get("hide_unreleased_content", False)))
     )
 
-    # Nuvio renders Continue Watching independently before catalog rows. It
-    # does not inject "My Library" as a Home row.
-    if progress:
+    # Android keeps full Modern rows, while Classic/Grid cap the Home preview
+    # at 24 items before See All.  The Smart-TV Modern implementation uses 15.
+    row_limit = 15 if selected_layout == "modern" else 24
+
+    addons = await api.async_addons(refresh=refresh)
+    addon_by_id = {_addon_id(addon): addon for addon in addons}
+
+    catalog_specs: list[tuple[Addon, dict[str, Any], str, str, str, int]] = []
+    default_catalog_keys: list[str] = []
+    catalog_spec_by_key: dict[str, tuple[Addon, dict[str, Any], str, str, str, int]] = {}
+    manifest_index = 0
+    for addon in addons:
+        for catalog in addon.manifest.get("catalogs", []):
+            if not isinstance(catalog, dict) or not _catalog_should_show_on_home(catalog):
+                continue
+            media_type = str(catalog.get("type") or "").strip()
+            catalog_id = str(catalog.get("id") or "").strip()
+            if not media_type or not catalog_id:
+                continue
+            key = _catalog_key(addon, media_type, catalog_id)
+            spec = (addon, catalog, media_type, catalog_id, key, manifest_index)
+            catalog_spec_by_key[key] = spec
+            default_catalog_keys.append(key)
+            manifest_index += 1
+
+            disable_key = (
+                f"{addon.base_url}_{media_type}_{catalog_id}_"
+                f"{str(catalog.get('name') or catalog_id)}"
+            )
+            if key in home_prefs["disabled"] or disable_key in home_prefs["disabled"]:
+                continue
+            catalog_specs.append(spec)
+
+    semaphore = asyncio.Semaphore(8)
+    loaded_sections: dict[str, dict[str, Any]] = {}
+
+    async def load_catalog_spec(
+        spec: tuple[Addon, dict[str, Any], str, str, str, int],
+        *,
+        include_if_disabled: bool = False,
+    ) -> dict[str, Any] | None:
+        addon, catalog, media_type, catalog_id, key, _manifest_index = spec
+        if key in loaded_sections:
+            return loaded_sections[key]
+        if not include_if_disabled:
+            disable_key = (
+                f"{addon.base_url}_{media_type}_{catalog_id}_"
+                f"{str(catalog.get('name') or catalog_id)}"
+            )
+            if key in home_prefs["disabled"] or disable_key in home_prefs["disabled"]:
+                return None
+        try:
+            async with semaphore:
+                metas = await api.async_catalog(addon, media_type, catalog_id)
+        except NuvioApiError:
+            return None
+
+        items = _dedupe_catalog_items(
+            metas,
+            media_type,
+            addon.manifest_url,
+            hide_unreleased=hide_unreleased,
+            limit=row_limit,
+        )
+        if not items:
+            return None
+        section = {
+            "id": key,
+            "kind": "catalog",
+            "name": home_prefs["custom_titles"].get(key)
+            or str(catalog.get("name") or catalog_id),
+            "addon": addon.name,
+            "addon_id": _addon_id(addon),
+            "media_type": media_type,
+            "catalog_id": catalog_id,
+            "items": items,
+        }
+        loaded_sections[key] = section
+        return section
+
+    # Load Home rows concurrently.
+    loaded_home = await asyncio.gather(
+        *(load_catalog_spec(spec) for spec in catalog_specs)
+    )
+    for section in loaded_home:
+        if section:
+            loaded_sections[section["id"]] = section
+
+    # Hero catalogs are independent of Home row visibility in Nuvio.  A catalog
+    # selected for Hero can remain hidden as a normal Home row.
+    if hero_section_enabled and hero_catalog_keys:
+        hero_specs = [
+            catalog_spec_by_key[key]
+            for key in hero_catalog_keys
+            if key in catalog_spec_by_key
+        ]
+        hero_loaded = await asyncio.gather(
+            *(load_catalog_spec(spec, include_if_disabled=True) for spec in hero_specs)
+        )
+        for section in hero_loaded:
+            if section:
+                loaded_sections[section["id"]] = section
+
+    # Collections are Home rows of folder tiles, not media-title rows.  Keep
+    # their exact synchronized identity/order metadata for the card.
+    collections_by_key: dict[str, dict[str, Any]] = {}
+    collection_keys: list[str] = []
+    for collection in collections:
+        collection_id = str(collection.get("id") or "").strip()
+        if not collection_id:
+            continue
+        key = f"collection_{collection_id}"
+        collection_keys.append(key)
+        folders: list[dict[str, Any]] = []
+        for folder in collection.get("folders") or []:
+            if not isinstance(folder, dict):
+                continue
+            folder_id = str(folder.get("id") or "").strip()
+            title = str(folder.get("title") or "").strip()
+            if not folder_id or not title:
+                continue
+            folders.append(
+                {
+                    "id": folder_id,
+                    "folder_id": folder_id,
+                    "collection_id": collection_id,
+                    "type": "collection_folder",
+                    "name": title,
+                    "poster": folder.get("coverImageUrl") or folder.get("cover_image_url"),
+                    "focus_gif": folder.get("focusGifUrl") or folder.get("focus_gif_url"),
+                    "focus_gif_enabled": folder.get("focusGifEnabled", True) is not False,
+                    "cover_emoji": folder.get("coverEmoji") or folder.get("cover_emoji"),
+                    "posterShape": str(
+                        folder.get("tileShape") or folder.get("tile_shape") or "SQUARE"
+                    ).upper(),
+                    "hide_title": folder.get("hideTitle", False) is True,
+                    "hero_backdrop": folder.get("heroBackdropUrl")
+                    or folder.get("hero_backdrop_url"),
+                    "hero_video": folder.get("heroVideoUrl")
+                    or folder.get("hero_video_url"),
+                    "title_logo": folder.get("titleLogoUrl")
+                    or folder.get("title_logo_url"),
+                    "sources": folder.get("sources")
+                    or folder.get("catalogSources")
+                    or [],
+                }
+            )
+        collections_by_key[key] = {
+            "id": key,
+            "kind": "collection",
+            "name": home_prefs["custom_titles"].get(key)
+            or str(collection.get("title") or "Collection"),
+            "collection_id": collection_id,
+            "backdrop": collection.get("backdropImageUrl")
+            or collection.get("backdrop_image_url"),
+            "pin_to_top": collection.get("pinToTop", False) is True,
+            "focus_glow_enabled": collection.get("focusGlowEnabled", True) is not False,
+            "view_mode": collection.get("viewMode") or collection.get("view_mode"),
+            "show_all_tab": collection.get("showAllTab", True) is not False,
+            "items": folders,
+        }
+
+    # Rebuild the exact Home row ordering rule:
+    # pinned collections first; then synchronized order; then newly discovered
+    # addon catalogs; then newly discovered collections.
+    available_keys = set(default_catalog_keys) | set(collection_keys)
+    saved_order = []
+    seen_order: set[str] = set()
+    for key in home_prefs["order"]:
+        if key in available_keys and key not in seen_order:
+            seen_order.add(key)
+            saved_order.append(key)
+    effective_order = (
+        saved_order
+        + [key for key in default_catalog_keys if key not in seen_order]
+        + [key for key in collection_keys if key not in seen_order]
+    )
+
+    sections: list[dict[str, Any]] = []
+
+    if continue_watching_enabled and progress:
         lib_index = {
             (str(x.get("content_type")), str(x.get("content_id"))): x for x in library
         }
-        active = []
+        active: list[dict[str, Any]] = []
         for item in progress:
             try:
                 duration = int(item.get("duration") or item.get("duration_ms") or 0)
@@ -343,17 +539,23 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
             if duration <= 0 or position <= 0 or position >= duration * 0.95:
                 continue
             active.append(item)
-        active.sort(
-            key=lambda item: int(
+
+        def progress_sort_value(item: dict[str, Any]) -> float:
+            raw = (
                 item.get("last_watched")
                 or item.get("updated_at")
                 or item.get("updatedAt")
                 or 0
-            ),
-            reverse=True,
-        )
+            )
+            try:
+                return float(raw)
+            except (TypeError, ValueError):
+                parsed = _parse_release_instant(raw)
+                return parsed.timestamp() if parsed else 0.0
+
+        active.sort(key=progress_sort_value, reverse=True)
         continue_items: list[dict[str, Any]] = []
-        for progress_item in active[:30]:
+        for progress_item in active[:50]:
             media_type = str(progress_item.get("content_type") or "movie")
             content_id = str(progress_item.get("content_id") or "")
             meta = lib_index.get((media_type, content_id), {})
@@ -384,6 +586,10 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
                     "season": progress_item.get("season"),
                     "episode": progress_item.get("episode"),
                     "video_id": progress_item.get("video_id"),
+                    "episode_title": progress_item.get("episode_title")
+                    or progress_item.get("episodeTitle"),
+                    "episode_thumbnail": progress_item.get("thumbnail")
+                    or progress_item.get("episode_thumbnail"),
                     "position": progress_item.get("position")
                     or progress_item.get("position_ms"),
                     "duration": progress_item.get("duration")
@@ -394,85 +600,81 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
         if continue_items:
             sections.append(
                 {
-                    "id": "continue",
+                    "id": "continue_watching",
                     "kind": "continue",
                     "name": "Continue Watching",
                     "items": continue_items,
                 }
             )
 
-    catalog_specs: list[tuple[Addon, dict[str, Any], str, str, str, int]] = []
-    manifest_index = 0
-    for addon in await api.async_addons(refresh=refresh):
-        for catalog in addon.manifest.get("catalogs", []):
-            if not isinstance(catalog, dict) or not _catalog_should_show_on_home(catalog):
-                continue
-            media_type = str(catalog.get("type") or "").strip()
-            catalog_id = str(catalog.get("id") or "").strip()
-            if not media_type or not catalog_id:
-                continue
-            key = _catalog_key(addon, media_type, catalog_id)
-            disable_key = (
-                f"{addon.base_url}_{media_type}_{catalog_id}_"
-                f"{str(catalog.get('name') or catalog_id)}"
-            )
-            if key in home_prefs["disabled"] or disable_key in home_prefs["disabled"]:
-                continue
-            catalog_specs.append(
-                (addon, catalog, media_type, catalog_id, key, manifest_index)
-            )
-            manifest_index += 1
+    added_collections: set[str] = set()
+    for key in collection_keys:
+        collection = collections_by_key.get(key)
+        if (
+            collection
+            and collection["pin_to_top"]
+            and key not in home_prefs["disabled"]
+            and collection["collection_id"] not in added_collections
+        ):
+            sections.append(collection)
+            added_collections.add(collection["collection_id"])
 
-    order_index = {
-        key: index for index, key in enumerate(home_prefs["order"])
-    }
-    catalog_specs.sort(
-        key=lambda spec: (
-            order_index.get(spec[4], len(order_index) + spec[5]),
-            spec[5],
+    for key in effective_order:
+        if key in home_prefs["disabled"]:
+            continue
+        if key.startswith("collection_"):
+            collection = collections_by_key.get(key)
+            if (
+                collection
+                and not collection["pin_to_top"]
+                and collection["collection_id"] not in added_collections
+            ):
+                sections.append(collection)
+                added_collections.add(collection["collection_id"])
+            continue
+        section = loaded_sections.get(key)
+        if section is not None:
+            sections.append(section)
+
+    # Build Nuvio's Hero candidate pool.  It distributes at most seven items
+    # across the selected Hero catalogs; if none are selected, it falls back
+    # to visible Home catalogs with artwork.
+    hero_rows: list[dict[str, Any]] = []
+    if hero_section_enabled:
+        if hero_catalog_keys:
+            hero_rows = [
+                loaded_sections[key] for key in hero_catalog_keys if key in loaded_sections
+            ]
+        else:
+            hero_rows = [section for section in sections if section.get("kind") == "catalog"]
+
+    def has_hero_artwork(item: dict[str, Any]) -> bool:
+        return bool(
+            item.get("background")
+            or item.get("landscapePoster")
+            or item.get("poster")
         )
-    )
 
-    semaphore = asyncio.Semaphore(8)
-
-    async def load_section(
-        addon: Addon,
-        catalog: dict[str, Any],
-        media_type: str,
-        catalog_id: str,
-        key: str,
-        _manifest_index: int,
-    ) -> dict[str, Any] | None:
-        try:
-            async with semaphore:
-                metas = await api.async_catalog(addon, media_type, catalog_id)
-        except NuvioApiError:
-            return None
-        items = _dedupe_catalog_items(
-            metas,
-            media_type,
-            addon.manifest_url,
-            hide_unreleased=hide_unreleased,
-            limit=15,
-        )
-        if not items:
-            return None
-        return {
-            "id": key,
-            "kind": "catalog",
-            "name": home_prefs["custom_titles"].get(key)
-            or str(catalog.get("name") or catalog_id),
-            "addon": addon.name,
-            "addon_id": _addon_id(addon),
-            "media_type": media_type,
-            "catalog_id": catalog_id,
-            "items": items,
-        }
-
-    catalog_sections = await asyncio.gather(
-        *(load_section(*spec) for spec in catalog_specs)
-    )
-    sections.extend(section for section in catalog_sections if section is not None)
+    hero_items: list[dict[str, Any]] = []
+    if hero_rows:
+        total_rows = len(hero_rows)
+        base_slot = 7 // max(1, total_rows)
+        remainder = 7 % max(1, total_rows)
+        seen_hero: set[str] = set()
+        for index, row in enumerate(hero_rows):
+            slot = base_slot + (1 if index < remainder else 0)
+            candidates = [item for item in row.get("items", []) if has_hero_artwork(item)]
+            if not candidates and hero_catalog_keys:
+                candidates = list(row.get("items", []))
+            for item in candidates:
+                identity = str(item.get("id") or "")
+                if not identity or identity in seen_hero:
+                    continue
+                seen_hero.add(identity)
+                hero_items.append(item)
+                slot -= 1
+                if slot <= 0:
+                    break
 
     registry = async_get_entity_registry(hass)
     players: list[dict[str, Any]] = []
@@ -494,22 +696,54 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
         )
     players.sort(key=lambda value: value["name"].casefold())
 
-    selected_layout = str(layout.get("selected_layout") or "MODERN").strip().casefold()
     preferences = {
         "layout": selected_layout,
-        "show_poster_labels": layout.get("poster_labels_enabled", True) is not False,
+        "hero_section_enabled": hero_section_enabled,
+        "continue_watching_enabled": continue_watching_enabled,
+        "show_poster_labels": _decode_synced_value(
+            layout.get("poster_labels_enabled", True)
+        ) is not False,
         "show_catalog_addon_name": (
             selected_layout == "classic"
-            and layout.get("catalog_addon_name_enabled", True) is not False
+            and _decode_synced_value(layout.get("catalog_addon_name_enabled", True))
+            is not False
         ),
-        "show_catalog_type_suffix": layout.get("catalog_type_suffix_enabled", True) is not False,
+        "show_catalog_type_suffix": _decode_synced_value(
+            layout.get("catalog_type_suffix_enabled", True)
+        ) is not False,
+        "modern_landscape_posters_enabled": _decode_synced_value(
+            layout.get("modern_landscape_posters_enabled", False)
+        ) is True,
+        "use_episode_thumbnails_in_cw": _decode_synced_value(
+            layout.get("use_episode_thumbnails_in_cw", True)
+        ) is not False,
+        "show_full_release_date": _decode_synced_value(
+            layout.get("show_full_release_date", True)
+        ) is not False,
+        "poster_card_width_dp": _decode_synced_value(
+            layout.get("poster_card_width_dp", 126)
+        ),
+        "poster_card_height_dp": _decode_synced_value(
+            layout.get("poster_card_height_dp", 189)
+        ),
+        "poster_card_corner_radius_dp": _decode_synced_value(
+            layout.get("poster_card_corner_radius_dp", 12)
+        ),
         "hide_unreleased_content": hide_unreleased,
         "synced_home_settings": bool(home_settings),
-        # Exposed so the frontend can be explicit about app-only collection
-        # rows until their provider-specific drill-down is mirrored as well.
-        "collection_count": len(collections),
+        "collection_count": len(collections_by_key),
+        "hero_catalog_keys": hero_catalog_keys,
     }
-    result = {"sections": sections, "players": players, "preferences": preferences}
+
+    result = {
+        "sections": sections,
+        "hero": {
+            "enabled": hero_section_enabled,
+            "items": hero_items,
+        },
+        "players": players,
+        "preferences": preferences,
+    }
     domain_data[DATA_HOME_CACHE] = (now_monotonic, result)
     return result
 
