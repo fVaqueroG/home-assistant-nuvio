@@ -166,6 +166,48 @@ def test_netflix_provider_targets() -> None:
     assert payload["params"]["contentId"] == payload["contentId"]
 
 
+def test_netflix_episode_prefers_exact_watch_url_on_webos() -> None:
+    url = "https://www.netflix.com/watch/82080204?trackId=200257859"
+    requests = webos_provider_launch_requests(
+        "netflix",
+        url,
+        media_type="series",
+        content_id="tt-example",
+        video_id="tt-example:1:2",
+        season=1,
+        episode=2,
+        episode_title="Example Episode",
+    )
+
+    assert len(requests) == 2
+
+    command, payload = requests[0]
+    assert command == "com.webos.applicationManager/launch"
+    assert payload["id"] == "netflix"
+    assert payload["params"]["contentTarget"] == url
+    assert payload["params"]["target"] == url
+    assert payload["params"]["url"] == url
+    assert payload["params"]["contentId"] == "82080204"
+    assert payload["params"]["sourceContentId"] == "tt-example"
+    assert payload["params"]["sourceVideoId"] == "tt-example:1:2"
+    assert payload["params"]["season"] == 1
+    assert payload["params"]["episode"] == 2
+    assert payload["params"]["episodeTitle"] == "Example Episode"
+
+    fallback_command, fallback = requests[1]
+    assert fallback_command == "system.launcher/launch"
+    assert fallback["id"] == "netflix"
+    assert "82080204" in fallback["contentId"]
+    assert fallback["params"]["contentId"] == fallback["contentId"]
+
+
+def test_netflix_other_episode_watch_id_is_distinct() -> None:
+    first = "https://www.netflix.com/watch/82080204?trackId=200257859"
+    second = "https://www.netflix.com/watch/82080202?trackId=279373164"
+    assert netflix_content_id(first) == "82080204"
+    assert netflix_content_id(second) == "82080202"
+
+
 def test_prime_provider_targets() -> None:
     url = "https://watch.amazon.com/detail?gti=amzn1.dv.gti.example"
     assert provider_content_id("prime", url) == "amzn1.dv.gti.example"
