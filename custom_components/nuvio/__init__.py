@@ -570,6 +570,75 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
                     blocking=True,
                 )
 
+        def _webos_provider_search_query(call: ServiceCall) -> str:
+            """Build a human-readable native webOS search query."""
+            title = str(call.data.get(ATTR_TITLE) or "").strip()
+            if not title:
+                return ""
+            if (
+                call.data.get(ATTR_MEDIA_TYPE) == "series"
+                and call.data.get(ATTR_EPISODE) is not None
+            ):
+                season = call.data.get(ATTR_SEASON)
+                episode = call.data.get(ATTR_EPISODE)
+                episode_title = str(
+                    call.data.get(ATTR_EPISODE_TITLE) or ""
+                ).strip()
+                parts = [title]
+                if season is not None:
+                    parts.append(f"S{int(season)}")
+                parts.append(f"E{int(episode)}")
+                if episode_title:
+                    parts.append(episode_title)
+                return " ".join(parts)
+            return title
+
+        def _webos_provider_prefers_native_search(
+            provider: str | None,
+            external_url: str,
+            call: ServiceCall,
+        ) -> bool:
+            """Use native LG search where real-TV tests show app links are ignored."""
+            if provider in {"prime", "disney", "max", "crunchyroll", "paramount"}:
+                return bool(_webos_provider_search_query(call))
+
+            # Netflix movie title IDs are proven to work. For episodes, only
+            # treat an actual /watch/<id> JustWatch URL as episode-specific.
+            if (
+                provider == "netflix"
+                and call.data.get(ATTR_MEDIA_TYPE) == "series"
+                and call.data.get(ATTR_EPISODE) is not None
+            ):
+                return "/watch/" not in external_url.casefold()
+
+            return False
+
+        async def _async_open_webos_native_search(
+            entity_id: str,
+            call: ServiceCall,
+        ) -> bool:
+            """Open LG webOS native search with title/episode metadata pre-filled."""
+            query = _webos_provider_search_query(call)
+            if not query:
+                return False
+            try:
+                await hass.services.async_call(
+                    "webostv",
+                    "command",
+                    {
+                        ATTR_ENTITY_ID: [entity_id],
+                        "command": "system.launcher/launch",
+                        "payload": {
+                            "id": "com.webos.app.search",
+                            "params": {"query": query},
+                        },
+                    },
+                    blocking=True,
+                )
+            except HomeAssistantError:
+                return False
+            return True
+
         async def handle_play_provider(call: ServiceCall) -> None:
             """Open an external streaming-provider source in that provider's app."""
             entity_ids = call.data[ATTR_ENTITY_ID]
@@ -638,6 +707,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
                 )
 
             for entity_id in webos_ids:
+                if _webos_provider_prefers_native_search(
+                    provider,
+                    external_url,
+                    call,
+                ):
+                    if await _async_open_webos_native_search(entity_id, call):
+                        continue
+
                 launch_requests = (
                     webos_provider_launch_requests(
                         provider,
