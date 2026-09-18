@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 import time
 from typing import Any
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlencode
 
 import probatio
 import pycountry
@@ -26,6 +26,11 @@ from homeassistant.helpers.entity_registry import async_get as async_get_entity_
 from .account import NuvioAuthError
 from .api import Addon, NuvioApiError
 from .debrid import DebridNotCached, DebridNotConfigured, DebridResolveError
+from .providers import (
+    normalize_provider_text,
+    normalize_selected_provider,
+    streaming_provider_key,
+)
 from .const import (
     CONF_PROFILE_ID,
     CONF_STREAMING_PROVIDERS,
@@ -235,55 +240,6 @@ def _home_catalog_preferences(settings: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-STREAMING_PROVIDER_ALIASES: dict[str, tuple[str, ...]] = {
-    "netflix": ("netflix",),
-    "prime": ("prime video", "amazon prime video", "amazon video"),
-    "disney": ("disney", "disney plus"),
-    "max": ("max", "hbo max"),
-    "apple": ("apple tv", "apple tv plus"),
-    "paramount": ("paramount", "paramount plus"),
-    "peacock": ("peacock", "peacock tv"),
-    "hulu": ("hulu",),
-    "crunchyroll": ("crunchyroll",),
-}
-
-STREAMING_PROVIDER_HOSTS: dict[str, tuple[str, ...]] = {
-    "netflix": ("netflix.com",),
-    "prime": ("primevideo.com", "amazon.com"),
-    "disney": ("disneyplus.com", "disney.com"),
-    "max": ("max.com", "hbomax.com"),
-    "apple": ("tv.apple.com",),
-    "paramount": ("paramountplus.com",),
-    "peacock": ("peacocktv.com",),
-    "hulu": ("hulu.com",),
-    "crunchyroll": ("crunchyroll.com",),
-}
-
-
-def _normalize_provider_text(value: Any) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold()).strip()
-
-
-def _streaming_provider_key(name: Any, external_url: Any = None) -> str | None:
-    """Map WatchHub/folder provider labels and URLs to one stable provider key."""
-    normalized = _normalize_provider_text(name)
-    padded = f" {normalized} "
-    for key, aliases in STREAMING_PROVIDER_ALIASES.items():
-        for alias in aliases:
-            if normalized == alias or f" {alias} " in padded:
-                return key
-
-    if external_url:
-        try:
-            host = (urlparse(str(external_url)).hostname or "").casefold()
-        except ValueError:
-            host = ""
-        for key, domains in STREAMING_PROVIDER_HOSTS.items():
-            if any(host == domain or host.endswith(f".{domain}") for domain in domains):
-                return key
-    return None
-
-
 def _selected_streaming_providers(entry: Any) -> set[str]:
     raw = entry.data.get(CONF_STREAMING_PROVIDERS)
     if raw is None:
@@ -292,12 +248,13 @@ def _selected_streaming_providers(entry: Any) -> set[str]:
         raw = [raw]
     if not isinstance(raw, (list, tuple, set)):
         return set()
-    known = set(STREAMING_PROVIDER_ALIASES)
-    return {
-        str(value).strip().casefold()
-        for value in raw
-        if str(value).strip().casefold() in known
-    }
+
+    selected: set[str] = set()
+    for value in raw:
+        key = normalize_selected_provider(value)
+        if key:
+            selected.add(key)
+    return selected
 
 
 def _country_code_variants(value: Any) -> set[str]:
@@ -699,7 +656,7 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
         key = f"collection_{collection_id}"
         collection_keys.append(key)
         collection_title = str(collection.get("title") or "").strip()
-        normalized_collection_title = _normalize_provider_text(collection_title)
+        normalized_collection_title = normalize_provider_text(collection_title)
         is_streaming_collection = normalized_collection_title in {
             "streaming",
             "streaming services",
@@ -715,7 +672,7 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
             if not folder_id or not title:
                 continue
             if streaming_providers and is_streaming_collection:
-                provider_key = _streaming_provider_key(title)
+                provider_key = streaming_provider_key(title)
                 if provider_key not in streaming_providers:
                     continue
             folders.append(
@@ -1326,9 +1283,7 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
         "synced_home_settings": bool(home_settings),
         "collection_count": len(collections_by_key),
         "hero_catalog_keys": hero_catalog_keys,
-        "streaming_providers": [
-            key for key in STREAMING_PROVIDER_ALIASES if key in streaming_providers
-        ],
+        "streaming_providers": sorted(streaming_providers),
         "watchhub_country": str(
             entry.data.get(CONF_WATCHHUB_COUNTRY)
             or getattr(hass.config, "country", None)
@@ -1765,7 +1720,7 @@ async def ws_streams(hass, connection, msg) -> None:
                 if stripped.startswith(("http://", "https://")):
                     external_url = candidate
 
-            provider_key = _streaming_provider_key(
+            provider_key = streaming_provider_key(
                 stream.get("name") or stream.get("title"),
                 external_url,
             )
