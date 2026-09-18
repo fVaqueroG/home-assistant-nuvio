@@ -51,10 +51,11 @@ const flush=()=>new Promise(r=>setImmediate(r));
  card.remove();assert.equal(card._heroTimer,null);assert.equal(timers.size,0);
  // External provider links (for example WatchHub/Amazon) are navigation URLs,
  // not media streams: never expose the direct-player buttons for them.
- const external=window.document.createElement('nuvio-card');external.setConfig({show_remote:false});external._loaded=true;external._view='sources';
+ const external=window.document.createElement('nuvio-card');external.setConfig({show_remote:false,entity:'media_player.tv'});external._loaded=true;external._view='sources';
  external._item={id:'tt1',type:'movie',name:'Movie'};external._details=external._item;external._streams=[{addon:'WatchHub',name:'Amazon Video',external_url:'https://watch.amazon.com/detail?gti=test',external:true,direct:false,resolvable:false,badges:[]}];
- external.render();const externalHtml=external.shadowRoot.innerHTML;
- assert.match(externalHtml,/>▶ Play<\/button>/);assert.match(externalHtml,/External provider link/);assert.doesNotMatch(externalHtml,/Play on TV/);assert.doesNotMatch(externalHtml,/Play in Nuvio/);assert.doesNotMatch(externalHtml,/Open title in Nuvio/);
+ const providerCalls=[];external._hass={states:{'media_player.tv':{}},callService:async(...args)=>providerCalls.push(args)};external.render();const externalHtml=external.shadowRoot.innerHTML;
+ assert.match(externalHtml,/>▶ Play<\/button>/);assert.match(externalHtml,/Streaming app/);assert.doesNotMatch(externalHtml,/Play on TV/);assert.doesNotMatch(externalHtml,/Play in Nuvio/);assert.doesNotMatch(externalHtml,/Open title in Nuvio/);
+ external.shadowRoot.querySelector('.nuvioplay').click();await flush();assert.equal(providerCalls.length,1);assert.equal(providerCalls[0][0],'nuvio');assert.equal(providerCalls[0][1],'play_provider');assert.equal(providerCalls[0][2].external_url,'https://watch.amazon.com/detail?gti=test');assert.equal(providerCalls[0][2].provider_name,'Amazon Video');assert.deepEqual(providerCalls[0][3],{entity_id:'media_player.tv'});
  external.remove();
  // Direct and resolvable rows also expose only the same Nuvio-backed Play action.
  const onePlay=window.document.createElement('nuvio-card');onePlay.setConfig({show_remote:false});onePlay._loaded=true;onePlay._view='sources';onePlay._item={id:'tt2',type:'movie',name:'Movie'};onePlay._details=onePlay._item;
@@ -95,5 +96,5 @@ const flush=()=>new Promise(r=>setImmediate(r));
  const empty=window.document.createElement('nuvio-card');window.document.body.append(empty);empty.setConfig({show_remote:false});empty.ws=async()=>({sections:[]});empty.hass={states:{}};await flush();
  for(let i=0;i<3;i++){let id=empty._homeRetryTimer,fn=timeouts.get(id);timeouts.delete(id);fn();await flush();}
  assert.equal(empty._homeRetryTimer,null);assert.equal(empty._homeRetryCount,3);empty.remove();assert.equal(timeouts.size,0);
- console.log('PASS: direct movie and episode Sources, single Nuvio Play action, external provider-link safety, lazy Home catalogs, seven-item Hero cap, progressive recovery, cached automatic retries, retained content, plus collection rows, source tabs, details/back, regular catalogs, stable HA updates, hero controls, partial failures, request races, timer cleanup');
+ console.log('PASS: streaming-app Play routing, direct movie and episode Sources, single Play action, external provider-link safety, lazy Home catalogs, seven-item Hero cap, progressive recovery, cached automatic retries, retained content, plus collection rows, source tabs, details/back, regular catalogs, stable HA updates, hero controls, partial failures, request races, timer cleanup');
 })().catch(e=>{console.error(e);process.exitCode=1;});
