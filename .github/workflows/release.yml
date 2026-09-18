@@ -5,7 +5,9 @@ on:
     branches:
       - main
     paths:
-      - custom_components/nuvio/manifest.json
+      - custom_components/nuvio/**
+      - tests/**
+      - .github/workflows/release.yml
   workflow_dispatch:
 
 permissions:
