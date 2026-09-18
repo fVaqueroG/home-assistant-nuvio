@@ -58,8 +58,17 @@ const flush=()=>new Promise(r=>setImmediate(r));
  let retryTimer=cold._homeRetryTimer,retryFn=timeouts.get(retryTimer);timeouts.delete(retryTimer);retryFn();await flush();assert.equal(cold._sections.length,1);assert.equal(cold._homeRetryCount,0);assert.equal(retryMessages[1].refresh,false);
  cold.ws=async()=>({sections:[],hero:{items:[]}});await cold.loadHome(true);assert.equal(cold._sections.length,1);
  cold.remove();assert.equal(cold._homeRetryTimer,null);
+ // Home keeps all catalog descriptors but only fetches lazy rows as needed.
+ const lazy=window.document.createElement('nuvio-card');lazy.setConfig({show_remote:false});lazy._view='catalog';
+ lazy._homePrefs={layout:'modern'};lazy._sections=[{id:'lazy1',kind:'catalog',name:'Lazy',lazy:true,manifest_url:'https://example.test/manifest.json',media_type:'movie',catalog_id:'lazy',items:[]}];
+ lazy.ws=async()=>({items:Array.from({length:20},(_,i)=>({id:'l'+i,type:'movie',name:'Lazy '+i}))});
+ await lazy.loadLazyCatalog(0);assert.equal(lazy._sections[0].lazy,false);assert.equal(lazy._sections[0].items.length,15);
+ // Defensive card cap keeps a malformed/older backend from rendering >7 Hero items.
+ const heroCap=window.document.createElement('nuvio-card');heroCap.setConfig({show_remote:false});heroCap._hass={states:{}};
+ heroCap.ws=async()=>({sections:[{kind:'collection',name:'Home',items:[]}],hero:{items:Array.from({length:12},(_,i)=>({id:'h'+i,type:'movie',name:'Hero '+i}))},players:[],preferences:{}});
+ await heroCap.loadHome();assert.equal(heroCap._hero.length,7);
  const empty=window.document.createElement('nuvio-card');window.document.body.append(empty);empty.setConfig({show_remote:false});empty.ws=async()=>({sections:[]});empty.hass={states:{}};await flush();
  for(let i=0;i<3;i++){let id=empty._homeRetryTimer,fn=timeouts.get(id);timeouts.delete(id);fn();await flush();}
  assert.equal(empty._homeRetryTimer,null);assert.equal(empty._homeRetryCount,3);empty.remove();assert.equal(timeouts.size,0);
- console.log('PASS: progressive Home recovery, cached automatic retries, retained content, bounded retries, plus 8 collection rows, source tabs, details/back, regular catalogs, stable HA updates, hero arrows/rotation/pause, partial failures, request races, timer cleanup');
+ console.log('PASS: lazy Home catalogs, seven-item Hero cap, progressive recovery, cached automatic retries, retained content, plus collection rows, source tabs, details/back, regular catalogs, stable HA updates, hero controls, partial failures, request races, timer cleanup');
 })().catch(e=>{console.error(e);process.exitCode=1;});
