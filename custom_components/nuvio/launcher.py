@@ -315,36 +315,16 @@ def provider_content_id(provider: str, external_url: str) -> str | None:
                 return match.group(1)
 
     if provider == "disney":
-        provider_id = provider_content_id(provider, raw_url)
-        requests: list[tuple[str, dict[str, Any]]] = []
-
-        for app_id in WEBOS_PROVIDER_APP_IDS.get("disney", ()):
-            if not raw_url:
-                continue
-
-            # Preserve the exact destination returned by the authenticated
-            # JustWatch account. Do not rewrite /browse/entity/... into a
-            # guessed /video/... URL: real-TV testing showed that rewrite does
-            # not navigate to the selected title on this LG build.
-            params: dict[str, Any] = {
-                "contentTarget": raw_url,
-                "target": raw_url,
-            }
-            if provider_id:
-                # Different Disney+ webOS builds have inspected either of
-                # these id keys. Sending both in the same launch avoids relying
-                # on a second request after webOS has already accepted the first.
-                params["contentId"] = provider_id
-                params["entityId"] = provider_id
-
-            requests.append(
-                (
-                    "com.webos.applicationManager/launch",
-                    {"id": app_id, "params": params},
-                )
-            )
-
-        return requests
+        match = re.search(r"(?:entity-|/entity/)([a-z0-9-]{8,})", raw, re.IGNORECASE)
+        if match:
+            return match.group(1)
+        match = re.search(
+            r"/([a-f0-9]{8,}(?:-[a-f0-9]{4,}){2,})/?$",
+            path,
+            re.IGNORECASE,
+        )
+        if match:
+            return match.group(1)
 
     if provider == "max":
         for key in ("id", "contentId", "contentid"):
@@ -601,35 +581,30 @@ def webos_provider_launch_requests(
 
     if provider == "disney":
         provider_id = provider_content_id(provider, raw_url)
-        targets: list[str] = []
-        if provider_id and re.fullmatch(
-            r"[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}",
-            provider_id,
-            re.IGNORECASE,
-        ):
-            # LG Disney+ accepts the canonical video UUID through
-            # Application Manager params.contentTarget.
-            targets.append(f"https://www.disneyplus.com/video/{provider_id}")
-        if raw_url and raw_url not in targets:
-            targets.append(raw_url)
-
         requests: list[tuple[str, dict[str, Any]]] = []
+
         for app_id in WEBOS_PROVIDER_APP_IDS.get("disney", ()):
-            for target in targets:
-                requests.append(
-                    (
-                        "com.webos.applicationManager/launch",
-                        {
-                            "id": app_id,
-                            "params": {
-                                "contentTarget": target,
-                                # Keep the legacy alias as a harmless fallback
-                                # for Disney app variants that inspect target.
-                                "target": target,
-                            },
-                        },
-                    )
+            if not raw_url:
+                continue
+
+            # Preserve the exact destination returned by the authenticated
+            # JustWatch account. Real-TV testing showed that rewriting an
+            # entity URL into a guessed /video/<UUID> URL does not navigate.
+            params: dict[str, Any] = {
+                "contentTarget": raw_url,
+                "target": raw_url,
+            }
+            if provider_id:
+                params["contentId"] = provider_id
+                params["entityId"] = provider_id
+
+            requests.append(
+                (
+                    "com.webos.applicationManager/launch",
+                    {"id": app_id, "params": params},
                 )
+            )
+
         return requests
 
     if provider == "max":
