@@ -16,6 +16,8 @@ assert.match(cardSource,/mdi:chevron-down/);
 assert.match(cardSource,/mdi:chevron-left/);
 assert.match(cardSource,/mdi:chevron-right/);
 assert.doesNotMatch(cardSource,/data-remote-key="up"[^\n]*⌃/);
+assert.match(cardSource,/nuvio-ring-up ha-icon\{transform:translateY\(-6px\)\}/);
+assert.match(cardSource,/ring-btn\.right ha-icon\{transform:translateX\(6px\)\}/);
 const flush=()=>new Promise(r=>setImmediate(r));
 (async()=>{
  const card=window.document.createElement('nuvio-card');window.document.body.append(card);
