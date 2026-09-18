@@ -107,6 +107,10 @@ class NuvioApi:
         """Return manifests already loaded, including partial discovery."""
         return list(self._addons or [])
 
+    def clear_catalog_cache(self) -> None:
+        """Drop cached catalog pages so a manual Home refresh is truly fresh."""
+        self._catalog_cache.clear()
+
     async def async_catalog(
         self,
         addon: Addon,
