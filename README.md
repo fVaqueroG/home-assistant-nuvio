@@ -194,6 +194,22 @@ WatchHub currently exposes streaming-provider availability for series at the **s
 
 Nuvio still sends the selected `video_id`, season, episode, and episode title to provider launchers as contextual hints. WatchHub series-provider rows are labeled **Series-level** so the UI does not imply that the returned provider URL is episode-specific.
 
+## JustWatch account session
+
+Nuvio can optionally use your **signed-in JustWatch account** for provider-offer queries.
+
+Configure it from **Settings → Devices & services → Nuvio → Reconfigure**:
+
+- Enable **Connect JustWatch account**.
+- For a normal email/password JustWatch account, enter the email and password once. Nuvio exchanges them for Firebase session tokens and **does not store the password**.
+- Home Assistant stores the renewable JustWatch refresh/access tokens in the Nuvio config entry and refreshes the short-lived access token automatically.
+- For Google/Apple/social-login JustWatch accounts, an advanced **JustWatch access token** field is available as a fallback. A browser-only access token is not renewable unless a refresh token is already present.
+- Once connected, provider rows identify authenticated links as **JustWatch account**.
+
+Authenticated offer queries request JustWatch's `preAffiliatedStandardWebURL` and prefer it over the normal affiliate/web URL. This removes JustWatch redirect wrappers before the provider URL is handed to the TV.
+
+JustWatch's official streaming-service documentation also describes provider-supplied LG webOS deeplinks as an app `id` plus `params.contentTarget`. Those deeplinks are part of JustWatch's streaming-service ingestion data, but the normal consumer GraphQL schema does not currently document a corresponding `web_os` field. Nuvio therefore does **not** invent one: if JustWatch exposes a native webOS payload in a future consumer response, it can be preferred directly; otherwise Nuvio uses the authenticated provider destination.
+
 ## Unofficial JustWatch offer links
 
 Nuvio can now query JustWatch's current **unofficial web GraphQL endpoint** directly, without a JustWatch account or paid partner API token. This integration uses only public title/season/episode offer data and does not log in to or scrape a user's JustWatch account.
