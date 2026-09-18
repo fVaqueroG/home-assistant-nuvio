@@ -320,7 +320,8 @@ class NuvioCard extends HTMLElement {
       var payload={
         type:"nuvio/watch_providers",
         media_type:this._item.type,
-        content_id:this._item.id
+        content_id:this._item.id,
+        title:(this._details&&this._details.name)||this._item.name||""
       };
       var season=ep.season==null?this._item.season:ep.season;
       var episode=ep.episode==null?this._item.episode:ep.episode;
@@ -344,11 +345,12 @@ class NuvioCard extends HTMLElement {
   async playWatchProvider(provider){
     if(!provider)return;
     if(provider.deep_link){
+      var linkSource=String(provider.deep_link_source||"");
       await this.playProviderSource({
         external_url:provider.deep_link,
-        name:provider.name||provider.tvdb_source_name||"",
+        name:provider.name||provider.justwatch_provider_name||provider.tvdb_source_name||"",
         title:provider.name||"",
-        addon:"TheTVDB"
+        addon:linkSource==="justwatch"?"JustWatch":(linkSource==="thetvdb"?"TheTVDB":"Provider")
       });
       return;
     }
@@ -357,7 +359,7 @@ class NuvioCard extends HTMLElement {
       await this.playInNuvioIndex(index);
       return;
     }
-    this._error=(provider.name||"This provider")+" is available for the configured country, but neither TheTVDB nor WatchHub supplied a usable provider link.";
+    this._error=(provider.name||"This provider")+" is available for the configured country, but JustWatch, TheTVDB, and WatchHub did not supply a usable provider link.";
     this.render();
   }
   watchHubSourceIndex(provider){
@@ -383,7 +385,10 @@ class NuvioCard extends HTMLElement {
       var exact=!!provider.deep_link;
       var playable=exact||watchhubIndex>=0;
       var access=(provider.access||[]).join(" · ");
-      var source=exact?"TheTVDB exact link":(watchhubIndex>=0?"WatchHub link":"Availability only");
+      var deepSource=String(provider.deep_link_source||"");
+      var source=exact
+        ? (deepSource==="justwatch"?"JustWatch offer":(deepSource==="thetvdb"?"TheTVDB exact link":"Provider link"))
+        : (watchhubIndex>=0?"WatchHub link":"Availability only");
       var hint=playable
         ? "Play with "+provider.name+" · "+source
         : provider.name+" is available here, but no usable provider link was returned.";
