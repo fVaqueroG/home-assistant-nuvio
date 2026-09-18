@@ -218,6 +218,14 @@ This means a TMDB-listed provider can be playable from the row even when it does
 
 Availability data is supplied by **JustWatch via TMDB**. Exact external/provider-link metadata can be supplied by **TheTVDB**. This product uses the TMDB API but is not endorsed or certified by TMDB.
 
+## Provider launch compatibility
+
+Real-TV testing is authoritative for provider launch support. Netflix and Apple TV movie launches are currently confirmed to reach the requested title on LG webOS. Prime Video, Disney+, Max, Crunchyroll, and Paramount+ have been observed reopening/opening the app without reaching the requested title when using application-manager launch parameters.
+
+Nuvio therefore prefers `system.launcher/launch` for Prime Video, Disney+, Max, Crunchyroll, and Paramount+ and sends the provider target as both `contentId` and `params.contentTarget`. Netflix keeps its known contentId format, and Apple TV keeps its currently working application-manager path.
+
+Provider playback also carries the movie/series title into the service so a future in-app search fallback can type the exact title when a provider ignores deep-link parameters.
+
 ## WatchHub provider launching
 
 WatchHub provider links are launched in the installed streaming app rather than the TV/browser URL handler. Netflix keeps its proven title-id launch path. Prime Video, Disney+, Apple TV, Max, Crunchyroll, and Paramount+ now use provider-specific Android TV packages and LG webOS application launch parameters.
