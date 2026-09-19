@@ -1,0 +1,27 @@
+name: Clean Nuvio toolbar branch (one-time)
+on:
+  push:
+    branches:
+      - release/0.4.59-toolbar-player
+    paths:
+      - .github/workflows/nuvio-cleanup-once.yml
+permissions:
+  contents: write
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/0.4.59-toolbar-player
+      - name: Remove generated dependencies and temporary workflow
+        run: |
+          git rm -r -q --cached -- tests/node_modules
+          rm -rf tests/node_modules
+          printf 'tests/node_modules/\n' > .gitignore
+          rm .github/workflows/nuvio-cleanup-once.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Exclude generated test dependencies from Nuvio toolbar release'
+          git push origin HEAD:release/0.4.59-toolbar-player
