@@ -34,10 +34,28 @@ assert.match(cardSource,/skip:this\._catalogPaging\.nextSkip/);
 assert.match(cardSource,/\.catalog-scroll\{height:clamp/);
 assert.match(cardSource,/\.catalog-fixed\{/);
 assert.match(cardSource,/async loadLazyCatalog[\s\S]*?type:"nuvio\/catalog"[\s\S]*?hide_unreleased:[^\n]+\n\s*\}\);/);
+assert.match(cardSource,/\.header\{position:sticky;top:0;z-index:20;/);
+assert.match(cardSource,/toolbar-player/);
+assert.match(cardSource,/aria-label="Media player"/);
+assert.match(cardSource,/id="homeTop"/);
+assert.equal((cardSource.match(/this\.playerSelect\(\)/g)||[]).length,1);
 const flush=()=>new Promise(r=>setImmediate(r));
 (async()=>{
  const card=window.document.createElement('nuvio-card');window.document.body.append(card);
  card.setConfig({show_remote:false});card._loaded=true;
+ card._hass={states:{'media_player.living_room':{attributes:{friendly_name:'Living Room TV'}},'media_player.bedroom':{attributes:{friendly_name:'Bedroom TV'}}}};
+ card._playerId='media_player.living_room';card.render();
+ assert.equal(card.shadowRoot.querySelectorAll('.header #player').length,1);
+ assert.equal(card.shadowRoot.querySelectorAll('.header .toolbar-btn span').length,0);
+ assert.equal(card.shadowRoot.querySelectorAll('.header #homeTop,.header #refresh,.header .remote-toggle-button').length,2);
+ assert.equal(card.shadowRoot.querySelector('#player').value,'media_player.living_room');
+ card._playerId='media_player.bedroom';card._view='details';card._item={id:'demo',type:'series',name:'Demo'};card._details={id:'demo',type:'series',name:'Demo',videos:[]};card.render();
+ assert.equal(card.shadowRoot.querySelectorAll('#player').length,1);
+ assert.equal(card.shadowRoot.querySelector('#player').value,'media_player.bedroom');
+ card._view='sources';card.render();
+ assert.equal(card.shadowRoot.querySelectorAll('#player').length,1);
+ card._view='home';card.render();
+
  card._hero=Array.from({length:12},(_,i)=>({id:'tt'+i,type:'movie',name:'Featured '+i}));
  card._sections=['Discover','Streaming','Genres','Themes','Studios','Decades','Runtime','World'].map((name,i)=>({kind:'collection',name,items:[{name:i===1?'Netflix':name,hide_title:true,sources:[{addonId:'aio-metadata',catalogId:'movies'+i,type:'movie',genre:'None'},{addonId:'aio-metadata',catalogId:'series'+i,type:'series',genre:'Drama'}]}]}));
  card._sections.push({kind:'catalog',name:'Popular',manifest_url:'https://example.test/manifest.json',catalog_id:'popular',media_type:'movie',items:[]});
