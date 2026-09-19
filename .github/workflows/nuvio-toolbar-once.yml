@@ -21,9 +21,13 @@ jobs:
           p = Path('tools/apply_toolbar_once.py')
           s = p.read_text()
           lines = s.splitlines(keepends=True)
-          matches = [i for i, line in enumerate(lines) if "'Sources player duplication'" in line]
-          assert len(matches) == 1
-          lines[matches[0]] = '''swap("this.playerSelect()+debridControls", "debridControls", 'Sources player duplication')\n'''
+          for term, replacement in (
+              ("'Sources player duplication'", '''swap("this.playerSelect()+debridControls", "debridControls", 'Sources player duplication')\n'''),
+              ("'Top toolbar player'", '''swap("+search+", "+search+this.playerSelect()+", 'Top toolbar player')\n'''),
+          ):
+              matches = [i for i, line in enumerate(lines) if term in line]
+              assert len(matches) == 1, term
+              lines[matches[0]] = replacement
           s = ''.join(lines)
           old = "for text in ('Home', 'Refresh', 'Control', 'Addons'):\n    swap('<span>'+text+'</span></button>', '</button>', text+' icon-only button')\n"
           new = '''header_start=c.index('  header(){')
@@ -45,6 +49,17 @@ jobs:
           PY
       - name: Apply toolbar patch
         run: python tools/apply_toolbar_once.py
+      - name: Wrap player in a styled top-toolbar control
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('custom_components/nuvio/frontend/nuvio-card.js')
+          s=p.read_text()
+          old="'+search+this.playerSelect()+"
+          new=''''+search+'<label class="toolbar-player" title="Select media player"><ha-icon icon="mdi:television" aria-hidden="true"></ha-icon>'+this.playerSelect()+'</label>'+'''
+          assert s.count(old)==1
+          p.write_text(s.replace(old,new,1))
+          PY
       - name: Validate card and tests
         run: |
           node --check custom_components/nuvio/frontend/nuvio-card.js
