@@ -19,10 +19,11 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           p = Path('tools/apply_toolbar_once.py')
-          s = p.read_text()
-          assert s.count("debridControls+'</div>'\"") == 2
-          s = s.replace("debridControls+'</div>'\"", "debridControls\"")
-          p.write_text(s)
+          lines = p.read_text().splitlines(keepends=True)
+          matches = [i for i, line in enumerate(lines) if "'Sources player duplication'" in line]
+          assert len(matches) == 1
+          lines[matches[0]] = '''swap("this.playerSelect()+debridControls", "debridControls", 'Sources player duplication')\n'''
+          p.write_text(''.join(lines))
           PY
       - name: Apply toolbar patch
         run: python tools/apply_toolbar_once.py
