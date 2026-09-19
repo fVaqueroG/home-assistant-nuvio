@@ -1,0 +1,30 @@
+name: Apply Nuvio toolbar change (one-time)
+on:
+  push:
+    branches:
+      - release/0.4.59-toolbar-player
+    paths:
+      - .github/workflows/nuvio-toolbar-once.yml
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/0.4.59-toolbar-player
+      - name: Apply toolbar patch
+        run: python tools/apply_toolbar_once.py
+      - name: Validate card and tests
+        run: |
+          node --check custom_components/nuvio/frontend/nuvio-card.js
+          npm ci --prefix tests
+          node tests/test_card.cjs
+      - name: Commit and push changes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Release 0.4.59: sticky toolbar with shared player selector and icon controls'
+          git push origin HEAD:release/0.4.59-toolbar-player
