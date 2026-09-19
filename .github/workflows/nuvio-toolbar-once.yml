@@ -14,16 +14,33 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: release/0.4.59-toolbar-player
-      - name: Correct source controls pattern
+      - name: Correct toolbar migration anchors
         run: |
           python - <<'PY'
           from pathlib import Path
           p = Path('tools/apply_toolbar_once.py')
-          lines = p.read_text().splitlines(keepends=True)
+          s = p.read_text()
+          lines = s.splitlines(keepends=True)
           matches = [i for i, line in enumerate(lines) if "'Sources player duplication'" in line]
           assert len(matches) == 1
           lines[matches[0]] = '''swap("this.playerSelect()+debridControls", "debridControls", 'Sources player duplication')\n'''
-          p.write_text(''.join(lines))
+          s = ''.join(lines)
+          old = "for text in ('Home', 'Refresh', 'Control', 'Addons'):\n    swap('<span>'+text+'</span></button>', '</button>', text+' icon-only button')\n"
+          new = '''header_start=c.index('  header(){')
+          header_end=c.index('  async goHome(){',header_start)
+          header=c[header_start:header_end]
+          for text in ('Home', 'Refresh', 'Control', 'Addons'):
+              marker='<span>'+text+'</span></button>'
+              assert header.count(marker)==1, text+' header icon-only marker'
+              header=header.replace(marker,'</button>',1)
+          c=c[:header_start]+header+c[header_end:]
+          '''
+          assert s.count(old) == 1
+          s = s.replace(old,new,1)
+          old_test = 'assert.doesNotMatch(cardSource,/<span>(?:Home|Refresh|Control|Addons)<\\/span><\\/button>/);'
+          assert s.count(old_test)==1
+          s=s.replace(old_test,'assert.match(cardSource,/id="homeTop"/);',1)
+          p.write_text(s)
           PY
       - name: Apply toolbar patch
         run: python tools/apply_toolbar_once.py
