@@ -37,10 +37,11 @@ jobs:
           '''
           assert s.count(old) == 1
           s = s.replace(old,new,1)
-          old_test = 'assert.doesNotMatch(cardSource,/<span>(?:Home|Refresh|Control|Addons)<\\/span><\\/button>/);'
-          assert s.count(old_test)==1
-          s=s.replace(old_test,'assert.match(cardSource,/id="homeTop"/);',1)
-          p.write_text(s)
+          lines=s.splitlines(keepends=True)
+          tests=[i for i,line in enumerate(lines) if 'assert.doesNotMatch(cardSource,/<span>(?:Home|Refresh|Control|Addons)' in line]
+          assert len(tests)==1
+          lines[tests[0]]='assert.match(cardSource,/id="homeTop"/);\n'
+          p.write_text(''.join(lines))
           PY
       - name: Apply toolbar patch
         run: python tools/apply_toolbar_once.py
