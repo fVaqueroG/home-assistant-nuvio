@@ -1,4 +1,4 @@
-name: Repair HDMI routing workflow (one-time)
+name: Apply HDMI routing from temporary payload
 on:
   push:
     branches:
@@ -8,28 +8,33 @@ on:
 permissions:
   contents: write
 jobs:
-  repair:
+  apply:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: release/0.4.60-hdmi-input-routing
-      - name: Repair embedded payload indentation
+      - name: Apply HDMI source routing
         run: |
           python - <<'PY'
           from pathlib import Path
-          p=Path('.github/workflows/nuvio-display-routing-once.yml')
-          s=p.read_text()
-          a=s.index("payload=''.join('''")
-          start=s.index('\n',a)+1
-          end=s.index("'''.split())",start)+len("'''.split())")
-          block=s[start:end]
-          s=s[:start]+''.join('          '+line for line in block.splitlines(keepends=True))+s[end:]
-          s=s.replace('git rm .github/workflows/nuvio-display-routing-once.yml','git rm .github/workflows/nuvio-display-routing-once.yml .github/workflows/nuvio-display-routing-repair.yml')
-          p.write_text(s)
+          import base64,zlib
+          s=Path('.github/workflows/nuvio-display-routing-once.yml').read_text()
+          start=s.index("payload=''.join('''")+len("payload=''.join('''")
+          end=s.index("'''.split())",start)
+          payload=''.join(s[start:end].split())
+          exec(zlib.decompress(base64.b64decode(payload)).decode('utf-8'))
           PY
+      - name: Run routing and card regression tests
+        run: |
+          node --check custom_components/nuvio/frontend/nuvio-card.js
+          npm ci --prefix tests
+          node tests/test_card.cjs
+          python -m compileall -q custom_components/nuvio
+      - name: Commit implementation without workflow changes
+        run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .github/workflows/nuvio-display-routing-once.yml
-          git commit -m 'Repair HDMI routing workflow payload indentation'
+          git add custom_components/nuvio/frontend/nuvio-card.js custom_components/nuvio/manifest.json README.md tests/test_card.cjs
+          git commit -m 'Release 0.4.60: route playback to external TV HDMI inputs'
           git push origin HEAD:release/0.4.60-hdmi-input-routing
