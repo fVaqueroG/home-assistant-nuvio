@@ -108,6 +108,35 @@ ADB-based Android TV entities. The frontend is served by the integration itself.
 registers the card as a Lovelace module resource with a versioned URL, avoiding stale
 mobile/browser caches and `Custom element doesn't exist: nuvio-card` errors.
 
+### Automatically switch the physical TV to a playback device
+
+When an Android TV box (or another player) is connected to a separate LG webOS,
+Roku TV, or other Home Assistant TV, configure `display_routes` on the Nuvio
+Lovelace card in **Edit dashboard → Edit card → Show code editor**:
+
+```yaml
+type: custom:nuvio-card
+default_player: media_player.android_box
+display_routes:
+  - player: media_player.android_box
+    display: media_player.lg_webos_tv
+    source: HDMI 1
+    turn_on: true
+    delay_ms: 1000
+  - player: media_player.bedroom_android_box
+    display: media_player.bedroom_roku_tv
+    source: HDMI 2
+```
+
+Replace the example entity IDs with the actual playback and physical TV entities.
+Use the **exact** HDMI input name from the physical TV's `source_list` attribute
+in Home Assistant Developer Tools → States. Select a mapped player in the card
+or press Play to turn on the display if needed, switch to its source, then send
+playback to the selected player. `turn_on: false` skips display power-on;
+`wake_delay_ms` (default 2000) waits after waking the TV, and `delay_ms`
+(default 1000) waits after switching its source. Unmapped players are unchanged.
+The display must implement `media_player.select_source` in Home Assistant.
+
 ## Actions
 
 Open a details page (movie):

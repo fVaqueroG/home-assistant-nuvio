@@ -13,6 +13,43 @@ class NuvioCard extends HTMLElement {
   players(){ return this._playersMeta.length?this._playersMeta.map(x=>x.entity_id):(this._hass?Object.keys(this._hass.states).filter(x=>x.startsWith("media_player.")).sort():[]); }
   platform(id){ var p=this._playersMeta.find(x=>x.entity_id===id); return p?p.platform:""; }
   player(){ var s=this.shadowRoot&&this.shadowRoot.querySelector("#player"); return this._playerId||(s&&s.value)||this._config.default_player||this._config.entity||this.players()[0]||""; }
+  displayRoute(player){
+  var routes=Array.isArray(this._config.display_routes)?this._config.display_routes:[];
+  return routes.find(r=>r&&r.player===player&&typeof r.display==="string"&&r.display.startsWith("media_player.")&&String(r.source||"").trim())||null;
+}
+async ensureDisplaySource(player){
+  var route=this.displayRoute(player);
+  if(!route)return;
+  var display=route.display,source=String(route.source).trim();
+  if(!this._hass||!this._hass.states||!this._hass.states[display])throw new Error("Display "+display+" is not available in Home Assistant.");
+  var state=this._hass.states[display];
+  if(state.state==="unavailable"||state.state==="unknown")throw new Error("Display "+display+" is "+state.state+".");
+  var pending=this._displayRoutePending;
+  if(pending&&pending.player===player&&pending.display===display&&pending.source===source)return pending.promise;
+  var task=(async()=>{
+    if(state.state==="off"&&route.turn_on!==false){
+      await this._hass.callService("media_player","turn_on",{},{entity_id:display});
+      var wakeDelay=Math.max(0,Math.min(10000,Number(route.wake_delay_ms??2000)||0));
+      if(wakeDelay)await new Promise(resolve=>setTimeout(resolve,wakeDelay));
+    }
+    if(((this._hass.states[display]||{}).attributes||{}).source===source)return;
+    var recent=this._lastDisplaySwitch;
+    if(recent&&recent.player===player&&recent.display===display&&recent.source===source&&Date.now()-recent.time<2000)return;
+    await this._hass.callService("media_player","select_source",{source:source},{entity_id:display});
+    this._lastDisplaySwitch={player,display,source,time:Date.now()};
+    var settle=Math.max(0,Math.min(10000,Number(route.delay_ms??1000)||0));
+    if(settle)await new Promise(resolve=>setTimeout(resolve,settle));
+  })();
+  this._displayRoutePending={player,display,source,promise:task};
+  try{await task;}
+  finally{if(this._displayRoutePending&&this._displayRoutePending.promise===task)this._displayRoutePending=null;}
+}
+async choosePlayer(player){
+  this._playerId=player;
+  try{await this.ensureDisplaySource(player);}
+  catch(e){this._error="Could not switch TV input: "+(e.message||e);this.render();}
+  finally{if(this._view==="details")this.render();}
+}
   async loadHome(refresh=false,retry=false){
     if(!this._hass||this._loading)return;
     clearTimeout(this._homeRetryTimer);this._homeRetryTimer=null;
@@ -424,6 +461,7 @@ class NuvioCard extends HTMLElement {
   async play(openOnly,ep){
     var p=this.player();if(!p){this._error="Select a media player first.";this.render();return;}
     try{
+      await this.ensureDisplaySource(p);
       if(openOnly)await this._hass.callService("nuvio","open",{media_type:this._item.type,content_id:this._item.id},{entity_id:p});
       else await this._hass.callService("nuvio","play",this.playData(ep),{entity_id:p});
     }catch(e){this._error=e.message||"Nuvio playback failed.";this.render();}
@@ -738,6 +776,7 @@ class NuvioCard extends HTMLElement {
     var p=this.player();if(!p){this._error="Select a media player first.";this.render();return;}
     if(!stream||!stream.url){this._error="This source does not have a playable URL yet.";this.render();return;}
     try{
+      await this.ensureDisplaySource(p);
       await this._hass.callService(
         "nuvio",
         "play_source",
@@ -751,6 +790,7 @@ class NuvioCard extends HTMLElement {
     if(!stream||!stream.external_url){this._error="This streaming source does not include a provider link.";this.render();return;}
     var context=this.playData(this._streamContext||null);
     try{
+      await this.ensureDisplaySource(p);
       await this._hass.callService(
         "nuvio",
         "play_provider",
@@ -892,7 +932,7 @@ class NuvioCard extends HTMLElement {
       ? ""
       : '<button class="ib toolbar-btn remote-toggle-button '+(this._remoteExpanded?"remote-active":"")+'" title="Control" aria-label="Control"><ha-icon icon="mdi:remote-tv"></ha-icon></button>';
     var home='<button class="ib toolbar-btn '+(onHome?"toolbar-active":"")+'" id="homeTop" title="Home" aria-label="Home"><ha-icon icon="mdi:home"></ha-icon></button>';
-    return '<div class="header"><div class="header-title"><h2>'+this.esc(this._config.title||"Nuvio")+'</h2><span class="card-version">v0.4.59</span></div><div class="tools">'+search+'<label class="toolbar-player" title="Select media player"><ha-icon icon="mdi:television" aria-hidden="true"></ha-icon>'+this.playerSelect()+'</label>'+
+    return '<div class="header"><div class="header-title"><h2>'+this.esc(this._config.title||"Nuvio")+'</h2><span class="card-version">v0.4.60</span></div><div class="tools">'+search+'<label class="toolbar-player" title="Select media player"><ha-icon icon="mdi:television" aria-hidden="true"></ha-icon>'+this.playerSelect()+'</label>'+
       home+
       '<button class="ib toolbar-btn" id="refresh" title="Refresh" aria-label="Refresh"><ha-icon icon="mdi:refresh"></ha-icon></button>'+
       addons+remote+'</div></div>';
@@ -980,6 +1020,7 @@ class NuvioCard extends HTMLElement {
     var p=this.player();
     if(!p){this._error="Select a media player first.";this.render();return;}
     try{
+      await this.ensureDisplaySource(p);
       await this._hass.callService("nuvio","remote_key",{key:key},{entity_id:p});
     }catch(e){
       this._error=e.message||"Remote command failed.";
@@ -1309,7 +1350,7 @@ class NuvioCard extends HTMLElement {
     r.querySelector("#open")?.addEventListener("click",()=>this.play(true,null));
     r.querySelector("#play")?.addEventListener("click",()=>this.play(false,null));
     r.querySelector("#sources")?.addEventListener("click",()=>this.showSources(null));
-    r.querySelector("#player")?.addEventListener("change",e=>{this._playerId=e.target.value;if(this._view==="details")this.render();});
+    r.querySelector("#player")?.addEventListener("change",e=>{this.choosePlayer(e.target.value);});
     r.querySelectorAll(".season").forEach(b=>b.addEventListener("click",()=>{this._season=Number(b.dataset.season);this.render();}));
     r.querySelectorAll(".sourceep").forEach(b=>b.addEventListener("click",()=>{var eps=(this._details.videos||[]).filter(v=>Number(v.season)===Number(this._season)).sort((a,c)=>(Number(a.episode)||0)-(Number(c.episode)||0));this.showSources(eps[Number(b.dataset.ep)],{backTo:"details"});}));
     r.querySelectorAll(".playsource").forEach(b=>b.addEventListener("click",()=>this.playSource(this._streams[Number(b.dataset.sourceIndex)])));
@@ -1354,4 +1395,4 @@ class NuvioCard extends HTMLElement {
 if(!customElements.get("nuvio-card"))customElements.define("nuvio-card",NuvioCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==="nuvio-card"))window.customCards.push({type:"nuvio-card",name:"Nuvio",description:"Browse, search and play your Nuvio catalog.",preview:true});
-console.info("NUVIO-CARD v0.4.59");
+console.info("NUVIO-CARD v0.4.60");
