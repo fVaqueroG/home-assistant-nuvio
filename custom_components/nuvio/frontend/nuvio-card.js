@@ -933,7 +933,7 @@ async choosePlayer(player){
       ? ""
       : '<button class="ib toolbar-btn remote-toggle-button '+(this._remoteExpanded?"remote-active":"")+'" title="Control" aria-label="Control"><ha-icon icon="mdi:remote-tv"></ha-icon></button>';
     var home='<button class="ib toolbar-btn '+(onHome?"toolbar-active":"")+'" id="homeTop" title="Home" aria-label="Home"><ha-icon icon="mdi:home"></ha-icon></button>';
-    return '<div class="header"><div class="header-title"><h2>'+this.esc(this._config.title||"Nuvio")+'</h2><span class="card-version">v0.4.61</span></div><div class="tools">'+search+'<label class="toolbar-player" title="Select media player"><ha-icon icon="mdi:television" aria-hidden="true"></ha-icon>'+this.playerSelect()+'</label>'+
+    return '<div class="header"><div class="header-title"><h2>'+this.esc(this._config.title||"Nuvio")+'</h2><span class="card-version">v0.4.62</span></div><div class="tools">'+search+'<label class="toolbar-player" title="Select media player"><ha-icon icon="mdi:television" aria-hidden="true"></ha-icon>'+this.playerSelect()+'</label>'+
       home+
       '<button class="ib toolbar-btn" id="refresh" title="Refresh" aria-label="Refresh"><ha-icon icon="mdi:refresh"></ha-icon></button>'+
       addons+remote+'</div></div>';
@@ -1407,11 +1407,21 @@ class NuvioCardEditor extends HTMLElement {
     this.shadowRoot.addEventListener("click",e=>this.clickAction(e));
   }
   set hass(h){
+    const previousSources=this.displaySourceSignature();
     const first=!this._hass;
     this._hass=h;
-    if(first||!this._rendered)this.render();
+    // Refresh input choices only when the configured displays' sources change.
+    if(first||!this._rendered||previousSources!==this.displaySourceSignature())this.render();
   }
   setConfig(config){this._config={...(config||{})};this.render();}
+  displaySources(display){
+    const states=(this._hass&&this._hass.states)||{};
+    const list=((states[display]||{}).attributes||{}).source_list;
+    return Array.isArray(list)?[...new Set(list.filter(item=>typeof item==="string"&&item.trim()))]:[];
+  }
+  displaySourceSignature(){
+    return JSON.stringify(this.routes().map(route=>[route&&route.display,this.displaySources(route&&route.display)]));
+  }
   esc(value){return String(value==null?"":value).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;");}
   playerIds(extra=[]){
     const states=(this._hass&&this._hass.states)||{};
@@ -1427,10 +1437,16 @@ class NuvioCardEditor extends HTMLElement {
     const empty=includeEmpty?'<option value="">Select a media player</option>':"";
     return empty+this.playerIds(extras).map(id=>'<option value="'+this.esc(id)+'" '+(id===selected?'selected':'')+'>'+this.esc(this.name(id))+' · '+this.esc(id)+'</option>').join("");
   }
-  sourceOptions(display,index){
-    const state=((this._hass&&this._hass.states)||{})[display];
-    const sources=((state||{}).attributes||{}).source_list;
-    return '<datalist id="nuvio-inputs-'+index+'">'+(Array.isArray(sources)?sources:[]).map(source=>'<option value="'+this.esc(source)+'"></option>').join("")+'</datalist>';
+  sourceOptions(display,index,selected=""){
+    const sources=this.displaySources(display);
+    const attrs=' data-route="'+index+'" data-key="source"';
+    if(sources.length){
+      // Source names are TV-provided: HDMI inputs may also have custom names.
+      const options='<option value="">Select a TV source</option>'+sources.map(source=>'<option value="'+this.esc(source)+'" '+(source===selected?'selected':'')+'>'+this.esc(source)+'</option>').join("");
+      const saved=selected&&!sources.includes(selected)?'<option value="'+this.esc(selected)+'" selected>'+this.esc(selected)+' (saved; not currently reported)</option>':"";
+      return '<select'+attrs+'>'+options+saved+'</select><small>Available sources reported by the selected TV in Home Assistant.</small>';
+    }
+    return '<input'+attrs+' type="text" value="'+this.esc(selected)+'" placeholder="Enter TV input name" autocomplete="off"><small>This TV does not report its sources; enter the exact input name manually.</small>';
   }
   routes(){return Array.isArray(this._config.display_routes)?this._config.display_routes:[];}
   routeHtml(route,index){
@@ -1438,13 +1454,10 @@ class NuvioCardEditor extends HTMLElement {
     const on=r.turn_on!==false;
     const wake=r.wake_delay_ms==null?2000:r.wake_delay_ms;
     const settle=r.delay_ms==null?1000:r.delay_ms;
-    const states=(this._hass&&this._hass.states)||{};
-    const inputList=((states[r.display]||{}).attributes||{}).source_list;
-    const hint=Array.isArray(inputList)&&inputList.length?'Choose a suggested TV input or enter its exact name.':'Enter the exact input name shown by the TV in Home Assistant.';
     return '<section class="route"><div class="route-heading"><strong>Connection '+(index+1)+'</strong><button type="button" data-action="remove" data-index="'+index+'" aria-label="Remove connection '+(index+1)+'">Remove</button></div>'+
       '<div class="fields"><label>Playback device<select data-route="'+index+'" data-key="player">'+this.playerOptions(r.player||"")+'</select></label>'+
       '<label>Physical TV / display<select data-route="'+index+'" data-key="display">'+this.playerOptions(r.display||"")+'</select></label>'+
-      '<label>TV input / HDMI source<input data-route="'+index+'" data-key="source" type="text" list="nuvio-inputs-'+index+'" value="'+this.esc(source)+'" placeholder="HDMI 1" autocomplete="off">'+this.sourceOptions(r.display,index)+'<small>'+this.esc(hint)+'</small></label>'+
+      '<label>TV input / HDMI source'+this.sourceOptions(r.display,index,source)+'</label>'+
       '<label class="switch"><input type="checkbox" data-route="'+index+'" data-key="turn_on" '+(on?'checked':'')+'>Turn on the display if needed</label>'+
       '<label>Wake delay (ms)<input type="number" min="0" max="10000" step="100" data-route="'+index+'" data-key="wake_delay_ms" value="'+this.esc(wake)+'"></label>'+
       '<label>Delay after input change (ms)<input type="number" min="0" max="10000" step="100" data-route="'+index+'" data-key="delay_ms" value="'+this.esc(settle)+'"></label></div></section>';
@@ -1474,6 +1487,7 @@ class NuvioCardEditor extends HTMLElement {
     if(!Number.isInteger(index)||index<0||index>=routes.length||!key)return;
     let value=checkbox?target.checked:target.value;
     if(key==="delay_ms"||key==="wake_delay_ms")value=Math.max(0,Math.min(10000,Math.round(Number(value)||0)));
+    if(key==="display"&&routes[index].display!==value)routes[index].source="";
     routes[index][key]=value;
     this.emit({...this._config,display_routes:routes});
   }
@@ -1521,7 +1535,7 @@ class NuvioCardEditor extends HTMLElement {
         <label class="switch"><input type="checkbox" data-field="show_remote" ${cfg.show_remote!==false?'checked':''}>Show control button</label>
         <label>Remote panel side<select data-field="remote_side"><option value="left" ${cfg.remote_side!=="right"?'selected':''}>Left</option><option value="right" ${cfg.remote_side==="right"?'selected':''}>Right</option></select></label>
       </div></section>
-      <section class="group"><h3>HDMI and TV connections</h3><p>When you select a playback device, Nuvio can turn on its physical TV and switch to the connected HDMI input. This mapping is optional, and players without a connection are unchanged. Input names must match the TV’s source list.</p>
+      <section class="group"><h3>HDMI and TV connections</h3><p>When you select a playback device, Nuvio can turn on its physical TV and switch to the connected HDMI input. This mapping is optional, and players without a connection are unchanged. Input choices come from the selected TV’s Home Assistant media sources; TVs without a source list allow manual input.</p>
         ${routes.map((route,index)=>this.routeHtml(route,index)).join("")}
         <button class="add" type="button" data-action="add">+ Add TV connection</button>
       </section>
@@ -1534,4 +1548,4 @@ if(!customElements.get("nuvio-card-editor"))customElements.define("nuvio-card-ed
 if(!customElements.get("nuvio-card"))customElements.define("nuvio-card",NuvioCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==="nuvio-card"))window.customCards.push({type:"nuvio-card",name:"Nuvio",description:"Browse, search and play your Nuvio catalog.",preview:true});
-console.info("NUVIO-CARD v0.4.61");
+console.info("NUVIO-CARD v0.4.62");

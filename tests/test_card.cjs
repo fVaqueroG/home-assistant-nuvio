@@ -50,7 +50,12 @@ visualEditor.hass={states:{'media_player.box':{attributes:{friendly_name:'Androi
 assert.ok(visualEditor.shadowRoot.querySelector('[data-field="default_player"]'));
 assert.ok(visualEditor.shadowRoot.querySelector('[data-field="show_remote"]'));
 assert.ok(visualEditor.shadowRoot.querySelector('[data-action="add"]'));
-assert.equal(visualEditor.shadowRoot.querySelectorAll('datalist option').length,2);
+// The TV's source_list becomes a real selectable menu, not static HDMI guesses.
+let tvSource=visualEditor.shadowRoot.querySelector('[data-route="0"][data-key="source"]');
+assert.equal(tvSource.localName,'select');
+assert.deepEqual([...tvSource.querySelectorAll('option')].map(o=>o.value),['','HDMI 1','HDMI 2']);
+assert.equal(tvSource.value,'HDMI 1');
+assert.equal(visualEditor.shadowRoot.querySelectorAll('datalist').length,0);
 const edits=[];
 visualEditor.addEventListener('config-changed',e=>edits.push(e.detail.config));
 const columns=visualEditor.shadowRoot.querySelector('[data-field="columns"]');
@@ -58,6 +63,29 @@ columns.value='7';columns.dispatchEvent(new window.Event('change',{bubbles:true}
 assert.equal(edits.at(-1).columns,7);
 assert.equal(edits.at(-1).other_custom_setting,'keep-me');
 assert.equal(edits.at(-1).display_routes[0].source,'HDMI 1');
+// Changing the selected input updates the saved route and preserves custom keys.
+tvSource=visualEditor.shadowRoot.querySelector('[data-route="0"][data-key="source"]');
+visualEditor.change({target:{getAttribute:key=>({'data-route':'0','data-key':'source'})[key]??null,type:'select-one',value:'HDMI 2'}});
+assert.equal(edits.at(-1).display_routes[0].source,'HDMI 2');
+assert.equal(edits.at(-1).other_custom_setting,'keep-me');
+// A changed TV source_list refreshes the options.
+visualEditor.hass={states:{'media_player.box':{attributes:{}},'media_player.lg':{attributes:{source_list:['HDMI 2','Game console']}}}};
+tvSource=visualEditor.shadowRoot.querySelector('[data-route="0"][data-key="source"]');
+assert.deepEqual([...tvSource.querySelectorAll('option')].map(o=>o.value),['','HDMI 2','Game console']);
+// Different physical TV: no stale source, and show that TV's actual source_list.
+visualEditor.hass={states:{'media_player.box':{attributes:{}},'media_player.lg':{attributes:{source_list:['HDMI 2']}},'media_player.roku':{attributes:{source_list:['HDMI 3','Android TV']}}}};
+let tvDisplay=visualEditor.shadowRoot.querySelector('[data-route="0"][data-key="display"]');
+visualEditor.change({target:{getAttribute:key=>({'data-route':'0','data-key':'display'})[key]??null,type:'select-one',value:'media_player.roku'}});
+assert.equal(edits.at(-1).display_routes[0].source,'');
+tvSource=visualEditor.shadowRoot.querySelector('[data-route="0"][data-key="source"]');
+assert.deepEqual([...tvSource.querySelectorAll('option')].map(o=>o.value),['','HDMI 3','Android TV']);
+// TVs not reporting source_list retain a manual input fallback.
+visualEditor.hass={states:{'media_player.box':{attributes:{}},'media_player.roku':{attributes:{}}}};
+tvSource=visualEditor.shadowRoot.querySelector('[data-route="0"][data-key="source"]');
+assert.equal(tvSource.localName,'input');
+tvSource.value='Custom input';tvSource.dispatchEvent(new window.Event('change',{bubbles:true}));
+assert.equal(edits.at(-1).display_routes[0].source,'Custom input');
+
 visualEditor.shadowRoot.querySelector('[data-action="add"]').click();
 assert.equal(edits.at(-1).display_routes.length,2);
 visualEditor.shadowRoot.querySelector('[data-action="remove"][data-index="0"]').click();
