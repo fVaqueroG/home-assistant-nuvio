@@ -108,6 +108,16 @@ ADB-based Android TV entities. The frontend is served by the integration itself.
 registers the card as a Lovelace module resource with a versioned URL, avoiding stale
 mobile/browser caches and `Custom element doesn't exist: nuvio-card` errors.
 
+### Visual card editor
+
+In **Edit dashboard → Edit Nuvio card**, use the visual editor to choose the
+card title, catalog columns, search and remote controls, default playback device,
+and optional HDMI/TV connections. Each connection includes the playback device,
+physical TV entity, exact input name (with suggestions from `source_list`),
+display power-on preference, and optional wake/input delays. You can add or remove
+multiple connections without opening the YAML editor. Existing custom YAML keys
+are preserved when the visual editor changes another field.
+
 ### Automatically switch the physical TV to a playback device
 
 When an Android TV box (or another player) is connected to a separate LG webOS,
