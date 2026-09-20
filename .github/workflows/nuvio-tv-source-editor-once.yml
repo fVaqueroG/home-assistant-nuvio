@@ -1,0 +1,32 @@
+name: Apply Nuvio TV source dropdown (one-time)
+on:
+  push:
+    branches:
+      - release/0.4.62-tv-source-dropdown
+    paths:
+      - .github/workflows/nuvio-tv-source-editor-once.yml
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/0.4.62-tv-source-dropdown
+      - name: Apply visual editor changes
+        run: |
+          python scripts/update_tv_source_editor_once.py
+      - name: Validate editor, card and integration
+        run: |
+          node --check custom_components/nuvio/frontend/nuvio-card.js
+          npm ci --prefix tests
+          node tests/test_card.cjs
+          python -m compileall -q custom_components/nuvio
+      - name: Commit application files
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add custom_components/nuvio/frontend/nuvio-card.js custom_components/nuvio/manifest.json README.md tests/test_card.cjs
+          git commit -m 'Release 0.4.62: use TV-reported sources in visual editor'
+          git push origin HEAD:release/0.4.62-tv-source-dropdown
