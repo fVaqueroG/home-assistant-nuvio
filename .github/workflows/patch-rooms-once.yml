@@ -13,11 +13,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Apply Nuvio card patch
-        run: python3 .github/scripts/patch_rooms_once.py
+      - name: Apply Nuvio card and room regression patches
+        run: |
+          python3 .github/scripts/patch_rooms_once.py
+          python3 .github/scripts/rooms_regression_once.py
       - name: Syntax check
         run: node --check custom_components/nuvio/frontend/nuvio-card.js
-      - name: Existing card regression tests
+      - name: Card regression tests
         run: |
           npm ci --prefix tests
           node tests/test_card.cjs
@@ -26,8 +28,8 @@ jobs:
           git diff --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add custom_components/nuvio/frontend/nuvio-card.js custom_components/nuvio/manifest.json
+          git add custom_components/nuvio/frontend/nuvio-card.js custom_components/nuvio/manifest.json tests/test_card.cjs
           if ! git diff --cached --quiet; then
-            git commit -m 'Add per-room Nuvio playback mappings, visual editor and TV volume remote'
+            git commit -m 'Test Nuvio room selection, HDMI routing, power helpers and volume control'
             git push
           fi
