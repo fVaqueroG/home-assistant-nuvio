@@ -41,6 +41,28 @@ assert.match(cardSource,/id="homeTop"/);
 assert.equal((cardSource.match(/this\.playerSelect\(\)/g)||[]).length,1);
 const flush=()=>new Promise(r=>setImmediate(r));
 (async()=>{
+ // Route HDMI first while preserving the selected Nuvio playback entity.
+ const routed=window.document.createElement('nuvio-card');
+ routed.setConfig({show_remote:false,display_routes:[{player:'media_player.android_box',display:'media_player.lg_tv',source:'HDMI 2',wake_delay_ms:0,delay_ms:0}]});
+ routed._playerId='media_player.android_box';routed._item={id:'tt1',type:'movie',name:'Movie'};
+ const routedCalls=[],display={state:'on',attributes:{source:'HDMI 1'}};
+ routed._hass={states:{'media_player.lg_tv':display,'media_player.android_box':{}},callService:async(...args)=>routedCalls.push(args)};
+ await routed.play(false,null);
+ assert.deepEqual(routedCalls.map(x=>x[0]+'.'+x[1]),['media_player.select_source','nuvio.play']);
+ assert.equal(routedCalls[0][2].source,'HDMI 2');
+ assert.equal(routedCalls[0][3].entity_id,'media_player.lg_tv');
+ assert.equal(routedCalls[1][3].entity_id,'media_player.android_box');
+ routedCalls.length=0;routed._playerId='media_player.no_route';
+ await routed.play(false,null);
+ assert.equal(routedCalls.length,1);assert.equal(routedCalls[0][1],'play');
+ routed._playerId='media_player.android_box';routed._lastDisplaySwitch=null;
+ display.attributes.source='HDMI 2';routedCalls.length=0;
+ await routed.play(false,null);
+ assert.deepEqual(routedCalls.map(x=>x[1]),['play']);
+ display.state='off';display.attributes.source='HDMI 1';routed._lastDisplaySwitch=null;routedCalls.length=0;
+ await routed.play(false,null);
+ assert.deepEqual(routedCalls.map(x=>x[1]),['turn_on','select_source','play']);
+ routed.remove();
  const card=window.document.createElement('nuvio-card');window.document.body.append(card);
  card.setConfig({show_remote:false});card._loaded=true;
  card._hass={states:{'media_player.living_room':{attributes:{friendly_name:'Living Room TV'}},'media_player.bedroom':{attributes:{friendly_name:'Bedroom TV'}}}};
