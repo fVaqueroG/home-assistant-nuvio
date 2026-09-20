@@ -1,0 +1,35 @@
+name: Repair HDMI routing workflow (one-time)
+on:
+  push:
+    branches:
+      - release/0.4.60-hdmi-input-routing
+    paths:
+      - .github/workflows/nuvio-display-routing-repair.yml
+permissions:
+  contents: write
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/0.4.60-hdmi-input-routing
+      - name: Repair embedded payload indentation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/nuvio-display-routing-once.yml')
+          s=p.read_text()
+          a=s.index("payload=''.join('''")
+          start=s.index('\n',a)+1
+          end=s.index("'''.split())",start)+len("'''.split())")
+          block=s[start:end]
+          s=s[:start]+''.join('          '+line for line in block.splitlines(keepends=True))+s[end:]
+          s=s.replace('git rm .github/workflows/nuvio-display-routing-once.yml','git rm .github/workflows/nuvio-display-routing-once.yml .github/workflows/nuvio-display-routing-repair.yml')
+          p.write_text(s)
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/nuvio-display-routing-once.yml
+          git commit -m 'Repair HDMI routing workflow payload indentation'
+          git push origin HEAD:release/0.4.60-hdmi-input-routing
