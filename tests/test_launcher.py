@@ -36,6 +36,7 @@ def test_movie_stream_intent() -> None:
     assert "--es contentId tt123" in command
     assert "--es videoId tt123" in command
     assert "--es launchMode stream" in command
+    assert "--activity-clear-top --activity-single-top" in command
 
 
 def test_episode_stream_intent_and_quoting() -> None:
@@ -101,6 +102,7 @@ def test_player_intent_command() -> None:
     )
     assert "com.nuviodebug.com/com.nuvio.tv.MainActivity" in command
     assert "--es launchMode player" in command
+    assert "--activity-clear-top --activity-single-top" in command
     assert "--es streamUrl" in command
     assert "https://cdn.example.com/movie.mkv?token=a&b=2" in command
     assert "--es streamTitle" in command
@@ -128,6 +130,7 @@ def test_webos_player_launch_payload() -> None:
     params = payload["params"]
     assert payload["id"] == "space.nuvio.webos"
     assert params["launchMode"] == "player"
+    assert "target" not in params
     assert params["streamUrl"] == "https://cdn.example.com/movie.mkv"
     assert params["streamTitle"] == "Movie REMUX"
     assert params["filename"] == "Movie.REMUX.mkv"
