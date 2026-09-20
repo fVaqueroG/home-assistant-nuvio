@@ -139,7 +139,7 @@ display_routes:
 ```
 
 Replace the example entity IDs with the actual playback and physical TV entities.
-Use the **exact** HDMI input name from the physical TV's `source_list` attribute
+The visual editor now reads the selected TV's `source_list` to offer its actual HDMI and other media inputs. Manual entry remains available if no sources are reported. In YAML, use the **exact** HDMI input name from the physical TV's `source_list` attribute
 in Home Assistant Developer Tools → States. Select a mapped player in the card
 or press Play to turn on the display if needed, switch to its source, then send
 playback to the selected player. `turn_on: false` skips display power-on;
