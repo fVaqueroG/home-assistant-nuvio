@@ -440,6 +440,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
                 )
 
             if call.data.get(ATTR_IN_NUVIO):
+                if android_remote_ids:
+                    raise HomeAssistantError(
+                        "Exact Nuvio stream playback requires the ADB-based Android TV "
+                        "media_player entity. Android TV Remote can open a title, but "
+                        "cannot send the selected stream URL to Nuvio."
+                    )
                 loaded_entry = hass.config_entries.async_loaded_entries(DOMAIN)[0]
                 profile_id = int(loaded_entry.data.get(CONF_PROFILE_ID, 1))
                 source_title = (
@@ -482,33 +488,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: NuvioConfigEntry) -> boo
                         {ATTR_ENTITY_ID: android_ids, "command": command},
                         blocking=True,
                     )
-
-                if android_remote_ids:
-                    # Android TV Remote cannot send arbitrary intent extras.
-                    # Fall back to Nuvio's title/episode stream screen.
-                    if (
-                        call.data.get(ATTR_MEDIA_TYPE)
-                        and call.data.get(ATTR_CONTENT_ID)
-                    ):
-                        uri = deep_link(
-                            call.data[ATTR_MEDIA_TYPE],
-                            call.data[ATTR_CONTENT_ID],
-                        )
-                        await hass.services.async_call(
-                            "media_player",
-                            "play_media",
-                            {
-                                ATTR_ENTITY_ID: android_remote_ids,
-                                "media_content_id": uri,
-                                "media_content_type": "url",
-                            },
-                            blocking=True,
-                        )
-                    else:
-                        raise HomeAssistantError(
-                            "Exact Nuvio internal-player launch on Android requires "
-                            "the ADB-based Android TV entity."
-                        )
 
                 if webos_ids:
                     payload = webos_launch_payload(

@@ -68,6 +68,7 @@ def stream_intent_command(
         "-n",
         f"{package_name}/{NUVIO_ACTIVITY}",
         "--activity-clear-top",
+        "--activity-single-top",
     ]
     for key, value in string_extras.items():
         if value is not None:
@@ -139,6 +140,7 @@ def player_intent_command(
         "-n",
         f"{package_name}/{NUVIO_ACTIVITY}",
         "--activity-clear-top",
+        "--activity-single-top",
     ]
     for key, value in string_extras.items():
         if value is not None:
@@ -195,11 +197,12 @@ def webos_launch_payload(
         else content_id
     )
     params: dict[str, Any] = {
-        "target": deep_link(normalized_type, content_id),
         "contentId": content_id,
         "contentType": normalized_type,
         "launchMode": launch_mode,
     }
+    if launch_mode != "player" or not stream_url:
+        params["target"] = deep_link(normalized_type, content_id)
     if stream_url is not None:
         params["streamUrl"] = stream_url
     if stream_title is not None:
