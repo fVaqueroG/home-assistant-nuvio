@@ -1,0 +1,33 @@
+name: Apply Nuvio visual card editor (one-time)
+on:
+  push:
+    branches:
+      - release/0.4.61-visual-card-editor
+    paths:
+      - .github/workflows/nuvio-card-editor-once.yml
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/0.4.61-visual-card-editor
+      - name: Patch bundled Nuvio editor
+        run: |
+          sed -i 's/new CustomEvent(/new window.CustomEvent(/g' scripts/implement_card_editor_once.py
+          python scripts/implement_card_editor_once.py
+      - name: Validate JavaScript and card editor behavior
+        run: |
+          node --check custom_components/nuvio/frontend/nuvio-card.js
+          npm ci --prefix tests
+          node tests/test_card.cjs
+          python -m compileall -q custom_components/nuvio
+      - name: Commit application updates only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add custom_components/nuvio/frontend/nuvio-card.js custom_components/nuvio/manifest.json README.md tests/test_card.cjs
+          git commit -m 'Release 0.4.61: visual Nuvio card editor'
+          git push origin HEAD:release/0.4.61-visual-card-editor
