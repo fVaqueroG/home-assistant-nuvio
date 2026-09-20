@@ -17,6 +17,20 @@ jobs:
       - name: Apply visual editor changes
         run: |
           python scripts/update_tv_source_editor_once.py
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('tests/test_card.cjs')
+          s=p.read_text()
+          old="tvSource.value='HDMI 2';tvSource.dispatchEvent(new window.Event('change',{bubbles:true}));"
+          new="visualEditor.change({target:{getAttribute:key=>({'data-route':'0','data-key':'source'})[key]??null,type:'select-one',value:'HDMI 2'}});"
+          assert s.count(old)==1
+          s=s.replace(old,new,1)
+          old="tvDisplay.value='media_player.roku';tvDisplay.dispatchEvent(new window.Event('change',{bubbles:true}));"
+          new="visualEditor.change({target:{getAttribute:key=>({'data-route':'0','data-key':'display'})[key]??null,type:'select-one',value:'media_player.roku'}});"
+          assert s.count(old)==1
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
       - name: Validate editor, card and integration
         run: |
           node --check custom_components/nuvio/frontend/nuvio-card.js
