@@ -4,6 +4,7 @@ class NuvioCard extends HTMLElement {
     this._config={}; this._hass=null; this._loaded=false; this._loading=false;
     this._sections=[]; this._hero=[]; this._heroIndex=0; this._homePrefs={}; this._results=[]; this._catalogSection=null; this._catalogItems=[]; this._catalogLoading=false; this._catalogLoadingMore=false; this._catalogVisibleCount=0; this._catalogPaging=null; this._catalogObserver=null; this._catalogScrollTop=0; this._catalogLoadError=""; this._resetCatalogScroll=false; this._catalogReload=null; this._returnView="home"; this._playersMeta=[]; this._playerId=""; this._streams=[]; this._streamLoading=false; this._streamLoadingStage=""; this._streamContext=null; this._sourceRequest=0; this._addonFilter="all"; this._addonFilterExpanded=false; this._watchProviders=[]; this._watchProviderMeta={configured:false}; this._watchProvidersLoading=false; this._debridMeta={configured:false,provider:""}; this._resolving=new Set(); this._lazyCatalogLoads=new Set(); this._lazyObserver=null; this._remoteExpanded=false; this._view="home"; this._item=null; this._details=null; this._season=null; this._query=""; this._error="";
   }
+  static getConfigElement(){ return document.createElement("nuvio-card-editor"); }
   static getStubConfig(){ return {title:"Nuvio",columns:6,show_remote:true,remote_side:"left"}; }
   setConfig(c){ this._config=Object.assign({title:"Nuvio",columns:6,show_search:true,show_remote:true,remote_side:"left"},c||{}); this.render(); }
   set hass(h){ this._hass=h; if(!this._loaded&&!this._loading&&!this._homeRetryTimer&&(this._homeRetryCount||0)<3)this.loadHome(); }
@@ -932,7 +933,7 @@ async choosePlayer(player){
       ? ""
       : '<button class="ib toolbar-btn remote-toggle-button '+(this._remoteExpanded?"remote-active":"")+'" title="Control" aria-label="Control"><ha-icon icon="mdi:remote-tv"></ha-icon></button>';
     var home='<button class="ib toolbar-btn '+(onHome?"toolbar-active":"")+'" id="homeTop" title="Home" aria-label="Home"><ha-icon icon="mdi:home"></ha-icon></button>';
-    return '<div class="header"><div class="header-title"><h2>'+this.esc(this._config.title||"Nuvio")+'</h2><span class="card-version">v0.4.60</span></div><div class="tools">'+search+'<label class="toolbar-player" title="Select media player"><ha-icon icon="mdi:television" aria-hidden="true"></ha-icon>'+this.playerSelect()+'</label>'+
+    return '<div class="header"><div class="header-title"><h2>'+this.esc(this._config.title||"Nuvio")+'</h2><span class="card-version">v0.4.61</span></div><div class="tools">'+search+'<label class="toolbar-player" title="Select media player"><ha-icon icon="mdi:television" aria-hidden="true"></ha-icon>'+this.playerSelect()+'</label>'+
       home+
       '<button class="ib toolbar-btn" id="refresh" title="Refresh" aria-label="Refresh"><ha-icon icon="mdi:refresh"></ha-icon></button>'+
       addons+remote+'</div></div>';
@@ -1392,7 +1393,145 @@ async choosePlayer(player){
     this.syncHeroTimer();
   }
 }
+
+// Lovelace visual editor. Preserve all unrelated configuration keys (including
+// future additions) and only update the setting that the user changes.
+class NuvioCardEditor extends HTMLElement {
+  constructor(){
+    super();
+    this.attachShadow({mode:"open"});
+    this._config={};
+    this._hass=null;
+    this._rendered=false;
+    this.shadowRoot.addEventListener("change",e=>this.change(e));
+    this.shadowRoot.addEventListener("click",e=>this.clickAction(e));
+  }
+  set hass(h){
+    const first=!this._hass;
+    this._hass=h;
+    if(first||!this._rendered)this.render();
+  }
+  setConfig(config){this._config={...(config||{})};this.render();}
+  esc(value){return String(value==null?"":value).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;");}
+  playerIds(extra=[]){
+    const states=(this._hass&&this._hass.states)||{};
+    return [...new Set([...Object.keys(states).filter(id=>id.startsWith("media_player.")),...extra.filter(id=>typeof id==="string"&&id.startsWith("media_player."))])].sort((a,b)=>this.name(a).localeCompare(this.name(b)));
+  }
+  name(id){
+    const states=(this._hass&&this._hass.states)||{};
+    return ((states[id]||{}).attributes||{}).friendly_name||id;
+  }
+  playerOptions(selected,includeEmpty=true){
+    const routes=Array.isArray(this._config.display_routes)?this._config.display_routes:[];
+    const extras=[selected,this._config.default_player,this._config.entity,...routes.flatMap(r=>[r&&r.player,r&&r.display])];
+    const empty=includeEmpty?'<option value="">Select a media player</option>':"";
+    return empty+this.playerIds(extras).map(id=>'<option value="'+this.esc(id)+'" '+(id===selected?'selected':'')+'>'+this.esc(this.name(id))+' · '+this.esc(id)+'</option>').join("");
+  }
+  sourceOptions(display,index){
+    const state=((this._hass&&this._hass.states)||{})[display];
+    const sources=((state||{}).attributes||{}).source_list;
+    return '<datalist id="nuvio-inputs-'+index+'">'+(Array.isArray(sources)?sources:[]).map(source=>'<option value="'+this.esc(source)+'"></option>').join("")+'</datalist>';
+  }
+  routes(){return Array.isArray(this._config.display_routes)?this._config.display_routes:[];}
+  routeHtml(route,index){
+    const r=route||{},source=String(r.source||"");
+    const on=r.turn_on!==false;
+    const wake=r.wake_delay_ms==null?2000:r.wake_delay_ms;
+    const settle=r.delay_ms==null?1000:r.delay_ms;
+    const states=(this._hass&&this._hass.states)||{};
+    const inputList=((states[r.display]||{}).attributes||{}).source_list;
+    const hint=Array.isArray(inputList)&&inputList.length?'Choose a suggested TV input or enter its exact name.':'Enter the exact input name shown by the TV in Home Assistant.';
+    return '<section class="route"><div class="route-heading"><strong>Connection '+(index+1)+'</strong><button type="button" data-action="remove" data-index="'+index+'" aria-label="Remove connection '+(index+1)+'">Remove</button></div>'+
+      '<div class="fields"><label>Playback device<select data-route="'+index+'" data-key="player">'+this.playerOptions(r.player||"")+'</select></label>'+
+      '<label>Physical TV / display<select data-route="'+index+'" data-key="display">'+this.playerOptions(r.display||"")+'</select></label>'+
+      '<label>TV input / HDMI source<input data-route="'+index+'" data-key="source" type="text" list="nuvio-inputs-'+index+'" value="'+this.esc(source)+'" placeholder="HDMI 1" autocomplete="off">'+this.sourceOptions(r.display,index)+'<small>'+this.esc(hint)+'</small></label>'+
+      '<label class="switch"><input type="checkbox" data-route="'+index+'" data-key="turn_on" '+(on?'checked':'')+'>Turn on the display if needed</label>'+
+      '<label>Wake delay (ms)<input type="number" min="0" max="10000" step="100" data-route="'+index+'" data-key="wake_delay_ms" value="'+this.esc(wake)+'"></label>'+
+      '<label>Delay after input change (ms)<input type="number" min="0" max="10000" step="100" data-route="'+index+'" data-key="delay_ms" value="'+this.esc(settle)+'"></label></div></section>';
+  }
+  emit(config){
+    this._config=config;
+    this.dispatchEvent(new window.CustomEvent("config-changed",{detail:{config:{...config}},bubbles:true,composed:true}));
+    this.render();
+  }
+  change(event){
+    const target=event.target;
+    if(!target||!target.getAttribute)return;
+    const field=target.getAttribute("data-field");
+    const routeIndex=target.getAttribute("data-route");
+    const checkbox=target.type==="checkbox";
+    if(field){
+      let value=checkbox?target.checked:target.value;
+      if(field==="columns")value=Math.max(1,Math.min(12,Number(value)||6));
+      const config={...this._config,[field]:value};
+      if(field==="default_player"&&!value)delete config.default_player;
+      this.emit(config);
+      return;
+    }
+    if(routeIndex==null)return;
+    const key=target.getAttribute("data-key");
+    const index=Number(routeIndex),routes=this.routes().map(r=>({...r}));
+    if(!Number.isInteger(index)||index<0||index>=routes.length||!key)return;
+    let value=checkbox?target.checked:target.value;
+    if(key==="delay_ms"||key==="wake_delay_ms")value=Math.max(0,Math.min(10000,Math.round(Number(value)||0)));
+    routes[index][key]=value;
+    this.emit({...this._config,display_routes:routes});
+  }
+  clickAction(event){
+    const btn=event.target&&event.target.closest&&event.target.closest("button[data-action]");
+    if(!btn)return;
+    const routes=this.routes().map(route=>({...route}));
+    if(btn.getAttribute("data-action")==="add")routes.push({player:"",display:"",source:"",turn_on:true,wake_delay_ms:2000,delay_ms:1000});
+    else if(btn.getAttribute("data-action")==="remove"){
+      const index=Number(btn.getAttribute("data-index"));
+      if(!Number.isInteger(index)||index<0||index>=routes.length)return;
+      routes.splice(index,1);
+    }else return;
+    this.emit({...this._config,display_routes:routes});
+  }
+  render(){
+    if(!this.shadowRoot)return;
+    const cfg=this._config,routes=this.routes();
+    this.shadowRoot.innerHTML=`<style>
+      :host{display:block;color:var(--primary-text-color);font:inherit}
+      .editor{display:grid;gap:18px;padding:12px 4px 24px}
+      section.group,.route{padding:14px;border:1px solid var(--divider-color);border-radius:14px;background:var(--card-background-color)}
+      h3{margin:0 0 12px;font-size:16px}p{color:var(--secondary-text-color);font-size:12px;line-height:1.4;margin:6px 0 12px}
+      .fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:12px;align-items:start}
+      label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:500;min-width:0}
+      select,input[type=text],input[type=number]{box-sizing:border-box;width:100%;min-width:0;padding:10px;border:1px solid var(--divider-color);border-radius:9px;background:var(--secondary-background-color);color:var(--primary-text-color);font:inherit}
+      input[type=checkbox]{width:18px;height:18px;accent-color:var(--primary-color)}
+      .switch{display:flex;flex-direction:row;align-items:center;gap:9px;padding:9px 0}
+      .route{margin:12px 0;background:var(--secondary-background-color)}
+      .route-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+      button{cursor:pointer;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);border-radius:10px;padding:9px 13px;font:inherit}
+      button.add{background:var(--primary-color);color:white;border-color:transparent}
+      small{font-weight:400;color:var(--secondary-text-color);line-height:1.35}
+      @media(max-width:480px){.fields{grid-template-columns:minmax(0,1fr)}section.group,.route{padding:12px}}
+    </style><div class="editor">
+      <section class="group"><h3>General</h3><div class="fields">
+        <label>Card title<input type="text" data-field="title" value="${this.esc(cfg.title==null?"Nuvio":cfg.title)}"></label>
+        <label>Catalog columns<input type="number" data-field="columns" min="1" max="12" step="1" value="${this.esc(cfg.columns==null?6:cfg.columns)}"></label>
+        <label class="switch"><input type="checkbox" data-field="show_search" ${cfg.show_search!==false?'checked':''}>Show search</label>
+      </div></section>
+      <section class="group"><h3>Playback device</h3><p>Choose the default device. The player selector remains available in the card’s top toolbar.</p>
+        <label>Default player<select data-field="default_player">${this.playerOptions(cfg.default_player||cfg.entity||"")}</select></label>
+      </section>
+      <section class="group"><h3>Remote control</h3><div class="fields">
+        <label class="switch"><input type="checkbox" data-field="show_remote" ${cfg.show_remote!==false?'checked':''}>Show control button</label>
+        <label>Remote panel side<select data-field="remote_side"><option value="left" ${cfg.remote_side!=="right"?'selected':''}>Left</option><option value="right" ${cfg.remote_side==="right"?'selected':''}>Right</option></select></label>
+      </div></section>
+      <section class="group"><h3>HDMI and TV connections</h3><p>When you select a playback device, Nuvio can turn on its physical TV and switch to the connected HDMI input. This mapping is optional, and players without a connection are unchanged. Input names must match the TV’s source list.</p>
+        ${routes.map((route,index)=>this.routeHtml(route,index)).join("")}
+        <button class="add" type="button" data-action="add">+ Add TV connection</button>
+      </section>
+    </div>`;
+    this._rendered=true;
+  }
+}
+if(!customElements.get("nuvio-card-editor"))customElements.define("nuvio-card-editor",NuvioCardEditor);
+
 if(!customElements.get("nuvio-card"))customElements.define("nuvio-card",NuvioCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==="nuvio-card"))window.customCards.push({type:"nuvio-card",name:"Nuvio",description:"Browse, search and play your Nuvio catalog.",preview:true});
-console.info("NUVIO-CARD v0.4.60");
+console.info("NUVIO-CARD v0.4.61");

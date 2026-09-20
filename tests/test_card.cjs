@@ -39,6 +39,32 @@ assert.match(cardSource,/toolbar-player/);
 assert.match(cardSource,/aria-label="Media player"/);
 assert.match(cardSource,/id="homeTop"/);
 assert.equal((cardSource.match(/this\.playerSelect\(\)/g)||[]).length,1);
+// Home Assistant discovers the native visual editor and preserves unrelated YAML.
+const editorCard=window.document.createElement('nuvio-card');
+const visualEditor=editorCard.constructor.getConfigElement();
+assert.equal(visualEditor.localName,'nuvio-card-editor');
+visualEditor.setConfig({type:'custom:nuvio-card',title:'Living room',columns:5,
+  other_custom_setting:'keep-me',display_routes:[{player:'media_player.box',display:'media_player.lg',source:'HDMI 1',turn_on:true,delay_ms:900}]});
+visualEditor.hass={states:{'media_player.box':{attributes:{friendly_name:'Android box'}},
+  'media_player.lg':{attributes:{friendly_name:'Living room LG',source_list:['HDMI 1','HDMI 2']}}}};
+assert.ok(visualEditor.shadowRoot.querySelector('[data-field="default_player"]'));
+assert.ok(visualEditor.shadowRoot.querySelector('[data-field="show_remote"]'));
+assert.ok(visualEditor.shadowRoot.querySelector('[data-action="add"]'));
+assert.equal(visualEditor.shadowRoot.querySelectorAll('datalist option').length,2);
+const edits=[];
+visualEditor.addEventListener('config-changed',e=>edits.push(e.detail.config));
+const columns=visualEditor.shadowRoot.querySelector('[data-field="columns"]');
+columns.value='7';columns.dispatchEvent(new window.Event('change',{bubbles:true}));
+assert.equal(edits.at(-1).columns,7);
+assert.equal(edits.at(-1).other_custom_setting,'keep-me');
+assert.equal(edits.at(-1).display_routes[0].source,'HDMI 1');
+visualEditor.shadowRoot.querySelector('[data-action="add"]').click();
+assert.equal(edits.at(-1).display_routes.length,2);
+visualEditor.shadowRoot.querySelector('[data-action="remove"][data-index="0"]').click();
+assert.equal(edits.at(-1).display_routes.length,1);
+assert.equal(edits.at(-1).other_custom_setting,'keep-me');
+visualEditor.remove();editorCard.remove();
+
 const flush=()=>new Promise(r=>setImmediate(r));
 (async()=>{
  // Route HDMI first while preserving the selected Nuvio playback entity.
