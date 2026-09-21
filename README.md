@@ -1,5 +1,7 @@
 # Nuvio for Home Assistant
 
+[![Latest release](https://img.shields.io/github/v/release/fVaqueroG/home-assistant-nuvio?label=latest%20release)](https://github.com/fVaqueroG/home-assistant-nuvio/releases/latest) · [Latest release notes](https://github.com/fVaqueroG/home-assistant-nuvio/releases/latest) · [All releases and changes](https://github.com/fVaqueroG/home-assistant-nuvio/releases)
+
 A custom Home Assistant integration that exposes Stremio-compatible addon
 catalogs in the Media browser and opens or plays the selected title in Nuvio on
 an Android TV / Google TV device.
