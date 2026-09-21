@@ -27,6 +27,7 @@ from homeassistant.helpers.entity_registry import async_get as async_get_entity_
 from .account import NuvioAuthError
 from .api import Addon, NuvioApiError
 from .debrid import DebridNotCached, DebridNotConfigured, DebridResolveError
+from .cw_metadata import enrich_continue_watching
 from .providers import (
     normalize_provider_text,
     normalize_selected_provider,
@@ -1091,6 +1092,21 @@ async def _home(hass: HomeAssistant, *, refresh: bool = False) -> dict[str, Any]
             item.pop("_cw_has_aired", None)
             item.pop("_cw_sort", None)
             item.pop("_cw_release", None)
+
+        # Synced watch-progress rows often contain only an IMDb ID. Resolve
+        # their display title using the same configured metadata providers
+        # Nuvio uses, without replacing their IDs or episode/playback state.
+        await enrich_continue_watching(
+            main_cw + upcoming_cw,
+            api=api,
+            addons=addons,
+            tmdb_api=entry.runtime_data.get(DATA_TMDB_API),
+            catalog_items=[
+                item
+                for section in loaded_sections.values()
+                for item in section.get("items", [])
+            ],
+        )
 
         if main_cw:
             sections.append(
