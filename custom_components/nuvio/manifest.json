@@ -1,8 +1,7 @@
 {
-
   "domain": "nuvio",
   "name": "Nuvio",
-  "version": "0.4.65",
+  "version": "0.4.66",
   "codeowners": [],
   "config_flow": true,
   "dependencies": [
@@ -15,5 +14,6 @@
   "iot_class": "cloud_polling",
   "requirements": [
     "pycountry>=23.12.11"
-  ]
+  ],
+  "issue_tracker": "https://github.com/fVaqueroG/home-assistant-nuvio/issues"
 }
