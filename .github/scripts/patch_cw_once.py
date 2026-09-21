@@ -77,12 +77,4 @@ replace_once(card, '<span class="card-version">v0.4.64</span>', '<span class="ca
 replace_once(card, 'console.info("NUVIO-CARD v0.4.64");', 'console.info("NUVIO-CARD v0.4.65");')
 manifest = "custom_components/nuvio/manifest.json"
 replace_once(manifest, '"version": "0.4.64"', '"version": "0.4.65"')
-
-release = ".github/workflows/release.yml"
-replace_once(release,
-    "      - name: Create GitHub release\n",
-    "      - name: Test Continue Watching metadata lookup\n"
-    "        shell: bash\n"
-    "        run: python tests/test_continue_titles.py\n\n"
-    "      - name: Create GitHub release\n")
 print("Applied Continue Watching title enrichment and v0.4.65 patch")
