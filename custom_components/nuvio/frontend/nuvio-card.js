@@ -1006,7 +1006,7 @@ async choosePlayer(player){
       ? ""
       : '<button class="ib toolbar-btn remote-toggle-button '+(this._remoteExpanded?"remote-active":"")+'" title="Control" aria-label="Control"><ha-icon icon="mdi:remote-tv"></ha-icon></button>';
     var home='<button class="ib toolbar-btn '+(onHome?"toolbar-active":"")+'" id="homeTop" title="Home" aria-label="Home"><ha-icon icon="mdi:home"></ha-icon></button>';
-    return '<div class="header"><div class="header-title"><h2>'+this.esc(this._config.title||"Nuvio")+'</h2><span class="card-version">v0.4.66</span></div><div class="tools">'+search+this.roomSelect()+'<label class="toolbar-player" title="Select media player"><ha-icon icon="mdi:television" aria-hidden="true"></ha-icon>'+this.playerSelect()+'</label>'+
+    return '<div class="header"><div class="header-title"><h2>'+this.esc(this._config.title||"Nuvio")+'</h2><span class="card-version">v0.4.67</span></div><div class="tools">'+search+this.roomSelect()+'<label class="toolbar-player" title="Select media player"><ha-icon icon="mdi:television" aria-hidden="true"></ha-icon>'+this.playerSelect()+'</label>'+
       home+
       '<button class="ib toolbar-btn" id="refresh" title="Refresh" aria-label="Refresh"><ha-icon icon="mdi:refresh"></ha-icon></button>'+
       addons+remote+'</div></div>';
@@ -1693,4 +1693,4 @@ if(!customElements.get("nuvio-card-editor"))customElements.define("nuvio-card-ed
 if(!customElements.get("nuvio-card"))customElements.define("nuvio-card",NuvioCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==="nuvio-card"))window.customCards.push({type:"nuvio-card",name:"Nuvio",description:"Browse, search and play your Nuvio catalog.",preview:true});
-console.info("NUVIO-CARD v0.4.66");
+console.info("NUVIO-CARD v0.4.67");
