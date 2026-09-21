@@ -1,0 +1,41 @@
+name: Apply HACS manifest fix (one-time)
+on:
+  push:
+    branches:
+      - fix/hacs-update-visibility
+permissions:
+  contents: write
+concurrency:
+  group: nuvio-hacs-manifest-fix
+  cancel-in-progress: true
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add issue tracker and align version
+        run: python3 .github/scripts/fix_hacs_once.py
+      - name: Validate integration and card
+        run: |
+          python3 -m compileall -q custom_components/nuvio
+          node --check custom_components/nuvio/frontend/nuvio-card.js
+          npm ci --prefix tests
+          node tests/test_card.cjs
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          m=json.loads(Path('custom_components/nuvio/manifest.json').read_text())
+          assert m['version']=='0.4.66'
+          assert m['issue_tracker']=='https://github.com/fVaqueroG/home-assistant-nuvio/issues'
+          h=json.loads(Path('hacs.json').read_text())
+          assert h['content_in_root'] is False
+          print('HACS manifest checks passed')
+          PY
+          git diff --check
+      - name: Commit validated source-only change
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add custom_components/nuvio/manifest.json custom_components/nuvio/frontend/nuvio-card.js
+          git commit -m 'Fix missing HACS issue tracker and release 0.4.66'
+          git push
