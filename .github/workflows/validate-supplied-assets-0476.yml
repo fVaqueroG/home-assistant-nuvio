@@ -1,0 +1,38 @@
+name: Validate supplied Nuvio assets v0.4.76
+on:
+  push:
+    branches:
+      - feature/user-vertical-icon-assets-0476
+    paths:
+      - .github/workflows/validate-supplied-assets-0476.yml
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact supplied asset blobs and version
+        shell: bash
+        run: |
+          test "$(git hash-object 'custom_components/nuvio/frontend/assets/vertical.png')" = "1d6fb864c0d4d0d1ee8072e8b0c92632725325a2"
+          test "$(git hash-object 'custom_components/nuvio/frontend/assets/icon-only.png')" = "b535fab3ae5864db8555ad5e37158b5035e6e361"
+          test ! -e custom_components/nuvio/frontend/assets/mark.png
+          grep -F '"version": "0.4.76"' custom_components/nuvio/manifest.json
+          grep -F 'NUVIO-CARD v0.4.76' custom_components/nuvio/frontend/nuvio-card.js
+          grep -F '/nuvio/assets/vertical.png?v=0.4.76' custom_components/nuvio/frontend/nuvio-card.js
+          grep -F '/nuvio/assets/icon-only.png?v=0.4.76' custom_components/nuvio/frontend/nuvio-card.js
+      - name: Compile Python
+        run: python -m compileall -q custom_components/nuvio
+      - name: Pyflakes
+        shell: bash
+        run: |
+          python -m pip install -q pyflakes
+          pyflakes custom_components/nuvio/config_flow.py custom_components/nuvio/frontend.py custom_components/nuvio/launcher.py custom_components/nuvio/providers.py custom_components/nuvio/tmdb.py custom_components/nuvio/tvdb.py custom_components/nuvio/justwatch.py
+      - name: Check Lovelace syntax
+        run: node --check custom_components/nuvio/frontend/nuvio-card.js
+      - name: Run Lovelace regression tests
+        shell: bash
+        run: |
+          npm ci --prefix tests
+          node tests/test_card.cjs
