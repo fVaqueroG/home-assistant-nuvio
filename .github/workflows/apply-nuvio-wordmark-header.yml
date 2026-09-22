@@ -1,0 +1,94 @@
+name: Apply Nuvio wordmark header
+
+on:
+  push:
+    branches:
+      - feature/nuvio-wordmark-header
+    paths:
+      - .github/workflows/apply-nuvio-wordmark-header.yml
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Replace Nuvio card header text with official wordmark
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path('custom_components/nuvio')
+          frontend = root / 'frontend/nuvio-card.js'
+          source = frontend.read_text(encoding='utf-8')
+          old_header = """'<div class="header"><div class="header-title"><h2>'+this.esc(this._config.title||"Nuvio")+'</h2><span class="card-version">v0.4.69</span>'"""
+          new_header = """'<div class="header"><div class="header-title"><img class="nuvio-wordmark" src="https://nuvio.tv/assets/nuvio-app-logo-wordmark.webp" alt="Nuvio" decoding="async" style="display:none;height:38px;max-width:150px;width:auto;object-fit:contain"><h2 class="nuvio-wordmark-fallback">'+this.esc(this._config.title||"Nuvio")+'</h2><span class="card-version">v0.4.70</span>'"""
+          if source.count(old_header) != 1:
+              raise SystemExit('Expected exactly one original Nuvio header; refusing an unsafe replacement')
+          source = source.replace(old_header, new_header, 1)
+
+          old_wire = '  wire(){\n    var r=this.shadowRoot,q=r.querySelector("#search");\n'
+          new_wire = '''  wire(){
+    var r=this.shadowRoot,q=r.querySelector("#search");
+    // Display the official wordmark only after it loads; preserve configured title on error.
+    var wordmark=r.querySelector(".nuvio-wordmark"),fallback=r.querySelector(".nuvio-wordmark-fallback");
+    if(wordmark&&fallback){
+      var updateWordmark=()=>{
+        var loaded=wordmark.complete&&wordmark.naturalWidth>0;
+        wordmark.style.display=loaded?"block":"none";
+        fallback.style.display=loaded?"none":"";
+      };
+      wordmark.addEventListener("load",updateWordmark);
+      wordmark.addEventListener("error",updateWordmark);
+      updateWordmark();
+    }
+'''
+          if source.count(old_wire) != 1:
+              raise SystemExit('Expected exactly one card wire() anchor')
+          source = source.replace(old_wire, new_wire, 1)
+          if source.count('NUVIO-CARD v0.4.69') != 1:
+              raise SystemExit('Unexpected source card version; inspect before updating')
+          source = source.replace('NUVIO-CARD v0.4.69', 'NUVIO-CARD v0.4.70', 1)
+          frontend.write_text(source, encoding='utf-8')
+
+          manifest_path = root / 'manifest.json'
+          manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+          if manifest['version'] != '0.4.69':
+              raise SystemExit('Unexpected manifest version; do not overwrite newer changes')
+          manifest['version'] = '0.4.70'
+          manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+          PY
+      - name: Validate wordmark, bundled resource, and existing functionality
+        shell: bash
+        run: |
+          node --check custom_components/nuvio/frontend/nuvio-card.js
+          node --check custom_components/nuvio/frontend/nuvio-popup-card.js
+          python - <<'PY'
+          from pathlib import Path
+          src = Path('custom_components/nuvio/frontend/nuvio-card.js').read_text(encoding='utf-8')
+          assert 'src="https://nuvio.tv/assets/nuvio-app-logo-wordmark.webp"' in src
+          assert 'class="nuvio-wordmark-fallback"' in src
+          assert 'wordmark.addEventListener("load",updateWordmark)' in src
+          assert 'wordmark.addEventListener("error",updateWordmark)' in src
+          assert 'this._config.title||"Nuvio"' in src
+          assert 'NUVIO-CARD v0.4.70' in src
+          assert '<span class="card-version">v0.4.70</span>' in src
+          print('Wordmark URL, responsive dimensions, fallback and resource version checks passed.')
+          PY
+          npm ci --prefix tests
+          node tests/test_card.cjs
+          python -m compileall -q custom_components/nuvio
+      - name: Commit tested changes
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add custom_components/nuvio/frontend/nuvio-card.js custom_components/nuvio/manifest.json
+          git commit -m 'Display official Nuvio wordmark in card header (v0.4.70)'
+          git push origin HEAD:feature/nuvio-wordmark-header
