@@ -1,0 +1,58 @@
+name: Fix Nuvio popup button outer grid height v0.4.81
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-nuvio-popup-grid-height-v0481.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce matching launcher host and card size
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          root=Path('custom_components/nuvio')
+          p=root/'frontend/nuvio-popup-card.js'
+          s=p.read_text(encoding='utf-8')
+          old='getCardSize() { return this.launcherStyle() === "vertical" ? 2 : 1; }'
+          new='getCardSize() { return 2; }'
+          assert s.count(old)==1, 'Expected Nuvio card-size method changed'
+          s=s.replace(old,new)
+          old=':host{display:block;--popup-button-height:120px}'
+          new=':host{display:block;--popup-button-height:120px;height:var(--popup-button-height);min-height:var(--popup-button-height);box-sizing:border-box}'
+          assert s.count(old)==1, 'Expected Nuvio launcher host CSS changed'
+          s=s.replace(old,new)
+          old='ha-card{height:var(--popup-button-height);min-height:var(--popup-button-height);'
+          new='ha-card{height:var(--popup-button-height)!important;min-height:var(--popup-button-height)!important;'
+          assert s.count(old)==1, 'Expected Nuvio card CSS changed'
+          s=s.replace(old,new)
+          p.write_text(s,encoding='utf-8')
+          m=root/'manifest.json'
+          data=json.loads(m.read_text(encoding='utf-8'))
+          assert data['version']=='0.4.80', data['version']
+          data['version']='0.4.81'
+          m.write_text(json.dumps(data,indent=2)+'\n',encoding='utf-8')
+          print('PASS: Nuvio 120px host/card, popup grid size 2, version 0.4.81')
+          PY
+      - name: Validate JavaScript and manifest
+        run: |
+          node --check custom_components/nuvio/frontend/nuvio-popup-card.js
+          python3 -m json.tool custom_components/nuvio/manifest.json >/dev/null
+      - name: Publish Nuvio HACS update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add custom_components/nuvio/frontend/nuvio-popup-card.js custom_components/nuvio/manifest.json
+          git commit -m 'v0.4.81: enforce full 120px Nuvio launcher host height'
+          git push origin HEAD:main
+          gh release create v0.4.81 --target "$(git rev-parse HEAD)" --title v0.4.81 --notes 'Force Nuvio popup launcher host and ha-card to a consistent 120px height and return matching card size for grid layouts. Keep existing logo, popup, playback and remote unchanged. Update HACS, restart Home Assistant, refresh the dashboard.'
