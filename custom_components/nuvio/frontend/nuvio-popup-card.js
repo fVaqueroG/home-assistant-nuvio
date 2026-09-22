@@ -63,13 +63,13 @@ launcherStyle() {
     const logo = document.createElement("img");
     if (style === "vertical") {
       logo.className = "launcher-vertical-logo";
-      logo.src = "/nuvio/assets/vertical.png?v=0.4.77";
+      logo.src = "/nuvio/assets/vertical.png?v=0.4.78";
     } else if (style === "logo_only") {
       logo.className = "launcher-mark";
-      logo.src = "/nuvio/assets/icon-only.png?v=0.4.77";
+      logo.src = "/nuvio/assets/icon-only.png?v=0.4.78";
     } else {
       logo.className = "launcher-logo";
-      logo.src = "/nuvio/assets/wordmark.png?v=0.4.77";
+      logo.src = "/nuvio/assets/wordmark.png?v=0.4.78";
     }
     logo.alt = "";
     logo.addEventListener("error", () => {
