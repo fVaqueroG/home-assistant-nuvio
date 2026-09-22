@@ -43,7 +43,8 @@ assert.equal((cardSource.match(/this\.playerSelect\(\)/g)||[]).length,1);
 // Logos must be bundled on the HA backend, with no external brand image URLs.
 const localAssets = require('node:fs');
 assert.deepEqual([...localAssets.readFileSync('custom_components/nuvio/frontend/assets/wordmark.png').subarray(0,8)],[137,80,78,71,13,10,26,10]);
-assert.deepEqual([...localAssets.readFileSync('custom_components/nuvio/frontend/assets/mark.png').subarray(0,8)],[137,80,78,71,13,10,26,10]);
+assert.deepEqual([...localAssets.readFileSync('custom_components/nuvio/frontend/assets/vertical.png').subarray(0,8)],[137,80,78,71,13,10,26,10]);
+assert.deepEqual([...localAssets.readFileSync('custom_components/nuvio/frontend/assets/icon-only.png').subarray(0,8)],[137,80,78,71,13,10,26,10]);
 assert.doesNotMatch(cardSource,/https:\/\/nuvio\.tv\/assets\/nuvio-app-logo-wordmark\.webp/);
 assert.doesNotMatch(cardSource,/\/nuvio\/assets\/wordmark\.webp/);
 assert.doesNotMatch(cardSource,/https:\/\/raw\.githubusercontent\.com\/NuvioMedia\/NuvioTVSmart\/main\/assets\/brand\/app_logo_mark\.png/);
@@ -51,7 +52,7 @@ assert.doesNotMatch(cardSource,/https:\/\/raw\.githubusercontent\.com\/NuvioMedi
 const launcher=window.document.createElement('nuvio-popup-card');
 assert.equal(launcher.constructor.getStubConfig().button_icon,undefined);
 launcher.setConfig({type:'custom:nuvio-popup-card',button_label:'Nuvio',popup_width:'wide'});
-assert.equal(launcher.shadowRoot.querySelector('.launcher-logo').getAttribute('src'),'/nuvio/assets/wordmark.png?v=0.4.75');
+assert.equal(launcher.shadowRoot.querySelector('.launcher-logo').getAttribute('src'),'/nuvio/assets/wordmark.png?v=0.4.76');
 assert.equal(launcher.shadowRoot.querySelector('.launcher-visual ha-icon'),null);
 assert.equal(launcher.shadowRoot.querySelector('.launcher-caption').style.display,'none');
 launcher.setConfig({type:'custom:nuvio-popup-card',button_icon:'mdi:television-play',button_label:'Nuvio'});
@@ -66,16 +67,16 @@ assert.equal(launcher.shadowRoot.querySelector('.launcher-caption').textContent,
 assert.match(cardSource,/Button icon \(MDI, optional\)/);
 assert.match(cardSource,/Used for Icon \+ text/);
 assert.match(cardSource,/input.addEventListener\("change", \(\) => this.emit/);
-// New appearance choices: official Nuvio mark stacked above its name,
-// original wordmark horizontal, and custom MDI icon with caption.
+// Appearance choices: the user's exact stacked PNG for vertical,
+// the official wordmark for horizontal, and custom MDI icon with caption.
 launcher.setConfig({type:'custom:nuvio-popup-card',button_style:'vertical',button_label:'Nuvio'});
 assert.equal(launcher.getCardSize(),2);
-assert.equal(launcher.shadowRoot.querySelector('.launcher-mark').getAttribute('src'),'/nuvio/assets/mark.png?v=0.4.75');
+assert.equal(launcher.shadowRoot.querySelector('.launcher-vertical-logo').getAttribute('src'),'/nuvio/assets/vertical.png?v=0.4.76');
 assert.equal(launcher.shadowRoot.querySelector('.launcher-caption').textContent,'Nuvio');
-assert.notEqual(launcher.shadowRoot.querySelector('.launcher-caption').style.display,'none');
+assert.equal(launcher.shadowRoot.querySelector('.launcher-caption').style.display,'none');
 launcher.setConfig({type:'custom:nuvio-popup-card',button_style:'horizontal',button_icon:'mdi:star',button_label:'Nuvio'});
 assert.equal(launcher.getCardSize(),1);
-assert.equal(launcher.shadowRoot.querySelector('.launcher-logo').getAttribute('src'),'/nuvio/assets/wordmark.png?v=0.4.75');
+assert.equal(launcher.shadowRoot.querySelector('.launcher-logo').getAttribute('src'),'/nuvio/assets/wordmark.png?v=0.4.76');
 assert.equal(launcher.shadowRoot.querySelector('.launcher-visual ha-icon'),null);
 launcher.setConfig({type:'custom:nuvio-popup-card',button_style:'icon_text',button_label:'Watch'});
 assert.equal(launcher.shadowRoot.querySelector('.launcher-visual ha-icon').getAttribute('icon'),'mdi:television-play');
@@ -85,11 +86,11 @@ assert.equal(launcher.shadowRoot.querySelector('.launcher-visual ha-icon').getAt
 assert.equal(launcher.shadowRoot.querySelector('.launcher-logo'),null);
 assert.match(cardSource,/Button appearance<select data-field="button_style"/);
 assert.match(cardSource,/buttonStyle.addEventListener\("change",\(\)=>this.emit/);
-// Logo-only: Nuvio's official mark, without either caption or MDI icon.
+// Logo-only: the user's exact uploaded icon PNG, without caption or MDI icon.
 launcher.setConfig({type:'custom:nuvio-popup-card',button_style:'logo_only',button_label:'Custom label',button_icon:'mdi:star',popup_width:'normal'});
 assert.equal(launcher.launcherStyle(),'logo_only');
 assert.equal(launcher.getCardSize(),1);
-assert.equal(launcher.shadowRoot.querySelector('.launcher-mark').getAttribute('src'),'/nuvio/assets/mark.png?v=0.4.75');
+assert.equal(launcher.shadowRoot.querySelector('.launcher-mark').getAttribute('src'),'/nuvio/assets/icon-only.png?v=0.4.76');
 assert.equal(launcher.shadowRoot.querySelector('.launcher-logo'),null);
 assert.equal(launcher.shadowRoot.querySelector('.launcher-visual ha-icon'),null);
 assert.equal(launcher.shadowRoot.querySelector('.launcher-caption').style.display,'none');

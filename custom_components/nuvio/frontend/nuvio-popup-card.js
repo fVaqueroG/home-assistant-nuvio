@@ -48,9 +48,10 @@ launcherStyle() {
     ha-icon{color:var(--primary-color);--mdc-icon-size:25px}
     .launcher-visual{min-width:0;display:flex;align-items:center;justify-content:center}
     .launcher-logo{display:block;width:120px;max-width:100%;height:auto;max-height:38px;object-fit:contain}
-    .launcher-mark{display:block;width:46px;height:46px;max-width:100%;object-fit:contain}
+    .launcher-vertical-logo{display:block;width:auto;max-width:100%;height:82px;max-height:82px;object-fit:contain}
+    .launcher-mark{display:block;width:auto;height:46px;max-width:100%;object-fit:contain}
     .launcher-caption{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .launcher-vertical button{flex-direction:column;gap:5px;padding:6px 8px}
+    .launcher-vertical button{flex-direction:column;gap:0;padding:6px 8px}
     .launcher-vertical .launcher-caption{font-size:13px;line-height:17px;max-width:100%}
   </style><ha-card class="launcher-${style}"><button type="button" aria-label="Open Nuvio"><span class="launcher-visual"></span><span class="launcher-caption"></span></button></ha-card>`;
   const visual = this.shadowRoot.querySelector(".launcher-visual");
@@ -60,23 +61,29 @@ launcherStyle() {
     visual.appendChild(selected);
   } else {
     const logo = document.createElement("img");
-    logo.className = ["vertical", "logo_only"].includes(style) ? "launcher-mark" : "launcher-logo";
-    logo.src = ["vertical", "logo_only"].includes(style)
-      ? "/nuvio/assets/mark.png?v=0.4.75"
-      : "/nuvio/assets/wordmark.png?v=0.4.75";
+    if (style === "vertical") {
+      logo.className = "launcher-vertical-logo";
+      logo.src = "/nuvio/assets/vertical.png?v=0.4.76";
+    } else if (style === "logo_only") {
+      logo.className = "launcher-mark";
+      logo.src = "/nuvio/assets/icon-only.png?v=0.4.76";
+    } else {
+      logo.className = "launcher-logo";
+      logo.src = "/nuvio/assets/wordmark.png?v=0.4.76";
+    }
     logo.alt = "";
     logo.addEventListener("error", () => {
       const fallback = document.createElement("strong");
-      fallback.textContent = ["vertical", "logo_only"].includes(style) ? "N" : "Nuvio";
+      fallback.textContent = style === "logo_only" ? "N" : "Nuvio";
       logo.replaceWith(fallback);
     });
     visual.appendChild(logo);
   }
   const caption = this.shadowRoot.querySelector(".launcher-caption");
   caption.textContent = label;
-  // The logo-only mark must never show a caption; the horizontal wordmark
-  // already includes the default brand name. Other layouts show the label.
-  caption.style.display = style === "logo_only" || (style === "horizontal" && label.trim().toLowerCase() === "nuvio") ? "none" : "";
+  // The uploaded vertical and logo-only assets already contain the complete
+  // visual treatment. The horizontal wordmark also contains the default name.
+  caption.style.display = ["vertical", "logo_only"].includes(style) || (style === "horizontal" && label.trim().toLowerCase() === "nuvio") ? "none" : "";
   this.shadowRoot.querySelector("button").addEventListener("click", () => this.openPopup());
 }
   openPopup() {
