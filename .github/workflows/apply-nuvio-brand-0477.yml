@@ -1,0 +1,83 @@
+name: Apply Nuvio icon branding v0.4.77
+on:
+  push:
+    branches:
+      - feature/nuvio-icon-branding-0477
+    paths:
+      - .github/workflows/apply-nuvio-brand-0477.yml
+permissions:
+  contents: write
+jobs:
+  apply-branding:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Derive square brand icons from exact uploaded artwork
+        shell: bash
+        run: |
+          python -m pip install -q pillow
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          import json
+          source_path = Path('custom_components/nuvio/frontend/assets/icon-only.png')
+          source = Image.open(source_path).convert('RGBA')
+          assert source.size == (153,167), f'unexpected source size: {source.size}'
+          assert source_path.stat().st_size == 35387, 'source PNG does not match uploaded user asset'
+          for size in (256,512):
+              w = round(source.width * size/max(source.size))
+              h = round(source.height * size/max(source.size))
+              sized = source.resize((w,h), Image.Resampling.LANCZOS)
+              result = Image.new('RGBA',(size,size),(0,0,0,0))
+              result.alpha_composite(sized,((size-w)//2,(size-h)//2))
+              assert result.getpixel((0,0))[3] == 0
+              for path in (
+                  Path('brand') / ('icon.png' if size == 256 else 'icon@2x.png'),
+                  Path('custom_components/nuvio/brand') / ('icon.png' if size == 256 else 'icon@2x.png'),
+                  Path('custom_components/nuvio/brand') / ('logo.png' if size == 256 else 'logo@2x.png'),
+              ):
+                  path.parent.mkdir(parents=True,exist_ok=True)
+                  result.save(path,optimize=True)
+          preview=Image.new('RGB',(1280,640),(22,24,32))
+          resized=source.resize((round(source.width*460/source.height),460),Image.Resampling.LANCZOS)
+          preview.paste(resized,((1280-resized.width)//2,(640-resized.height)//2),resized)
+          social=Path('.github/social-preview.png')
+          preview.save(social,optimize=True)
+          readme=Path('README.md')
+          original=readme.read_text()
+          if not original.startswith('# Nuvio for Home Assistant\n'):
+              raise SystemExit('README title changed; update banner insertion')
+          readme.write_text('<p align="center"><img src="brand/icon.png" alt="Nuvio logo" width="112"></p>\n\n'+original)
+          manifest=Path('custom_components/nuvio/manifest.json')
+          manifest_data=json.loads(manifest.read_text())
+          assert manifest_data['version']=='0.4.76'
+          manifest_data['version']='0.4.77'
+          manifest.write_text(json.dumps(manifest_data,indent=2)+'\n')
+          for name in ('custom_components/nuvio/frontend/nuvio-card.js','custom_components/nuvio/frontend/nuvio-popup-card.js','tests/test_card.cjs'):
+              path=Path(name)
+              old=path.read_text()
+              assert '0.4.76' in old, name
+              path.write_text(old.replace('0.4.76','0.4.77'))
+          # Verify brand icons retain the source's aspect ratio inside square transparent canvases.
+          for path in ('brand/icon.png','brand/icon@2x.png','custom_components/nuvio/brand/icon.png','custom_components/nuvio/brand/icon@2x.png','custom_components/nuvio/brand/logo.png'):
+              image=Image.open(path)
+              assert image.width==image.height
+              assert image.mode=='RGBA'
+              assert image.getpixel((0,0))[3]==0
+          print('Nuvio original icon reused; brand icons, README and social preview prepared.')
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add brand/ custom_components/nuvio/brand/ custom_components/nuvio/manifest.json custom_components/nuvio/frontend/nuvio-card.js custom_components/nuvio/frontend/nuvio-popup-card.js tests/test_card.cjs README.md .github/social-preview.png
+          git commit -m "Use uploaded Nuvio icon for HACS, Home Assistant and GitHub branding (v0.4.77)"
+          git push
+      - name: Validate updated integration and card
+        shell: bash
+        run: |
+          python -m compileall -q custom_components/nuvio
+          node --check custom_components/nuvio/frontend/nuvio-card.js
+          npm ci --prefix tests
+          node tests/test_card.cjs
+          git diff --exit-code
