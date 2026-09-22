@@ -2253,8 +2253,15 @@ async def async_register_frontend(hass: HomeAssistant) -> None:
     if data.get(DATA_FRONTEND_REGISTERED):
         return
 
+    # Official logos are packaged locally and served by Home Assistant, so
+    # browsers never fetch them from Nuvio's site or GitHub.
+    assets = Path(__file__).parent / "frontend" / "assets"
     await hass.http.async_register_static_paths(
-        [StaticPathConfig(CARD_URL, str(CARD_FILE), cache_headers=False)]
+        [
+            StaticPathConfig(CARD_URL, str(CARD_FILE), cache_headers=False),
+            StaticPathConfig("/nuvio/assets/wordmark.webp", str(assets / "wordmark.webp"), cache_headers=True),
+            StaticPathConfig("/nuvio/assets/mark.png", str(assets / "mark.png"), cache_headers=True),
+        ]
     )
 
     # Storage-mode dashboards load the card through exactly one Lovelace
