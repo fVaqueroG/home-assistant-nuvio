@@ -1,0 +1,61 @@
+name: Align Nuvio popup launcher v0.4.80
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/align-popup-launcher-v0480.yml']
+permissions:
+  contents: write
+jobs:
+  align:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make Nuvio popup button match other launchers
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          root=Path('custom_components/nuvio')
+          p=root/'frontend/nuvio-popup-card.js'
+          s=p.read_text()
+          old=':host{display:block}ha-card{height:56px;box-sizing:border-box}\n    ha-card.launcher-vertical{height:96px}'
+          new=':host{display:block;--popup-button-height:120px}ha-card{height:var(--popup-button-height);min-height:var(--popup-button-height);box-sizing:border-box;border-radius:var(--ha-card-border-radius,14px);overflow:hidden}\n    ha-card.launcher-vertical{height:var(--popup-button-height)}'
+          assert s.count(old)==1, 'Unexpected Nuvio launcher CSS'
+          s=s.replace(old,new)
+          old='button{box-sizing:border-box;width:100%;height:100%;border:0;border-radius:var(--ha-card-border-radius,12px);padding:0 12px;display:flex;'
+          new='button{box-sizing:border-box;width:100%;height:100%;min-height:var(--popup-button-height);border:0;border-radius:inherit;padding:8px;display:flex;'
+          assert s.count(old)==1
+          s=s.replace(old,new)
+          old='.launcher-vertical-logo{display:block;width:auto;max-width:100%;height:82px;max-height:82px;object-fit:contain}'
+          new='.launcher-vertical-logo{display:block;width:auto;max-width:100%;height:104px;max-height:104px;object-fit:contain}'
+          assert s.count(old)==1
+          s=s.replace(old,new)
+          old='.launcher-vertical button{flex-direction:column;gap:0;padding:6px 8px}'
+          new='.launcher-vertical button{flex-direction:column;gap:0;padding:8px}'
+          assert s.count(old)==1
+          s=s.replace(old,new)
+          for mode in ('launcher-vertical','launcher-logo','launcher-mark'):
+              assert mode in s
+          p.write_text(s)
+          manifest=root/'manifest.json'
+          data=json.loads(manifest.read_text())
+          assert data['version']=='0.4.79', data['version']
+          data['version']='0.4.80'
+          manifest.write_text(json.dumps(data,indent=2)+'\n')
+          print('Nuvio popup launcher height unified to 120px; version 0.4.80')
+          PY
+      - name: Validate syntax and launcher sizing
+        run: |
+          node --check custom_components/nuvio/frontend/nuvio-popup-card.js
+          python3 -m json.tool custom_components/nuvio/manifest.json >/dev/null
+          grep -q 'popup-button-height:120px' custom_components/nuvio/frontend/nuvio-popup-card.js
+      - name: Publish integration update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add custom_components/nuvio/frontend/nuvio-popup-card.js custom_components/nuvio/manifest.json
+          git commit -m 'v0.4.80: align Nuvio popup launcher to 120px'
+          git push origin HEAD:main
+          gh release create v0.4.80 --target "$(git rev-parse HEAD)" --title v0.4.80 --notes 'Align the Nuvio popup launcher height, border radius and spacing to the Streaming Browser and Totalplay popup buttons without changing the full Nuvio card.'
