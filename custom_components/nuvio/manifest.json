@@ -1,7 +1,7 @@
 {
   "domain": "nuvio",
   "name": "Nuvio",
-  "version": "0.4.80",
+  "version": "0.4.81",
   "codeowners": [],
   "config_flow": true,
   "dependencies": [

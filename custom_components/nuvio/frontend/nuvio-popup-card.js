@@ -18,7 +18,7 @@ class NuvioPopupCard extends HTMLElement {
   }
   static getConfigElement() { return document.createElement("nuvio-popup-card-editor"); }
   static getStubConfig() { return {button_label: "Nuvio", button_style: "horizontal", popup_width: "wide", popup_auto_close_minutes: 2}; }
-  getCardSize() { return this.launcherStyle() === "vertical" ? 2 : 1; }
+  getCardSize() { return 2; }
 launcherStyle() {
   // Old cards that saved an icon must keep showing that icon unless
   // their owner explicitly picks a different layout.
@@ -59,7 +59,7 @@ launcherStyle() {
   const icon = String(this._config.button_icon ?? "").trim();
   const style = this.launcherStyle();
   this.shadowRoot.innerHTML = `<style>
-    :host{display:block;--popup-button-height:120px}ha-card{height:var(--popup-button-height);min-height:var(--popup-button-height);box-sizing:border-box;border-radius:var(--ha-card-border-radius,14px);overflow:hidden}
+    :host{display:block;--popup-button-height:120px;height:var(--popup-button-height);min-height:var(--popup-button-height);box-sizing:border-box}ha-card{height:var(--popup-button-height)!important;min-height:var(--popup-button-height)!important;box-sizing:border-box;border-radius:var(--ha-card-border-radius,14px);overflow:hidden}
     ha-card.launcher-vertical{height:var(--popup-button-height)}
     button{box-sizing:border-box;width:100%;height:100%;min-height:var(--popup-button-height);border:0;border-radius:inherit;padding:8px;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;background:transparent;color:var(--primary-text-color);font:inherit;font-weight:600}
     button:hover{background:var(--secondary-background-color)}button:focus-visible{outline:2px solid var(--primary-color);outline-offset:-3px}
