@@ -40,6 +40,26 @@ assert.doesNotMatch(cardSource,/await this\.play\(false,this\._streamContext\|\|
 assert.match(cardSource,/aria-label="Media player"/);
 assert.match(cardSource,/id="homeTop"/);
 assert.equal((cardSource.match(/this\.playerSelect\(\)/g)||[]).length,1);
+// Popup launcher: official logo by default, explicit icon overrides it.
+const launcher=window.document.createElement('nuvio-popup-card');
+assert.equal(launcher.constructor.getStubConfig().button_icon,undefined);
+launcher.setConfig({type:'custom:nuvio-popup-card',button_label:'Nuvio',popup_width:'wide'});
+assert.equal(launcher.shadowRoot.querySelector('.launcher-logo').getAttribute('src'),'https://nuvio.tv/assets/nuvio-app-logo-wordmark.webp');
+assert.equal(launcher.shadowRoot.querySelector('.launcher-visual ha-icon'),null);
+assert.equal(launcher.shadowRoot.querySelector('.launcher-caption').style.display,'none');
+launcher.setConfig({type:'custom:nuvio-popup-card',button_icon:'mdi:television-play',button_label:'Nuvio'});
+assert.equal(launcher.shadowRoot.querySelector('.launcher-logo'),null);
+assert.equal(launcher.shadowRoot.querySelector('.launcher-visual ha-icon').getAttribute('icon'),'mdi:television-play');
+assert.notEqual(launcher.shadowRoot.querySelector('.launcher-caption').style.display,'none');
+launcher.setConfig({type:'custom:nuvio-popup-card',button_icon:'',button_label:'Movies'});
+assert.ok(launcher.shadowRoot.querySelector('.launcher-logo'));
+assert.equal(launcher.shadowRoot.querySelector('.launcher-caption').textContent,'Movies');
+// The simulated DOM lacks the native select and CustomEvent implementations.
+// Check editor field/handler statically; logo and icon rendering run in the DOM.
+assert.match(cardSource,/Button icon \(MDI, optional\)/);
+assert.match(cardSource,/Leave empty to use the official Nuvio logo/);
+assert.match(cardSource,/input.addEventListener\("change", \(\) => this.emit/);
+launcher.remove();
 // Home Assistant discovers the native visual editor and preserves unrelated YAML.
 const editorCard=window.document.createElement('nuvio-card');
 const visualEditor=editorCard.constructor.getConfigElement();

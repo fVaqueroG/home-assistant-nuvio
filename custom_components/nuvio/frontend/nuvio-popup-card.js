@@ -16,7 +16,7 @@ class NuvioPopupCard extends HTMLElement {
     };
   }
   static getConfigElement() { return document.createElement("nuvio-popup-card-editor"); }
-  static getStubConfig() { return {button_label: "Nuvio", button_icon: "mdi:television-play", popup_width: "wide"}; }
+  static getStubConfig() { return {button_label: "Nuvio", popup_width: "wide"}; }
   getCardSize() { return 1; }
   popupSize() { return ["normal", "wide", "fullscreen"].includes(this._config.popup_width) ? this._config.popup_width : "wide"; }
   setConfig(config) {
@@ -31,15 +31,40 @@ class NuvioPopupCard extends HTMLElement {
   }
   render() {
     const label = String(this._config.button_label ?? "Nuvio");
-    const icon = String(this._config.button_icon ?? "mdi:television-play");
+    // A non-empty saved icon is an explicit user selection. Blank or
+    // absent icon uses the official wordmark, including in old cards.
+    const icon = String(this._config.button_icon ?? "").trim();
+    const selectedIcon = icon.length > 0;
     this.shadowRoot.innerHTML = `<style>
       :host{display:block}ha-card{height:56px;box-sizing:border-box}
-      button{box-sizing:border-box;width:100%;height:100%;border:0;border-radius:var(--ha-card-border-radius,12px);padding:0 16px;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;background:transparent;color:var(--primary-text-color);font:inherit;font-weight:600}
+      button{box-sizing:border-box;width:100%;height:100%;border:0;border-radius:var(--ha-card-border-radius,12px);padding:0 12px;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;background:transparent;color:var(--primary-text-color);font:inherit;font-weight:600}
       button:hover{background:var(--secondary-background-color)}button:focus-visible{outline:2px solid var(--primary-color);outline-offset:-3px}
-      ha-icon{color:var(--primary-color);--mdc-icon-size:25px}span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    </style><ha-card><button type="button" aria-label="Open Nuvio"><ha-icon></ha-icon><span></span></button></ha-card>`;
-    this.shadowRoot.querySelector("ha-icon").setAttribute("icon", icon);
-    this.shadowRoot.querySelector("span").textContent = label;
+      ha-icon{color:var(--primary-color);--mdc-icon-size:25px}
+      .launcher-visual{min-width:0;display:flex;align-items:center;justify-content:center}
+      .launcher-logo{display:block;width:120px;max-width:100%;height:auto;max-height:38px;object-fit:contain}
+      .launcher-caption{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    </style><ha-card><button type="button" aria-label="Open Nuvio"><span class="launcher-visual"></span><span class="launcher-caption"></span></button></ha-card>`;
+    const visual = this.shadowRoot.querySelector(".launcher-visual");
+    if (selectedIcon) {
+      const selected = document.createElement("ha-icon");
+      selected.setAttribute("icon", icon);
+      visual.appendChild(selected);
+    } else {
+      const logo = document.createElement("img");
+      logo.className = "launcher-logo";
+      logo.src = "https://nuvio.tv/assets/nuvio-app-logo-wordmark.webp";
+      logo.alt = "";
+      logo.addEventListener("error", () => {
+        const fallback = document.createElement("strong");
+        fallback.textContent = "Nuvio";
+        logo.replaceWith(fallback);
+      });
+      visual.appendChild(logo);
+    }
+    const caption = this.shadowRoot.querySelector(".launcher-caption");
+    caption.textContent = label;
+    // The wordmark already says Nuvio; avoid doubling the brand text.
+    caption.style.display = selectedIcon || (label.trim() && label.trim().toLowerCase() !== "nuvio") ? "" : "none";
     this.shadowRoot.querySelector("button").addEventListener("click", () => this.openPopup());
   }
   openPopup() {
@@ -94,10 +119,10 @@ class NuvioPopupCardEditor extends HTMLElement {
     this.dispatchEvent(new CustomEvent("config-changed", {detail:{config:{...this._config}},bubbles:true,composed:true}));
   }
   render() {
-    this.shadowRoot.innerHTML=`<style>:host{display:block;color:var(--primary-text-color)}.popup-options{display:flex;gap:12px;flex-wrap:wrap;padding:12px 4px;border-bottom:1px solid var(--divider-color)}label{display:flex;flex:1 1 170px;flex-direction:column;gap:6px;font-size:13px}input{padding:10px;border:1px solid var(--divider-color);border-radius:9px;background:var(--secondary-background-color);color:var(--primary-text-color);font:inherit}</style><div class="popup-options"><label>Button label<input data-field="button_label" type="text"></label><label>Button icon (MDI)<input data-field="button_icon" type="text" placeholder="mdi:television-play"></label><label>Popup size<select data-field="popup_width"><option value="normal">Normal</option><option value="wide">Wide</option><option value="fullscreen">Full screen</option></select></label></div><nuvio-card-editor></nuvio-card-editor>`;
+    this.shadowRoot.innerHTML=`<style>:host{display:block;color:var(--primary-text-color)}.popup-options{display:flex;gap:12px;flex-wrap:wrap;padding:12px 4px;border-bottom:1px solid var(--divider-color)}label{display:flex;flex:1 1 170px;flex-direction:column;gap:6px;font-size:13px}input{padding:10px;border:1px solid var(--divider-color);border-radius:9px;background:var(--secondary-background-color);color:var(--primary-text-color);font:inherit}</style><div class="popup-options"><label>Button label<input data-field="button_label" type="text"></label><label>Button icon (MDI, optional)<input data-field="button_icon" type="text" placeholder="Leave blank for Nuvio logo"><small>Leave empty to use the official Nuvio logo.</small></label><label>Popup size<select data-field="popup_width"><option value="normal">Normal</option><option value="wide">Wide</option><option value="fullscreen">Full screen</option></select></label></div><nuvio-card-editor></nuvio-card-editor>`;
     for (const field of ["button_label","button_icon"]) {
       const input=this.shadowRoot.querySelector(`[data-field="${field}"]`);
-      input.value=String(this._config[field] ?? (field==="button_label"?"Nuvio":"mdi:television-play"));
+      input.value=String(this._config[field] ?? (field==="button_label"?"Nuvio":""));
       input.addEventListener("change", () => this.emit({...this._config,[field]:input.value}));
     }
     const popupSize=this.shadowRoot.querySelector("select[data-field=popup_width]");

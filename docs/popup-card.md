@@ -5,7 +5,7 @@ Starting with v0.4.68, the integration registers **Nuvio Popup Button** as a sec
 ```yaml
 type: custom:nuvio-popup-card
 button_label: Nuvio
-button_icon: mdi:television-play
+# button_icon: mdi:television-play  # Optional: use this icon instead of the logo
 popup_width: wide  # normal, wide, or fullscreen
 title: Nuvio
 columns: 6
@@ -19,3 +19,5 @@ Select **Nuvio Popup Button** in the visual card editor to configure the button 
 The full-size card remains independently available using `type: custom:nuvio-card`.
 
 Popup size: select **Normal** (up to 850 px), **Wide** (default, up to 1180 px), or **Full screen** in the popup card visual editor. The YAML key is `popup_width`. On narrow/mobile displays, the popup fills the viewport regardless of the selected preset. This changes the dialog dimensions only; existing Nuvio player/room/HDMI options continue to work.
+
+By default, the compact popup button displays the official Nuvio wordmark. Leave `button_icon` absent or empty to show the logo. Set `button_icon: mdi:television-play` (or another Home Assistant icon) to replace the logo with that icon. Clear the icon field in the visual editor to return to the logo. Existing saved cards with an explicit icon keep their chosen icon; remove `button_icon` to switch to the logo. When the logo appears with the default Nuvio label, the duplicate label is hidden; a custom label is still shown. If the remote image fails to load, the button falls back to the word Nuvio.
