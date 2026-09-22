@@ -22,7 +22,7 @@ launcherStyle() {
   // Old cards that saved an icon must keep showing that icon unless
   // their owner explicitly picks a different layout.
   const style = String(this._config.button_style || "").trim();
-  if (["vertical", "horizontal", "icon_text"].includes(style)) return style;
+  if (["vertical", "horizontal", "logo_only", "icon_text"].includes(style)) return style;
   return String(this._config.button_icon || "").trim() ? "icon_text" : "horizontal";
 }
   popupSize() { return ["normal", "wide", "fullscreen"].includes(this._config.popup_width) ? this._config.popup_width : "wide"; }
@@ -60,23 +60,23 @@ launcherStyle() {
     visual.appendChild(selected);
   } else {
     const logo = document.createElement("img");
-    logo.className = style === "vertical" ? "launcher-mark" : "launcher-logo";
-    logo.src = style === "vertical"
+    logo.className = ["vertical", "logo_only"].includes(style) ? "launcher-mark" : "launcher-logo";
+    logo.src = ["vertical", "logo_only"].includes(style)
       ? "https://raw.githubusercontent.com/NuvioMedia/NuvioTVSmart/main/assets/brand/app_logo_mark.png"
       : "https://nuvio.tv/assets/nuvio-app-logo-wordmark.webp";
     logo.alt = "";
     logo.addEventListener("error", () => {
       const fallback = document.createElement("strong");
-      fallback.textContent = style === "vertical" ? "N" : "Nuvio";
+      fallback.textContent = ["vertical", "logo_only"].includes(style) ? "N" : "Nuvio";
       logo.replaceWith(fallback);
     });
     visual.appendChild(logo);
   }
   const caption = this.shadowRoot.querySelector(".launcher-caption");
   caption.textContent = label;
-  // Horizontal wordmark already includes the brand name; stacked logo
-  // and icon layouts always show the configured caption below/beside.
-  caption.style.display = style === "horizontal" && label.trim().toLowerCase() === "nuvio" ? "none" : "";
+  // The logo-only mark must never show a caption; the horizontal wordmark
+  // already includes the default brand name. Other layouts show the label.
+  caption.style.display = style === "logo_only" || (style === "horizontal" && label.trim().toLowerCase() === "nuvio") ? "none" : "";
   this.shadowRoot.querySelector("button").addEventListener("click", () => this.openPopup());
 }
   openPopup() {
@@ -131,14 +131,14 @@ class NuvioPopupCardEditor extends HTMLElement {
     this.dispatchEvent(new CustomEvent("config-changed", {detail:{config:{...this._config}},bubbles:true,composed:true}));
   }
   render() {
-    this.shadowRoot.innerHTML=`<style>:host{display:block;color:var(--primary-text-color)}.popup-options{display:flex;gap:12px;flex-wrap:wrap;padding:12px 4px;border-bottom:1px solid var(--divider-color)}label{display:flex;flex:1 1 170px;flex-direction:column;gap:6px;font-size:13px}input{padding:10px;border:1px solid var(--divider-color);border-radius:9px;background:var(--secondary-background-color);color:var(--primary-text-color);font:inherit}</style><div class="popup-options"><label>Button label<input data-field="button_label" type="text"></label><label>Button icon (MDI, optional)<input data-field="button_icon" type="text" placeholder="mdi:television-play"><small>Used for Icon + text; leave blank for the default TV icon.</small></label><label>Button appearance<select data-field="button_style"><option value="vertical">Vertical logo</option><option value="horizontal">Horizontal logo</option><option value="icon_text">Icon + text</option></select></label><label>Popup size<select data-field="popup_width"><option value="normal">Normal</option><option value="wide">Wide</option><option value="fullscreen">Full screen</option></select></label></div><nuvio-card-editor></nuvio-card-editor>`;
+    this.shadowRoot.innerHTML=`<style>:host{display:block;color:var(--primary-text-color)}.popup-options{display:flex;gap:12px;flex-wrap:wrap;padding:12px 4px;border-bottom:1px solid var(--divider-color)}label{display:flex;flex:1 1 170px;flex-direction:column;gap:6px;font-size:13px}input{padding:10px;border:1px solid var(--divider-color);border-radius:9px;background:var(--secondary-background-color);color:var(--primary-text-color);font:inherit}</style><div class="popup-options"><label>Button label<input data-field="button_label" type="text"></label><label>Button icon (MDI, optional)<input data-field="button_icon" type="text" placeholder="mdi:television-play"><small>Used for Icon + text; leave blank for the default TV icon.</small></label><label>Button appearance<select data-field="button_style"><option value="vertical">Vertical logo</option><option value="horizontal">Horizontal logo</option><option value="logo_only">Logo only</option><option value="icon_text">Icon + text</option></select></label><label>Popup size<select data-field="popup_width"><option value="normal">Normal</option><option value="wide">Wide</option><option value="fullscreen">Full screen</option></select></label></div><nuvio-card-editor></nuvio-card-editor>`;
     for (const field of ["button_label","button_icon"]) {
       const input=this.shadowRoot.querySelector(`[data-field="${field}"]`);
       input.value=String(this._config[field] ?? (field==="button_label"?"Nuvio":""));
       input.addEventListener("change", () => this.emit({...this._config,[field]:input.value}));
     }
     const buttonStyle=this.shadowRoot.querySelector("select[data-field=button_style]");
-  buttonStyle.value=["vertical","horizontal","icon_text"].includes(this._config.button_style)
+  buttonStyle.value=["vertical","horizontal","logo_only","icon_text"].includes(this._config.button_style)
     ? this._config.button_style
     : (String(this._config.button_icon||"").trim()?"icon_text":"horizontal");
   buttonStyle.addEventListener("change",()=>this.emit({...this._config,button_style:buttonStyle.value}));

@@ -78,6 +78,17 @@ assert.equal(launcher.shadowRoot.querySelector('.launcher-visual ha-icon').getAt
 assert.equal(launcher.shadowRoot.querySelector('.launcher-logo'),null);
 assert.match(cardSource,/Button appearance<select data-field="button_style"/);
 assert.match(cardSource,/buttonStyle.addEventListener\("change",\(\)=>this.emit/);
+// Logo-only: Nuvio's official mark, without either caption or MDI icon.
+launcher.setConfig({type:'custom:nuvio-popup-card',button_style:'logo_only',button_label:'Custom label',button_icon:'mdi:star',popup_width:'normal'});
+assert.equal(launcher.launcherStyle(),'logo_only');
+assert.equal(launcher.getCardSize(),1);
+assert.equal(launcher.shadowRoot.querySelector('.launcher-mark').getAttribute('src'),'https://raw.githubusercontent.com/NuvioMedia/NuvioTVSmart/main/assets/brand/app_logo_mark.png');
+assert.equal(launcher.shadowRoot.querySelector('.launcher-logo'),null);
+assert.equal(launcher.shadowRoot.querySelector('.launcher-visual ha-icon'),null);
+assert.equal(launcher.shadowRoot.querySelector('.launcher-caption').style.display,'none');
+assert.equal(launcher.shadowRoot.querySelector('button').getAttribute('aria-label'),'Open Nuvio');
+assert.match(cardSource,/<option value="logo_only">Logo only<\/option>/);
+assert.match(cardSource,/"logo_only","icon_text"\]\.includes\(this\._config\.button_style\)/);
 launcher.remove();
 // Home Assistant discovers the native visual editor and preserves unrelated YAML.
 const editorCard=window.document.createElement('nuvio-card');
