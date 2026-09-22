@@ -29,3 +29,6 @@ Choose `button_style: logo_only` for an icon-sized launcher showing the packaged
 **Local brand images:** The integration packages all launcher branding under `custom_components/nuvio/frontend/assets/` and serves it through Home Assistant with cache headers and versioned URLs, so dashboard loads do not contact external logo hosts.
 
 From v0.4.76, `wordmark.png` remains the official horizontal Nuvio wordmark. `vertical.png` is the exact stacked vertical logo supplied by the integration owner, and `icon-only.png` is the exact icon-only PNG supplied by the integration owner. The vertical and logo-only launcher styles render those images directly and hide the separate caption, preventing duplicate branding.
+
+
+Popup auto-close: the popup automatically closes 2 minutes after it opens by default. Set `popup_auto_close_minutes: 5` to change the duration, or `popup_auto_close_minutes: 0` to disable automatic closing. Fractional minute values are supported. The visual editor exposes **Popup auto-close (minutes)**; changing the value while the popup is open restarts or cancels the countdown. The timer is cleared if the popup is closed manually or the card is removed. It only closes the popup UI and does not stop TV playback.
