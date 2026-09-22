@@ -1006,7 +1006,7 @@ async choosePlayer(player){
       ? ""
       : '<button class="ib toolbar-btn remote-toggle-button '+(this._remoteExpanded?"remote-active":"")+'" title="Control" aria-label="Control"><ha-icon icon="mdi:remote-tv"></ha-icon></button>';
     var home='<button class="ib toolbar-btn '+(onHome?"toolbar-active":"")+'" id="homeTop" title="Home" aria-label="Home"><ha-icon icon="mdi:home"></ha-icon></button>';
-    return '<div class="header"><div class="header-title"><h2>'+this.esc(this._config.title||"Nuvio")+'</h2><span class="card-version">v0.4.68</span></div><div class="tools">'+search+this.roomSelect()+'<label class="toolbar-player" title="Select media player"><ha-icon icon="mdi:television" aria-hidden="true"></ha-icon>'+this.playerSelect()+'</label>'+
+    return '<div class="header"><div class="header-title"><h2>'+this.esc(this._config.title||"Nuvio")+'</h2><span class="card-version">v0.4.69</span></div><div class="tools">'+search+this.roomSelect()+'<label class="toolbar-player" title="Select media player"><ha-icon icon="mdi:television" aria-hidden="true"></ha-icon>'+this.playerSelect()+'</label>'+
       home+
       '<button class="ib toolbar-btn" id="refresh" title="Refresh" aria-label="Refresh"><ha-icon icon="mdi:refresh"></ha-icon></button>'+
       addons+remote+'</div></div>';
@@ -1693,7 +1693,7 @@ if(!customElements.get("nuvio-card-editor"))customElements.define("nuvio-card-ed
 if(!customElements.get("nuvio-card"))customElements.define("nuvio-card",NuvioCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==="nuvio-card"))window.customCards.push({type:"nuvio-card",name:"Nuvio",description:"Browse, search and play your Nuvio catalog.",preview:true});
-console.info("NUVIO-CARD v0.4.68");
+console.info("NUVIO-CARD v0.4.69");
 
 // Nuvio popup button. Bundled after nuvio-card.js so HACS loads both card types
 // through the existing versioned Lovelace module resource.
@@ -1713,11 +1713,13 @@ class NuvioPopupCard extends HTMLElement {
     };
   }
   static getConfigElement() { return document.createElement("nuvio-popup-card-editor"); }
-  static getStubConfig() { return {button_label: "Nuvio", button_icon: "mdi:television-play"}; }
+  static getStubConfig() { return {button_label: "Nuvio", button_icon: "mdi:television-play", popup_width: "wide"}; }
   getCardSize() { return 1; }
+  popupSize() { return ["normal", "wide", "fullscreen"].includes(this._config.popup_width) ? this._config.popup_width : "wide"; }
   setConfig(config) {
     this._config = {...config};
     this.render();
+    if (this._overlay) this._overlay.dataset.size = this.popupSize();
     if (this._popupCard) this._popupCard.setConfig({...this._config, type: "custom:nuvio-card"});
   }
   set hass(value) {
@@ -1742,9 +1744,13 @@ class NuvioPopupCard extends HTMLElement {
     this._opener = this.shadowRoot.activeElement;
     const overlay = document.createElement("div");
     overlay.className = "nuvio-popup-overlay";
+    overlay.dataset.size = this.popupSize();
     overlay.innerHTML = `<style>
       .nuvio-popup-overlay{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.65);padding:12px;box-sizing:border-box}
-      .nuvio-popup-frame{width:min(1200px,100%);height:min(900px,100%);min-width:0;display:flex;flex-direction:column;overflow:hidden;border-radius:18px;background:var(--card-background-color,var(--ha-card-background,#fff));color:var(--primary-text-color);box-shadow:0 20px 75px rgba(0,0,0,.4)}
+      .nuvio-popup-frame{width:min(1180px,96vw);max-width:96vw;height:min(1050px,92dvh);max-height:92dvh;min-width:0;display:flex;flex-direction:column;overflow:hidden;border-radius:18px;background:var(--card-background-color,var(--ha-card-background,#fff));color:var(--primary-text-color);box-shadow:0 20px 75px rgba(0,0,0,.4)}
+      .nuvio-popup-overlay[data-size="normal"] .nuvio-popup-frame{width:min(850px,96vw)}
+      .nuvio-popup-overlay[data-size="fullscreen"]{padding:0}
+      .nuvio-popup-overlay[data-size="fullscreen"] .nuvio-popup-frame{width:100%;max-width:100%;height:100%;max-height:100%;border-radius:0}
       .nuvio-popup-top{height:48px;flex:0 0 48px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 12px 0 20px;border-bottom:1px solid var(--divider-color);font:600 16px var(--paper-font-body1_-_font-family,inherit)}
       .nuvio-popup-top button{width:36px;height:36px;display:grid;place-items:center;border:0;border-radius:50%;cursor:pointer;background:var(--secondary-background-color);color:var(--primary-text-color)}
       .nuvio-popup-top button:focus-visible{outline:2px solid var(--primary-color)}
@@ -1785,12 +1791,15 @@ class NuvioPopupCardEditor extends HTMLElement {
     this.dispatchEvent(new CustomEvent("config-changed", {detail:{config:{...this._config}},bubbles:true,composed:true}));
   }
   render() {
-    this.shadowRoot.innerHTML=`<style>:host{display:block;color:var(--primary-text-color)}.popup-options{display:flex;gap:12px;flex-wrap:wrap;padding:12px 4px;border-bottom:1px solid var(--divider-color)}label{display:flex;flex:1 1 170px;flex-direction:column;gap:6px;font-size:13px}input{padding:10px;border:1px solid var(--divider-color);border-radius:9px;background:var(--secondary-background-color);color:var(--primary-text-color);font:inherit}</style><div class="popup-options"><label>Button label<input data-field="button_label" type="text"></label><label>Button icon (MDI)<input data-field="button_icon" type="text" placeholder="mdi:television-play"></label></div><nuvio-card-editor></nuvio-card-editor>`;
+    this.shadowRoot.innerHTML=`<style>:host{display:block;color:var(--primary-text-color)}.popup-options{display:flex;gap:12px;flex-wrap:wrap;padding:12px 4px;border-bottom:1px solid var(--divider-color)}label{display:flex;flex:1 1 170px;flex-direction:column;gap:6px;font-size:13px}input{padding:10px;border:1px solid var(--divider-color);border-radius:9px;background:var(--secondary-background-color);color:var(--primary-text-color);font:inherit}</style><div class="popup-options"><label>Button label<input data-field="button_label" type="text"></label><label>Button icon (MDI)<input data-field="button_icon" type="text" placeholder="mdi:television-play"></label><label>Popup size<select data-field="popup_width"><option value="normal">Normal</option><option value="wide">Wide</option><option value="fullscreen">Full screen</option></select></label></div><nuvio-card-editor></nuvio-card-editor>`;
     for (const field of ["button_label","button_icon"]) {
       const input=this.shadowRoot.querySelector(`[data-field="${field}"]`);
       input.value=String(this._config[field] ?? (field==="button_label"?"Nuvio":"mdi:television-play"));
       input.addEventListener("change", () => this.emit({...this._config,[field]:input.value}));
     }
+    const popupSize=this.shadowRoot.querySelector("select[data-field=popup_width]");
+    popupSize.value=["normal","wide","fullscreen"].includes(this._config.popup_width)?this._config.popup_width:"wide";
+    popupSize.addEventListener("change",()=>this.emit({...this._config,popup_width:popupSize.value}));
     const editor=this.shadowRoot.querySelector("nuvio-card-editor");
     editor.addEventListener("config-changed", event => {event.stopPropagation();this.emit(event.detail.config);});
     editor.setConfig({...this._config,type:"custom:nuvio-card"});

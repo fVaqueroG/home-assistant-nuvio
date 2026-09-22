@@ -6,6 +6,7 @@ Starting with v0.4.68, the integration registers **Nuvio Popup Button** as a sec
 type: custom:nuvio-popup-card
 button_label: Nuvio
 button_icon: mdi:television-play
+popup_width: wide  # normal, wide, or fullscreen
 title: Nuvio
 columns: 6
 show_search: true
@@ -16,3 +17,5 @@ remote_side: left
 Select **Nuvio Popup Button** in the visual card editor to configure the button label, icon, player, rooms, TV/HDMI mappings, and the usual Nuvio settings. All the options from the full-size `custom:nuvio-card` (including `rooms`, `default_room`, `default_player`, `display_routes`) work in the popup card as well. Open the popup by clicking the compact dashboard button; close it with the X, the backdrop, or Escape. The catalog is scrollable inside the dialog and takes the available display area on narrow screens.
 
 The full-size card remains independently available using `type: custom:nuvio-card`.
+
+Popup size: select **Normal** (up to 850 px), **Wide** (default, up to 1180 px), or **Full screen** in the popup card visual editor. The YAML key is `popup_width`. On narrow/mobile displays, the popup fills the viewport regardless of the selected preset. This changes the dialog dimensions only; existing Nuvio player/room/HDMI options continue to work.
