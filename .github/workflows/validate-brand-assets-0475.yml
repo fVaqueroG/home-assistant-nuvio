@@ -1,0 +1,39 @@
+name: Validate official Nuvio brand assets v0.4.75
+on:
+  push:
+    branches:
+      - feature/official-nuviotv-brand-assets-0475
+    paths:
+      - .github/workflows/validate-brand-assets-0475.yml
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate version and local brand paths
+        shell: bash
+        run: |
+          grep -F '"version": "0.4.75"' custom_components/nuvio/manifest.json
+          grep -F 'NUVIO-CARD v0.4.75' custom_components/nuvio/frontend/nuvio-card.js
+          grep -F '/nuvio/assets/app_logo_wordmark.png?v=0.4.75' custom_components/nuvio/frontend/nuvio-card.js
+          grep -F '/nuvio/assets/app_logo_mark.png?v=0.4.75' custom_components/nuvio/frontend/nuvio-card.js
+          test -s custom_components/nuvio/frontend/assets/app_logo_wordmark.png
+          test -s custom_components/nuvio/frontend/assets/app_logo_mark.png
+          test ! -e custom_components/nuvio/frontend/assets/wordmark.webp
+          test ! -e custom_components/nuvio/frontend/assets/mark.png
+      - name: Compile Python
+        run: python -m compileall -q custom_components/nuvio
+      - name: Pyflakes
+        shell: bash
+        run: |
+          python -m pip install -q pyflakes
+          pyflakes custom_components/nuvio/config_flow.py custom_components/nuvio/frontend.py custom_components/nuvio/launcher.py custom_components/nuvio/providers.py custom_components/nuvio/tmdb.py custom_components/nuvio/tvdb.py custom_components/nuvio/justwatch.py
+      - name: Check Lovelace syntax
+        run: node --check custom_components/nuvio/frontend/nuvio-card.js
+      - name: Run Lovelace regression tests
+        shell: bash
+        run: |
+          npm ci --prefix tests
+          node tests/test_card.cjs
