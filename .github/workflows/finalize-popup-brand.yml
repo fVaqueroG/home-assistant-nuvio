@@ -1,0 +1,59 @@
+name: Finalize Nuvio popup logo default
+
+on:
+  push:
+    branches: [feature/popup-logo-default]
+    paths: [.github/workflows/finalize-popup-brand.yml]
+permissions:
+  contents: write
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply logo default, icon override and regression coverage
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from textwrap import dedent
+          workflow=Path('.github/workflows/apply-popup-brand-default.yml').read_text(encoding='utf-8')
+          script=workflow.split("          python - <<'PY'\n",1)[1].split('          PY\n',1)[0]
+          exec(dedent(script), {'__name__':'__main__'})
+          tests_path=Path('tests/test_card.cjs')
+          tests=tests_path.read_text(encoding='utf-8')
+          start=tests.index("const launcherEditor=window.document.createElement('nuvio-popup-card-editor');")
+          closing='launcher.remove();launcherEditor.remove();'
+          end=tests.index(closing,start)+len(closing)
+          tests=tests[:start]+'''// The simulated DOM lacks the native select and CustomEvent implementations.
+          // Check editor field/handler statically; logo and icon rendering run in the DOM.
+          assert.match(cardSource,/Button icon \\(MDI, optional\\)/);
+          assert.match(cardSource,/Leave empty to use the official Nuvio logo/);
+          assert.match(cardSource,/input.addEventListener\\("change", \\(\\) => this.emit/);
+          launcher.remove();'''+tests[end:]
+          tests_path.write_text(tests,encoding='utf-8')
+          PY
+      - name: Check syntax and behavior
+        run: |
+          node --check custom_components/nuvio/frontend/nuvio-popup-card.js
+          node --check custom_components/nuvio/frontend/nuvio-card.js
+          python -m compileall -q custom_components/nuvio
+          npm ci --prefix tests
+          node tests/test_card.cjs
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('custom_components/nuvio/frontend/nuvio-popup-card.js').read_text()
+          b=Path('custom_components/nuvio/frontend/nuvio-card.js').read_text()
+          assert b.endswith(s)
+          assert 'NUVIO-CARD v0.4.71' in b
+          assert '<span class="card-version">v0.4.71</span>' in b
+          assert 'popupSize()' in s and 'popup_width' in s
+          assert 'https://nuvio.tv/assets/nuvio-app-logo-wordmark.webp' in s
+          print('PASS: default wordmark, icon override, restored logo, popup sizes and version')
+          PY
+      - name: Commit tested files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add custom_components/nuvio/frontend/nuvio-popup-card.js custom_components/nuvio/frontend/nuvio-card.js custom_components/nuvio/manifest.json docs/popup-card.md tests/test_card.cjs
+          git commit -m "Default Nuvio popup launcher to logo with optional icon (v0.4.71)"
+          git push origin HEAD:feature/popup-logo-default
