@@ -23,7 +23,6 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path
-
           root = Path('custom_components/nuvio')
           frontend = root / 'frontend/nuvio-card.js'
           source = frontend.read_text(encoding='utf-8')
@@ -32,23 +31,23 @@ jobs:
           if source.count(old_header) != 1:
               raise SystemExit('Expected exactly one original Nuvio header; refusing an unsafe replacement')
           source = source.replace(old_header, new_header, 1)
-
           old_wire = '  wire(){\n    var r=this.shadowRoot,q=r.querySelector("#search");\n'
-          new_wire = '''  wire(){
-    var r=this.shadowRoot,q=r.querySelector("#search");
-    // Display the official wordmark only after it loads; preserve configured title on error.
-    var wordmark=r.querySelector(".nuvio-wordmark"),fallback=r.querySelector(".nuvio-wordmark-fallback");
-    if(wordmark&&fallback){
-      var updateWordmark=()=>{
-        var loaded=wordmark.complete&&wordmark.naturalWidth>0;
-        wordmark.style.display=loaded?"block":"none";
-        fallback.style.display=loaded?"none":"";
-      };
-      wordmark.addEventListener("load",updateWordmark);
-      wordmark.addEventListener("error",updateWordmark);
-      updateWordmark();
-    }
-'''
+          new_wire = (
+              '  wire(){\n'
+              '    var r=this.shadowRoot,q=r.querySelector("#search");\n'
+              '    // Prefer the official wordmark, retaining the configured title if loading fails.\n'
+              '    var wordmark=r.querySelector(".nuvio-wordmark"),fallback=r.querySelector(".nuvio-wordmark-fallback");\n'
+              '    if(wordmark&&fallback){\n'
+              '      var updateWordmark=()=>{\n'
+              '        var loaded=wordmark.complete&&wordmark.naturalWidth>0;\n'
+              '        wordmark.style.display=loaded?"block":"none";\n'
+              '        fallback.style.display=loaded?"none":"";\n'
+              '      };\n'
+              '      wordmark.addEventListener("load",updateWordmark);\n'
+              '      wordmark.addEventListener("error",updateWordmark);\n'
+              '      updateWordmark();\n'
+              '    }\n'
+          )
           if source.count(old_wire) != 1:
               raise SystemExit('Expected exactly one card wire() anchor')
           source = source.replace(old_wire, new_wire, 1)
@@ -56,7 +55,6 @@ jobs:
               raise SystemExit('Unexpected source card version; inspect before updating')
           source = source.replace('NUVIO-CARD v0.4.69', 'NUVIO-CARD v0.4.70', 1)
           frontend.write_text(source, encoding='utf-8')
-
           manifest_path = root / 'manifest.json'
           manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
           if manifest['version'] != '0.4.69':
@@ -64,7 +62,7 @@ jobs:
           manifest['version'] = '0.4.70'
           manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
           PY
-      - name: Validate wordmark, bundled resource, and existing functionality
+      - name: Validate wordmark and existing card functionality
         shell: bash
         run: |
           node --check custom_components/nuvio/frontend/nuvio-card.js
@@ -79,7 +77,7 @@ jobs:
           assert 'this._config.title||"Nuvio"' in src
           assert 'NUVIO-CARD v0.4.70' in src
           assert '<span class="card-version">v0.4.70</span>' in src
-          print('Wordmark URL, responsive dimensions, fallback and resource version checks passed.')
+          print('Wordmark URL, fallback, and frontend resource version checks passed.')
           PY
           npm ci --prefix tests
           node tests/test_card.cjs
