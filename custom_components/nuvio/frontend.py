@@ -2259,8 +2259,8 @@ async def async_register_frontend(hass: HomeAssistant) -> None:
     await hass.http.async_register_static_paths(
         [
             StaticPathConfig(CARD_URL, str(CARD_FILE), cache_headers=False),
-            StaticPathConfig("/nuvio/assets/wordmark.webp", str(assets / "wordmark.webp"), cache_headers=True),
-            StaticPathConfig("/nuvio/assets/mark.png", str(assets / "mark.png"), cache_headers=True),
+            StaticPathConfig("/nuvio/assets/wordapp_logo_mark.png", str(assets / "wordapp_logo_mark.png"), cache_headers=True),
+            StaticPathConfig("/nuvio/assets/app_logo_app_logo_mark.png", str(assets / "app_logo_app_logo_mark.png"), cache_headers=True),
         ]
     )
 

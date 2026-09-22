@@ -26,4 +26,9 @@ Popup launcher appearance: set `button_style: horizontal` (default official word
 
 Choose `button_style: logo_only` for an icon-sized launcher showing only the official Nuvio logo mark, with no text even when `button_label` is configured. The visual editor offers **Logo only** under **Button appearance**. This setting controls only the dashboard launcher; `popup_width` and existing rooms, TVs, and playback settings are unchanged.
 
-**Local brand images:** The integration includes the official logo files under `custom_components/nuvio/frontend/assets/` and serves them through Home Assistant at `/nuvio/assets/wordmark.webp` and `/nuvio/assets/mark.png`. All launcher appearances and the full card header use these local assets rather than requesting logos from external websites. Browser cache headers and versioned image URLs allow reuse across dashboard loads and updates.
+**Local brand images:** The integration includes the official logo files under `custom_components/nuvio/frontend/assets/` and serves them through Home Assistant at `/nuvio/assets/app_logo_wordapp_logo_mark.png` and `/nuvio/assets/app_logo_app_logo_mark.png`. All launcher appearances and the full card header use these local assets rather than requesting logos from external websites. Browser cache headers and versioned image URLs allow reuse across dashboard loads and updates.
+
+From v0.4.75, both images are the official `NuvioMedia/NuvioTV` `dev` branch PNG assets: `app_logo_wordapp_logo_mark.png` for the horizontal wordmark and `app_logo_app_logo_mark.png` for the vertical/logo-only mark. The integration packages them in `frontend/assets/` and Home Assistant serves `/nuvio/assets/wordapp_logo_mark.png` and `/nuvio/assets/app_logo_app_logo_mark.png` locally; dashboard loads do not contact upstream hosts.
+
+
+Brand assets: the horizontal wordmark and logo mark are packaged from the official `NuvioMedia/NuvioTV` `dev` branch (`assets/brand/app_logo_wordmark.png` and `assets/brand/app_logo_mark.png`). Home Assistant serves these packaged copies locally; dashboard clients do not fetch the images from GitHub at runtime.
