@@ -33,8 +33,6 @@ jobs:
               raise SystemExit('Popup already bundled; refusing duplicate registration')
           if 'NUVIO-CARD v0.4.67' not in original:
               raise SystemExit('Unexpected card version; inspect the current card before bundling')
-          if 'v0.4.67' not in original:
-              raise SystemExit('Could not locate existing visual card version')
           bundle.write_text(original.replace('v0.4.67', 'v0.4.68').rstrip() + '\n\n' + addition, encoding='utf-8')
           manifest_file = root / 'manifest.json'
           manifest = json.loads(manifest_file.read_text(encoding='utf-8'))
@@ -42,37 +40,6 @@ jobs:
               raise SystemExit('Unexpected integration version; do not overwrite newer changes')
           manifest['version'] = '0.4.68'
           manifest_file.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
-          readme_file = Path('README.md')
-          readme = readme_file.read_text(encoding='utf-8')
-          anchor = '### Visual card editor'
-          if readme.count(anchor) != 1:
-              raise SystemExit('Could not locate visual card editor documentation')
-          docs = '''### Compact popup button card
-
-The **Nuvio Popup Button** is a second Lovelace card type. It opens the existing full
-Nuvio card in a scrollable popup without navigating away from the dashboard. Both
-cards are available in the card picker and use the same versioned resource; no
-additional dashboard resource or Browser Mod installation is needed.
-
-```yaml
-type: custom:nuvio-popup-card
-button_label: Nuvio
-button_icon: mdi:television-play
-title: Nuvio
-default_player: media_player.living_room_android_tv
-columns: 6
-show_search: true
-show_remote: true
-remote_side: left
-```
-
-The popup button accepts the same `rooms`, `default_room`, `default_player`,
-`display_routes`, and other options as `custom:nuvio-card`. Its visual editor
-also exposes the existing full-size card settings. The full card remains
-available as `type: custom:nuvio-card`.
-
-'''
-          readme_file.write_text(readme.replace(anchor, docs + anchor, 1), encoding='utf-8')
           PY
       - name: Validate frontend JavaScript and existing card behavior
         shell: bash
@@ -82,11 +49,11 @@ available as `type: custom:nuvio-card`.
           npm ci --prefix tests
           node tests/test_card.cjs
           python -m compileall -q custom_components/nuvio
-      - name: Commit bundled card and documentation
+      - name: Commit bundled card
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add README.md custom_components/nuvio/manifest.json custom_components/nuvio/frontend/nuvio-card.js
+          git add custom_components/nuvio/manifest.json custom_components/nuvio/frontend/nuvio-card.js
           git commit -m "Bundle Nuvio popup button card (v0.4.68)"
           git push origin HEAD:feature/nuvio-popup-button
