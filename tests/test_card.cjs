@@ -42,15 +42,16 @@ assert.match(cardSource,/id="homeTop"/);
 assert.equal((cardSource.match(/this\.playerSelect\(\)/g)||[]).length,1);
 // Logos must be bundled on the HA backend, with no external brand image URLs.
 const localAssets = require('node:fs');
-assert.equal(localAssets.readFileSync('custom_components/nuvio/frontend/assets/wordmark.webp').subarray(8,12).toString(),'WEBP');
+assert.deepEqual([...localAssets.readFileSync('custom_components/nuvio/frontend/assets/wordmark.png').subarray(0,8)],[137,80,78,71,13,10,26,10]);
 assert.deepEqual([...localAssets.readFileSync('custom_components/nuvio/frontend/assets/mark.png').subarray(0,8)],[137,80,78,71,13,10,26,10]);
 assert.doesNotMatch(cardSource,/https:\/\/nuvio\.tv\/assets\/nuvio-app-logo-wordmark\.webp/);
+assert.doesNotMatch(cardSource,/\/nuvio\/assets\/wordmark\.webp/);
 assert.doesNotMatch(cardSource,/https:\/\/raw\.githubusercontent\.com\/NuvioMedia\/NuvioTVSmart\/main\/assets\/brand\/app_logo_mark\.png/);
 // Popup launcher: official logo by default, explicit icon overrides it.
 const launcher=window.document.createElement('nuvio-popup-card');
 assert.equal(launcher.constructor.getStubConfig().button_icon,undefined);
 launcher.setConfig({type:'custom:nuvio-popup-card',button_label:'Nuvio',popup_width:'wide'});
-assert.equal(launcher.shadowRoot.querySelector('.launcher-logo').getAttribute('src'),'/nuvio/assets/wordmark.webp?v=0.4.74');
+assert.equal(launcher.shadowRoot.querySelector('.launcher-logo').getAttribute('src'),'/nuvio/assets/wordmark.png?v=0.4.75');
 assert.equal(launcher.shadowRoot.querySelector('.launcher-visual ha-icon'),null);
 assert.equal(launcher.shadowRoot.querySelector('.launcher-caption').style.display,'none');
 launcher.setConfig({type:'custom:nuvio-popup-card',button_icon:'mdi:television-play',button_label:'Nuvio'});
@@ -69,12 +70,12 @@ assert.match(cardSource,/input.addEventListener\("change", \(\) => this.emit/);
 // original wordmark horizontal, and custom MDI icon with caption.
 launcher.setConfig({type:'custom:nuvio-popup-card',button_style:'vertical',button_label:'Nuvio'});
 assert.equal(launcher.getCardSize(),2);
-assert.equal(launcher.shadowRoot.querySelector('.launcher-mark').getAttribute('src'),'/nuvio/assets/mark.png?v=0.4.74');
+assert.equal(launcher.shadowRoot.querySelector('.launcher-mark').getAttribute('src'),'/nuvio/assets/mark.png?v=0.4.75');
 assert.equal(launcher.shadowRoot.querySelector('.launcher-caption').textContent,'Nuvio');
 assert.notEqual(launcher.shadowRoot.querySelector('.launcher-caption').style.display,'none');
 launcher.setConfig({type:'custom:nuvio-popup-card',button_style:'horizontal',button_icon:'mdi:star',button_label:'Nuvio'});
 assert.equal(launcher.getCardSize(),1);
-assert.equal(launcher.shadowRoot.querySelector('.launcher-logo').getAttribute('src'),'/nuvio/assets/wordmark.webp?v=0.4.74');
+assert.equal(launcher.shadowRoot.querySelector('.launcher-logo').getAttribute('src'),'/nuvio/assets/wordmark.png?v=0.4.75');
 assert.equal(launcher.shadowRoot.querySelector('.launcher-visual ha-icon'),null);
 launcher.setConfig({type:'custom:nuvio-popup-card',button_style:'icon_text',button_label:'Watch'});
 assert.equal(launcher.shadowRoot.querySelector('.launcher-visual ha-icon').getAttribute('icon'),'mdi:television-play');
@@ -88,7 +89,7 @@ assert.match(cardSource,/buttonStyle.addEventListener\("change",\(\)=>this.emit/
 launcher.setConfig({type:'custom:nuvio-popup-card',button_style:'logo_only',button_label:'Custom label',button_icon:'mdi:star',popup_width:'normal'});
 assert.equal(launcher.launcherStyle(),'logo_only');
 assert.equal(launcher.getCardSize(),1);
-assert.equal(launcher.shadowRoot.querySelector('.launcher-mark').getAttribute('src'),'/nuvio/assets/mark.png?v=0.4.74');
+assert.equal(launcher.shadowRoot.querySelector('.launcher-mark').getAttribute('src'),'/nuvio/assets/mark.png?v=0.4.75');
 assert.equal(launcher.shadowRoot.querySelector('.launcher-logo'),null);
 assert.equal(launcher.shadowRoot.querySelector('.launcher-visual ha-icon'),null);
 assert.equal(launcher.shadowRoot.querySelector('.launcher-caption').style.display,'none');
