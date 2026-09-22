@@ -1,3 +1,5 @@
+<p align="center"><img src="brand/icon.png" alt="Nuvio logo" width="112"></p>
+
 # Nuvio for Home Assistant
 
 [![Latest release](https://img.shields.io/github/v/release/fVaqueroG/home-assistant-nuvio?label=latest%20release)](https://github.com/fVaqueroG/home-assistant-nuvio/releases/latest) · [Latest release notes](https://github.com/fVaqueroG/home-assistant-nuvio/releases/latest) · [All releases and changes](https://github.com/fVaqueroG/home-assistant-nuvio/releases)
