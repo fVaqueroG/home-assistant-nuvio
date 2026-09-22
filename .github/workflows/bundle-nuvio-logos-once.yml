@@ -1,0 +1,92 @@
+name: Bundle Nuvio logos into Home Assistant
+on:
+  push:
+    branches: [feature/nuvio-local-brand-assets-0474]
+    paths: [.github/workflows/bundle-nuvio-logos-once.yml]
+permissions:
+  contents: write
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download official images once into integration package
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIR=custom_components/nuvio/frontend/assets
+          mkdir -p "$DIR"
+          curl -fLsS --retry 3 --connect-timeout 10 --max-time 60 'https://nuvio.tv/assets/nuvio-app-logo-wordmark.webp' -o "$DIR/wordmark.webp"
+          curl -fLsS --retry 3 --connect-timeout 10 --max-time 60 'https://raw.githubusercontent.com/NuvioMedia/NuvioTVSmart/main/assets/brand/app_logo_mark.png' -o "$DIR/mark.png"
+          python - <<'PY'
+          from pathlib import Path
+          directory=Path('custom_components/nuvio/frontend/assets')
+          wordmark=(directory/'wordmark.webp').read_bytes()
+          mark=(directory/'mark.png').read_bytes()
+          assert 100<len(wordmark)<1000000 and wordmark[:4]==b'RIFF' and wordmark[8:12]==b'WEBP', 'Invalid official wordmark'
+          assert 100<len(mark)<1000000 and mark.startswith(b'\x89PNG\r\n\x1a\n'), 'Invalid official Nuvio mark'
+          print('Bundled wordmark:',len(wordmark),'bytes; mark:',len(mark),'bytes')
+          PY
+      - name: Register local backend assets and update card references
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          root=Path('custom_components/nuvio')
+          old_wordmark='https://nuvio.tv/assets/nuvio-app-logo-wordmark.webp'
+          old_mark='https://raw.githubusercontent.com/NuvioMedia/NuvioTVSmart/main/assets/brand/app_logo_mark.png'
+          new_wordmark='/nuvio/assets/wordmark.webp?v=0.4.74'
+          new_mark='/nuvio/assets/mark.png?v=0.4.74'
+          for name in ('nuvio-card.js','nuvio-popup-card.js'):
+              path=root/'frontend'/name
+              text=path.read_text()
+              assert old_wordmark in text, f'Wordmark missing in {name}'
+              if name=='nuvio-popup-card.js': assert old_mark in text
+              text=text.replace(old_wordmark,new_wordmark).replace(old_mark,new_mark)
+              if name=='nuvio-card.js':
+                  assert 'v0.4.73' in text
+                  text=text.replace('v0.4.73','v0.4.74')
+              path.write_text(text)
+          backend=root/'frontend.py'
+          text=backend.read_text()
+          old='    await hass.http.async_register_static_paths(\n        [StaticPathConfig(CARD_URL, str(CARD_FILE), cache_headers=False)]\n    )'
+          new='''    # Official logos are packaged locally and served by Home Assistant, so\n    # browsers never fetch them from Nuvio's site or GitHub.\n    assets = Path(__file__).parent / "frontend" / "assets"\n    await hass.http.async_register_static_paths(\n        [\n            StaticPathConfig(CARD_URL, str(CARD_FILE), cache_headers=False),\n            StaticPathConfig("/nuvio/assets/wordmark.webp", str(assets / "wordmark.webp"), cache_headers=True),\n            StaticPathConfig("/nuvio/assets/mark.png", str(assets / "mark.png"), cache_headers=True),\n        ]\n    )'''
+          assert old in text, 'Unexpected frontend registration'
+          backend.write_text(text.replace(old,new,1))
+          manifest=root/'manifest.json'
+          text=manifest.read_text()
+          assert '"version": "0.4.73"' in text
+          manifest.write_text(text.replace('"version": "0.4.73"','"version": "0.4.74"',1))
+          tests=Path('tests/test_card.cjs')
+          text=tests.read_text()
+          assert old_wordmark in text and old_mark in text
+          text=text.replace(old_wordmark,new_wordmark).replace(old_mark,new_mark)
+          anchor='// Popup launcher: official logo by default, explicit icon overrides it.'
+          assert anchor in text
+          extra='''// Logos must be bundled on the HA backend, with no external brand image URLs.\nconst localAssets = require('node:fs');\nassert.equal(localAssets.readFileSync('custom_components/nuvio/frontend/assets/wordmark.webp').subarray(8,12).toString(),'WEBP');\nassert.deepEqual([...localAssets.readFileSync('custom_components/nuvio/frontend/assets/mark.png').subarray(0,8)],[137,80,78,71,13,10,26,10]);\nassert.doesNotMatch(cardSource,/https:\\/\\/nuvio\\.tv\\/assets\\/nuvio-app-logo-wordmark\\.webp/);\nassert.doesNotMatch(cardSource,/https:\\/\\/raw\\.githubusercontent\\.com\\/NuvioMedia\\/NuvioTVSmart\\/main\\/assets\\/brand\\/app_logo_mark\\.png/);\n'''
+          tests.write_text(text.replace(anchor,extra+anchor,1))
+          docs=Path('docs/popup-card.md')
+          docs.write_text(docs.read_text()+'\n**Local brand images:** The integration includes the official logo files under `custom_components/nuvio/frontend/assets/` and serves them through Home Assistant at `/nuvio/assets/wordmark.webp` and `/nuvio/assets/mark.png`. All launcher appearances and the full card header use these local assets rather than requesting logos from external websites. Browser cache headers and versioned image URLs allow reuse across dashboard loads and updates.\n')
+          print('Local backend logo routes registered; frontend references updated')
+          PY
+      - name: Validate backend, frontend and existing launcher tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q custom_components/nuvio
+          node --check custom_components/nuvio/frontend/nuvio-card.js
+          node --check custom_components/nuvio/frontend/nuvio-popup-card.js
+          npm ci --prefix tests
+          node tests/test_card.cjs
+          grep -F 'NUVIO-CARD v0.4.74' custom_components/nuvio/frontend/nuvio-card.js
+          grep -F '<span class="card-version">v0.4.74</span>' custom_components/nuvio/frontend/nuvio-card.js
+      - name: Commit packaged image assets and local references
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add custom_components/nuvio/frontend/assets custom_components/nuvio/frontend/nuvio-card.js custom_components/nuvio/frontend/nuvio-popup-card.js custom_components/nuvio/frontend.py custom_components/nuvio/manifest.json docs/popup-card.md tests/test_card.cjs
+          git commit -m 'Serve bundled Nuvio logos from Home Assistant backend (v0.4.74)'
+          git push origin HEAD:feature/nuvio-local-brand-assets-0474
