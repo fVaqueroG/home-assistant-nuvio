@@ -59,17 +59,17 @@ launcherStyle() {
   const icon = String(this._config.button_icon ?? "").trim();
   const style = this.launcherStyle();
   this.shadowRoot.innerHTML = `<style>
-    :host{display:block}ha-card{height:56px;box-sizing:border-box}
-    ha-card.launcher-vertical{height:96px}
-    button{box-sizing:border-box;width:100%;height:100%;border:0;border-radius:var(--ha-card-border-radius,12px);padding:0 12px;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;background:transparent;color:var(--primary-text-color);font:inherit;font-weight:600}
+    :host{display:block;--popup-button-height:120px}ha-card{height:var(--popup-button-height);min-height:var(--popup-button-height);box-sizing:border-box;border-radius:var(--ha-card-border-radius,14px);overflow:hidden}
+    ha-card.launcher-vertical{height:var(--popup-button-height)}
+    button{box-sizing:border-box;width:100%;height:100%;min-height:var(--popup-button-height);border:0;border-radius:inherit;padding:8px;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;background:transparent;color:var(--primary-text-color);font:inherit;font-weight:600}
     button:hover{background:var(--secondary-background-color)}button:focus-visible{outline:2px solid var(--primary-color);outline-offset:-3px}
     ha-icon{color:var(--primary-color);--mdc-icon-size:25px}
     .launcher-visual{min-width:0;display:flex;align-items:center;justify-content:center}
     .launcher-logo{display:block;width:120px;max-width:100%;height:auto;max-height:38px;object-fit:contain}
-    .launcher-vertical-logo{display:block;width:auto;max-width:100%;height:82px;max-height:82px;object-fit:contain}
+    .launcher-vertical-logo{display:block;width:auto;max-width:100%;height:104px;max-height:104px;object-fit:contain}
     .launcher-mark{display:block;width:auto;height:46px;max-width:100%;object-fit:contain}
     .launcher-caption{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .launcher-vertical button{flex-direction:column;gap:0;padding:6px 8px}
+    .launcher-vertical button{flex-direction:column;gap:0;padding:8px}
     .launcher-vertical .launcher-caption{font-size:13px;line-height:17px;max-width:100%}
   </style><ha-card class="launcher-${style}"><button type="button" aria-label="Open Nuvio"><span class="launcher-visual"></span><span class="launcher-caption"></span></button></ha-card>`;
   const visual = this.shadowRoot.querySelector(".launcher-visual");
