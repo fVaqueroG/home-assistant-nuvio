@@ -1,0 +1,67 @@
+name: Apply logo-aligned header version v0.4.78
+on:
+  push:
+    branches:
+      - feature/align-header-version-0478
+    paths:
+      - .github/workflows/apply-version-alignment-0478.yml
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Align version to visible edge of the logo
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          card = Path('custom_components/nuvio/frontend/nuvio-card.js')
+          text = card.read_text()
+          old = '.card-version{font-size:10px;line-height:1.2;color:var(--secondary-text-color);opacity:.8}'
+          new = old + '.header-title.wordmark-loaded .card-version{margin-left:16px}'
+          assert text.count(old) == 1, 'Header CSS location changed'
+          text = text.replace(old, new, 1)
+          old = '        wordmark.style.display=loaded?"block":"none";\n        fallback.style.display=loaded?"none":"";'
+          new = '        wordmark.style.display=loaded?"block":"none";\n        fallback.style.display=loaded?"none":"";\n        wordmark.closest(".header-title")?.classList.toggle("wordmark-loaded",loaded);'
+          assert text.count(old) == 1, 'Wordmark load handler changed'
+          text = text.replace(old, new, 1)
+          assert 'v0.4.77' in text
+          card.write_text(text.replace('0.4.77','0.4.78'))
+          popup = Path('custom_components/nuvio/frontend/nuvio-popup-card.js')
+          text = popup.read_text()
+          assert '0.4.77' in text
+          popup.write_text(text.replace('0.4.77','0.4.78'))
+          manifest = Path('custom_components/nuvio/manifest.json')
+          payload = json.loads(manifest.read_text())
+          assert payload['version'] == '0.4.77'
+          payload['version'] = '0.4.78'
+          manifest.write_text(json.dumps(payload, indent=2) + '\n')
+          tests = Path('tests/test_card.cjs')
+          text = tests.read_text()
+          assert '0.4.77' in text
+          text = text.replace('0.4.77','0.4.78')
+          marker = "assert.match(cardSource,/id=\"homeTop\"/);"
+          assert text.count(marker) == 1
+          text = text.replace(marker,marker+'''\n// The visible logo begins inside the PNG's transparent left inset. Only shift\n// the version while the image is displayed; keep text fallback flush-left.\nassert.match(cardSource,/\\.header-title\\.wordmark-loaded \\.card-version\\{margin-left:16px\\}/);\nassert.match(cardSource,/wordmark\\.closest\\("\\.header-title"\\)\\?\\.classList\\.toggle\\("wordmark-loaded",loaded\\)/);''',1)
+          tests.write_text(text)
+          print('Applied wordmark-relative version alignment and bumped v0.4.78')
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add custom_components/nuvio/manifest.json custom_components/nuvio/frontend/nuvio-card.js custom_components/nuvio/frontend/nuvio-popup-card.js tests/test_card.cjs
+          git commit -m "Align Nuvio version with visible logo edge (v0.4.78)"
+          git push
+      - name: Validate integration and card
+        shell: bash
+        run: |
+          python -m compileall -q custom_components/nuvio
+          node --check custom_components/nuvio/frontend/nuvio-card.js
+          node --check custom_components/nuvio/frontend/nuvio-popup-card.js
+          npm ci --prefix tests
+          node tests/test_card.cjs
+          git diff --exit-code
