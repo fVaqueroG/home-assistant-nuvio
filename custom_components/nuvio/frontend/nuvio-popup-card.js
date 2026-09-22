@@ -62,8 +62,8 @@ launcherStyle() {
     const logo = document.createElement("img");
     logo.className = ["vertical", "logo_only"].includes(style) ? "launcher-mark" : "launcher-logo";
     logo.src = ["vertical", "logo_only"].includes(style)
-      ? "/nuvio/assets/mark.png?v=0.4.74"
-      : "/nuvio/assets/wordmark.webp?v=0.4.74";
+      ? "/nuvio/assets/mark.png?v=0.4.75"
+      : "/nuvio/assets/wordmark.png?v=0.4.75";
     logo.alt = "";
     logo.addEventListener("error", () => {
       const fallback = document.createElement("strong");
