@@ -57,8 +57,27 @@ assert.equal(launcher.shadowRoot.querySelector('.launcher-caption').textContent,
 // The simulated DOM lacks the native select and CustomEvent implementations.
 // Check editor field/handler statically; logo and icon rendering run in the DOM.
 assert.match(cardSource,/Button icon \(MDI, optional\)/);
-assert.match(cardSource,/Leave empty to use the official Nuvio logo/);
+assert.match(cardSource,/Used for Icon \+ text/);
 assert.match(cardSource,/input.addEventListener\("change", \(\) => this.emit/);
+// New appearance choices: official Nuvio mark stacked above its name,
+// original wordmark horizontal, and custom MDI icon with caption.
+launcher.setConfig({type:'custom:nuvio-popup-card',button_style:'vertical',button_label:'Nuvio'});
+assert.equal(launcher.getCardSize(),2);
+assert.equal(launcher.shadowRoot.querySelector('.launcher-mark').getAttribute('src'),'https://raw.githubusercontent.com/NuvioMedia/NuvioTVSmart/main/assets/brand/app_logo_mark.png');
+assert.equal(launcher.shadowRoot.querySelector('.launcher-caption').textContent,'Nuvio');
+assert.notEqual(launcher.shadowRoot.querySelector('.launcher-caption').style.display,'none');
+launcher.setConfig({type:'custom:nuvio-popup-card',button_style:'horizontal',button_icon:'mdi:star',button_label:'Nuvio'});
+assert.equal(launcher.getCardSize(),1);
+assert.equal(launcher.shadowRoot.querySelector('.launcher-logo').getAttribute('src'),'https://nuvio.tv/assets/nuvio-app-logo-wordmark.webp');
+assert.equal(launcher.shadowRoot.querySelector('.launcher-visual ha-icon'),null);
+launcher.setConfig({type:'custom:nuvio-popup-card',button_style:'icon_text',button_label:'Watch'});
+assert.equal(launcher.shadowRoot.querySelector('.launcher-visual ha-icon').getAttribute('icon'),'mdi:television-play');
+assert.equal(launcher.shadowRoot.querySelector('.launcher-caption').textContent,'Watch');
+launcher.setConfig({type:'custom:nuvio-popup-card',button_style:'icon_text',button_icon:'mdi:movie-open',button_label:'Movies'});
+assert.equal(launcher.shadowRoot.querySelector('.launcher-visual ha-icon').getAttribute('icon'),'mdi:movie-open');
+assert.equal(launcher.shadowRoot.querySelector('.launcher-logo'),null);
+assert.match(cardSource,/Button appearance<select data-field="button_style"/);
+assert.match(cardSource,/buttonStyle.addEventListener\("change",\(\)=>this.emit/);
 launcher.remove();
 // Home Assistant discovers the native visual editor and preserves unrelated YAML.
 const editorCard=window.document.createElement('nuvio-card');
