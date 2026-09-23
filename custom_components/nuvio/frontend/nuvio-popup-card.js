@@ -6,6 +6,7 @@ function nuvioThemeStyle(target, choice) {
   };
   for (const key of Object.keys(palettes.light)) target.style.removeProperty(key);
   target.style.removeProperty('color-scheme');
+  target.style.setProperty('--nuvio-logo-contrast', choice === 'light' ? 'drop-shadow(0 0 1.3px rgba(25,36,58,.88)) drop-shadow(0 1px 1px rgba(25,36,58,.55))' : 'none');
   if (Object.hasOwn(palettes, choice)) {
     for (const [key,value] of Object.entries(palettes[choice])) target.style.setProperty(key,value);
     target.style.setProperty('color-scheme',choice);
@@ -88,6 +89,7 @@ launcherStyle() {
     .launcher-visual{min-width:0;display:flex;align-items:center;justify-content:center}
     .launcher-logo{display:block;width:120px;max-width:100%;height:auto;max-height:38px;object-fit:contain}
     .launcher-vertical-logo{display:block;width:auto;max-width:100%;height:104px;max-height:104px;object-fit:contain}
+    .launcher-logo,.launcher-vertical-logo,.launcher-mark{filter:var(--nuvio-logo-contrast,none)}
     .launcher-mark{display:block;width:auto;height:46px;max-width:100%;object-fit:contain}
     .launcher-caption{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .launcher-vertical button{flex-direction:column;gap:0;padding:8px}
