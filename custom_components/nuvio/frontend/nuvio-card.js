@@ -1,3 +1,16 @@
+function nuvioThemeStyle(target, choice) {
+  if (!target) return;
+  const palettes = {
+    light: {'--card-background-color':'#ffffff','--ha-card-background':'#ffffff','--primary-text-color':'#182436','--secondary-text-color':'#58697d','--secondary-background-color':'#edf2f7','--divider-color':'#d8e0e9','--ha-card-border-color':'#d8e0e9'},
+    dark: {'--card-background-color':'#171b24','--ha-card-background':'#171b24','--primary-text-color':'#f2f5fb','--secondary-text-color':'#aab6c8','--secondary-background-color':'#283142','--divider-color':'#465267','--ha-card-border-color':'#465267'}
+  };
+  for (const key of Object.keys(palettes.light)) target.style.removeProperty(key);
+  target.style.removeProperty('color-scheme');
+  if (Object.hasOwn(palettes, choice)) {
+    for (const [key,value] of Object.entries(palettes[choice])) target.style.setProperty(key,value);
+    target.style.setProperty('color-scheme',choice);
+  }
+}
 class NuvioCard extends HTMLElement {
   constructor(){
     super(); this.attachShadow({mode:"open"});
@@ -5,9 +18,18 @@ class NuvioCard extends HTMLElement {
     this._sections=[]; this._hero=[]; this._heroIndex=0; this._homePrefs={}; this._results=[]; this._catalogSection=null; this._catalogItems=[]; this._catalogLoading=false; this._catalogLoadingMore=false; this._catalogVisibleCount=0; this._catalogPaging=null; this._catalogObserver=null; this._catalogScrollTop=0; this._catalogLoadError=""; this._resetCatalogScroll=false; this._catalogReload=null; this._returnView="home"; this._playersMeta=[]; this._playerId=""; this._roomId=null; this._streams=[]; this._streamLoading=false; this._streamLoadingStage=""; this._streamContext=null; this._sourceRequest=0; this._addonFilter="all"; this._addonFilterExpanded=false; this._watchProviders=[]; this._watchProviderMeta={configured:false}; this._watchProvidersLoading=false; this._debridMeta={configured:false,provider:""}; this._resolving=new Set(); this._lazyCatalogLoads=new Set(); this._lazyObserver=null; this._remoteExpanded=false; this._view="home"; this._item=null; this._details=null; this._season=null; this._query=""; this._error="";
   }
   static getConfigElement(){ return document.createElement("nuvio-card-editor"); }
-  static getStubConfig(){ return {title:"Nuvio",columns:6,show_remote:true,remote_side:"left"}; }
-  setConfig(c){
-    this._config=Object.assign({title:"Nuvio",columns:6,show_search:true,show_remote:true,remote_side:"left"},c||{});
+  static getStubConfig(){ return {title:"Nuvio",columns:6,show_remote:true,remote_side:"left",theme:"system"}; }
+  _refreshCardTheme(){
+  nuvioThemeStyle(this,this._config.theme);
+  const portal=document.getElementById('nuvio-remote-portal');
+  if (this._remoteExpanded && portal) {
+    const mode=this._config.theme;
+    portal.dataset.nuvioTheme=mode==='light'||mode==='dark' ? mode : (this._hass?.themes?.darkMode ? 'dark' : 'light');
+  }
+}
+setConfig(c){
+  this._config=Object.assign({title:"Nuvio",columns:6,show_search:true,show_remote:true,remote_side:"left",theme:"system"},c||{});
+  this._refreshCardTheme();
     var rooms=this.rooms();
     if(this._roomId===null||(this._roomId&&!rooms.some(r=>r.id===this._roomId))){
       var initial=rooms.find(r=>r.id===this._config.default_room)||rooms[0];
@@ -17,7 +39,7 @@ class NuvioCard extends HTMLElement {
     if(room&&room.player)this._playerId=room.player;
     this.render();
   }
-  set hass(h){ this._hass=h; if(!this._loaded&&!this._loading&&!this._homeRetryTimer&&(this._homeRetryCount||0)<3)this.loadHome(); }
+  set hass(h){ this._hass=h; this._refreshCardTheme(); if(!this._loaded&&!this._loading&&!this._homeRetryTimer&&(this._homeRetryCount||0)<3)this.loadHome(); }
   getCardSize(){ return 8; }
   ws(m){ return this._hass.connection.sendMessagePromise(m); }
   esc(v){ return String(v==null?"":v).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;"); }
@@ -1006,7 +1028,7 @@ async choosePlayer(player){
       ? ""
       : '<button class="ib toolbar-btn remote-toggle-button '+(this._remoteExpanded?"remote-active":"")+'" title="Control" aria-label="Control"><ha-icon icon="mdi:remote-tv"></ha-icon></button>';
     var home='<button class="ib toolbar-btn '+(onHome?"toolbar-active":"")+'" id="homeTop" title="Home" aria-label="Home"><ha-icon icon="mdi:home"></ha-icon></button>';
-    return '<div class="header"><div class="header-title"><img class="nuvio-wordmark" src="/nuvio/assets/wordmark.png?v=0.4.79" alt="Nuvio" decoding="async" style="display:none;height:38px;max-width:150px;width:auto;object-fit:contain"><h2 class="nuvio-wordmark-fallback">'+this.esc(this._config.title||"Nuvio")+'</h2><span class="card-version">v0.4.79</span></div><div class="tools">'+search+this.roomSelect()+'<label class="toolbar-player" title="Select media player"><ha-icon icon="mdi:television" aria-hidden="true"></ha-icon>'+this.playerSelect()+'</label>'+
+    return '<div class="header"><div class="header-title"><img class="nuvio-wordmark" src="/nuvio/assets/wordmark.png?v=0.4.79" alt="Nuvio" decoding="async" style="display:none;height:38px;max-width:150px;width:auto;object-fit:contain"><h2 class="nuvio-wordmark-fallback">'+this.esc(this._config.title||"Nuvio")+'</h2><span class="card-version">v0.4.86</span></div><div class="tools">'+search+this.roomSelect()+'<label class="toolbar-player" title="Select media player"><ha-icon icon="mdi:television" aria-hidden="true"></ha-icon>'+this.playerSelect()+'</label>'+
       home+
       '<button class="ib toolbar-btn" id="refresh" title="Refresh" aria-label="Refresh"><ha-icon icon="mdi:refresh"></ha-icon></button>'+
       addons+remote+'</div></div>';
@@ -1274,8 +1296,20 @@ async choosePlayer(player){
     portal.querySelector(".nuvio-remote-close")?.addEventListener("click",close);
     portal.querySelector(".nuvio-remote-backdrop")?.addEventListener("click",close);
 
-    (document.body||document.documentElement).appendChild(portal);
-  }
+    const remoteTheme=document.createElement('style');
+  remoteTheme.textContent=`#nuvio-remote-portal[data-nuvio-theme="light"] .nuvio-remote-shell{background:#fff!important;color:#182436!important;border-color:#d8e0e9!important}
+    #nuvio-remote-portal[data-nuvio-theme="light"] .nuvio-remote-head{color:#58697d!important}
+    #nuvio-remote-portal[data-nuvio-theme="light"] .nuvio-remote-close,
+    #nuvio-remote-portal[data-nuvio-theme="light"] .nuvio-wake-btn,
+    #nuvio-remote-portal[data-nuvio-theme="light"] .nuvio-number-pad button,
+    #nuvio-remote-portal[data-nuvio-theme="light"] .nuvio-volume-row button,
+    #nuvio-remote-portal[data-nuvio-theme="light"] .nuvio-remote-footer button{background:#edf2f7!important;color:#182436!important}
+    #nuvio-remote-portal[data-nuvio-theme="light"] .nuvio-remote-ring{background:radial-gradient(circle at center,#edf2f7 0 34%,#d8e0e9 35% 100%)!important}
+    #nuvio-remote-portal[data-nuvio-theme="light"] .nuvio-remote-ring .nuvio-ring-btn{color:#182436!important}`;
+  portal.appendChild(remoteTheme);
+  (document.body||document.documentElement).appendChild(portal);
+  this._refreshCardTheme();
+}
   disconnectedCallback(){
     clearTimeout(this._homeRetryTimer);this._homeRetryTimer=null;
     clearInterval(this._heroTimer);this._heroTimer=null;
@@ -1677,6 +1711,7 @@ class NuvioCardEditor extends HTMLElement {
     </style><div class="editor">
       <section class="group"><h3>General</h3><div class="fields">
         <label>Card title<input type="text" data-field="title" value="${this.esc(cfg.title==null?"Nuvio":cfg.title)}"></label>
+        <label>Theme<select data-field="theme"><option value="system" ${(cfg.theme||'system')==='system'?'selected':''}>System (Home Assistant)</option><option value="light" ${cfg.theme==='light'?'selected':''}>Light</option><option value="dark" ${cfg.theme==='dark'?'selected':''}>Dark</option></select></label>
         <label>Catalog columns<input type="number" data-field="columns" min="1" max="12" step="1" value="${this.esc(cfg.columns==null?6:cfg.columns)}"></label>
         <label class="switch"><input type="checkbox" data-field="show_search" ${cfg.show_search!==false?'checked':''}>Show search</label>
       </div></section>
@@ -1705,7 +1740,7 @@ if(!customElements.get("nuvio-card-editor"))customElements.define("nuvio-card-ed
 if(!customElements.get("nuvio-card"))customElements.define("nuvio-card",NuvioCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==="nuvio-card"))window.customCards.push({type:"nuvio-card",name:"Nuvio",description:"Browse, search and play your Nuvio catalog.",preview:true});
-console.info("NUVIO-CARD v0.4.85");
+console.info("NUVIO-CARD v0.4.86");
 
 // Nuvio popup button. Bundled after nuvio-card.js so HACS loads both card types
 // through the existing versioned Lovelace module resource.
@@ -1756,12 +1791,19 @@ launcherStyle() {
     const previousAutoClose = this.popupAutoCloseMinutes();
     this._config = {...config};
     this.render();
+    this._refreshPopupTheme();
     if (this._overlay) this._overlay.dataset.size = this.popupSize();
     if (this._overlay && previousAutoClose !== this.popupAutoCloseMinutes()) this.startAutoCloseTimer();
     if (this._popupCard) this._popupCard.setConfig({...this._config, type: "custom:nuvio-card"});
   }
-  set hass(value) {
-    this._hass = value;
+  _refreshPopupTheme() {
+      nuvioThemeStyle(this,this._config.theme);
+      const frame=this._overlay?.querySelector('.nuvio-popup-frame');
+      if (frame) nuvioThemeStyle(frame,this._config.theme);
+    }
+    set hass(value) {
+      this._hass = value;
+    this._refreshPopupTheme();
     if (this._popupCard) this._popupCard.hass = value;
   }
   render() {
@@ -1840,6 +1882,7 @@ launcherStyle() {
     card.setConfig({...this._config, type: "custom:nuvio-card"});
     content.appendChild(card);
     (document.body || document.documentElement).appendChild(overlay);
+    this._refreshPopupTheme();
     card.hass = this._hass;
     overlay.querySelector(".nuvio-popup-top button").addEventListener("click", () => this.closePopup());
     overlay.addEventListener("click", event => { if (event.target === overlay) this.closePopup(); });

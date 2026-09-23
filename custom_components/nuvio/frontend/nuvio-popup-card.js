@@ -1,3 +1,16 @@
+function nuvioThemeStyle(target, choice) {
+  if (!target) return;
+  const palettes = {
+    light: {'--card-background-color':'#ffffff','--ha-card-background':'#ffffff','--primary-text-color':'#182436','--secondary-text-color':'#58697d','--secondary-background-color':'#edf2f7','--divider-color':'#d8e0e9','--ha-card-border-color':'#d8e0e9'},
+    dark: {'--card-background-color':'#171b24','--ha-card-background':'#171b24','--primary-text-color':'#f2f5fb','--secondary-text-color':'#aab6c8','--secondary-background-color':'#283142','--divider-color':'#465267','--ha-card-border-color':'#465267'}
+  };
+  for (const key of Object.keys(palettes.light)) target.style.removeProperty(key);
+  target.style.removeProperty('color-scheme');
+  if (Object.hasOwn(palettes, choice)) {
+    for (const [key,value] of Object.entries(palettes[choice])) target.style.setProperty(key,value);
+    target.style.setProperty('color-scheme',choice);
+  }
+}
 // Nuvio popup button. Bundled after nuvio-card.js so HACS loads both card types
 // through the existing versioned Lovelace module resource.
 class NuvioPopupCard extends HTMLElement {
@@ -47,12 +60,19 @@ launcherStyle() {
     const previousAutoClose = this.popupAutoCloseMinutes();
     this._config = {...config};
     this.render();
+    this._refreshPopupTheme();
     if (this._overlay) this._overlay.dataset.size = this.popupSize();
     if (this._overlay && previousAutoClose !== this.popupAutoCloseMinutes()) this.startAutoCloseTimer();
     if (this._popupCard) this._popupCard.setConfig({...this._config, type: "custom:nuvio-card"});
   }
-  set hass(value) {
-    this._hass = value;
+  _refreshPopupTheme() {
+      nuvioThemeStyle(this,this._config.theme);
+      const frame=this._overlay?.querySelector('.nuvio-popup-frame');
+      if (frame) nuvioThemeStyle(frame,this._config.theme);
+    }
+    set hass(value) {
+      this._hass = value;
+    this._refreshPopupTheme();
     if (this._popupCard) this._popupCard.hass = value;
   }
   render() {
@@ -131,6 +151,7 @@ launcherStyle() {
     card.setConfig({...this._config, type: "custom:nuvio-card"});
     content.appendChild(card);
     (document.body || document.documentElement).appendChild(overlay);
+    this._refreshPopupTheme();
     card.hass = this._hass;
     overlay.querySelector(".nuvio-popup-top button").addEventListener("click", () => this.closePopup());
     overlay.addEventListener("click", event => { if (event.target === overlay) this.closePopup(); });
