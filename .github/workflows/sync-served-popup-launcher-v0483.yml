@@ -1,0 +1,61 @@
+name: Sync served Nuvio popup launcher v0.4.83
+'on':
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/sync-served-popup-launcher-v0483.yml
+permissions:
+  contents: write
+jobs:
+  sync-popup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Replace stale popup code in actual served Nuvio bundle
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          root = Path('custom_components/nuvio')
+          served = root / 'frontend/nuvio-card.js'
+          popup = root / 'frontend/nuvio-popup-card.js'
+          source = served.read_text(encoding='utf-8')
+          popup_source = popup.read_text(encoding='utf-8')
+          marker = '// Nuvio popup button. Bundled after nuvio-card.js so HACS loads both card types'
+          assert source.count(marker) == 1, 'Unexpected bundled popup structure'
+          assert popup_source.startswith(marker), 'Standalone popup marker changed'
+          prefix, old_popup = source.split(marker, 1)
+          assert 'ha-card.launcher-vertical{height:96px}' in old_popup, 'Expected stale 96px launcher in served bundle'
+          assert 'getGridOptions()' in popup_source, 'Grid sizing missing in corrected source'
+          assert 'height:120px!important' in popup_source, 'Corrected launcher CSS missing'
+          assert 'console.info("NUVIO-CARD v0.4.79");' in prefix, 'Unexpected bundle version marker'
+          prefix = prefix.replace('console.info("NUVIO-CARD v0.4.79");', 'console.info("NUVIO-CARD v0.4.83");', 1)
+          served.write_text(prefix + popup_source.rstrip() + '\n', encoding='utf-8')
+          manifest = root / 'manifest.json'
+          meta = json.loads(manifest.read_text(encoding='utf-8'))
+          assert meta['version'] == '0.4.82', meta['version']
+          meta['version'] = '0.4.83'
+          manifest.write_text(json.dumps(meta, indent=2) + '\n', encoding='utf-8')
+          new = served.read_text(encoding='utf-8')
+          assert new.split(marker, 1)[1] == popup_source.rstrip() + '\n'
+          assert 'ha-card.launcher-vertical{height:96px}' not in new
+          assert new.count('class NuvioPopupCard extends HTMLElement') == 1
+          print('PASS: Served Nuvio JS now contains the corrected 120px popup and matching grid sizing; popup source and served bundle are synchronized.')
+          PY
+      - name: Validate production bundle, popup source and manifest
+        run: |
+          node --check custom_components/nuvio/frontend/nuvio-card.js
+          node --check custom_components/nuvio/frontend/nuvio-popup-card.js
+          python3 -m json.tool custom_components/nuvio/manifest.json >/dev/null
+      - name: Publish v0.4.83
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add custom_components/nuvio/frontend/nuvio-card.js custom_components/nuvio/manifest.json
+          git commit -m 'v0.4.83: fix actual served Nuvio popup launcher height'
+          git push origin HEAD:main
+          gh release create v0.4.83 --target "$(git rev-parse HEAD)" --title 'v0.4.83' --notes 'Fix the root cause of Nuvio popup button appearing shorter: Home Assistant loads bundled nuvio-card.js, which retained the old 96px popup even in v0.4.82. Synchronize that served bundle with the corrected standalone popup source, including 120px host/card/button and matching Home Assistant grid sizing. Full-size card and existing dashboard YAML remain unchanged.'
