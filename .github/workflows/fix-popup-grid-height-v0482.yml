@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Align host, card, button and HA grid options
+      - name: Align host card button and HA grid options
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -19,31 +19,26 @@ jobs:
           base=Path('custom_components/nuvio')
           p=base/'frontend/nuvio-popup-card.js'
           js=p.read_text(encoding='utf-8')
-          def replace_once(a,b):
+          def replace_once(old,new):
               global js
-              assert js.count(a)==1, f'Unexpected launcher source: {a[:80]}'
-              js=js.replace(a,b,1)
-          replace_once('  getCardSize() { return 2; }', '''  getCardSize() { return 2; }
-  // Match the Streaming Browser popup in Home Assistant Sections as well as Grid.
-  getGridOptions() {
-    const tall = this.launcherStyle() === "vertical";
-    return {columns: tall ? 4 : 3, rows: tall ? 2 : 1,
-      min_columns: 2, min_rows: tall ? 2 : 1};
-  }''')
+              assert js.count(old)==1, f'Unexpected launcher source: {old[:90]}'
+              js=js.replace(old,new,1)
+          replace_once('  getCardSize() { return 2; }', '  getCardSize() { return 2; }\n  getGridOptions() { const tall = this.launcherStyle() === "vertical"; return {columns: tall ? 4 : 3, rows: tall ? 2 : 1, min_columns: 2, min_rows: tall ? 2 : 1}; }')
           replace_once(':host{display:block;--popup-button-height:120px;height:var(--popup-button-height);min-height:var(--popup-button-height);box-sizing:border-box}ha-card{height:var(--popup-button-height)!important;min-height:var(--popup-button-height)!important;box-sizing:border-box;border-radius:var(--ha-card-border-radius,14px);overflow:hidden}', ':host{display:block;--popup-button-height:120px;height:120px!important;min-height:120px!important;max-height:120px!important;align-self:stretch;box-sizing:border-box}ha-card{display:block;width:100%;height:120px!important;min-height:120px!important;max-height:120px!important;box-sizing:border-box;border-radius:var(--ha-card-border-radius,14px);overflow:hidden}')
           replace_once('ha-card.launcher-vertical{height:var(--popup-button-height)}', 'ha-card.launcher-vertical{height:120px!important;min-height:120px!important;max-height:120px!important}')
           replace_once('button{box-sizing:border-box;width:100%;height:100%;min-height:var(--popup-button-height);border:0;', 'button{box-sizing:border-box;width:100%;height:120px!important;min-height:120px!important;max-height:120px!important;border:0;')
-          replace_once('logo.src = "/nuvio/assets/vertical.png?v=0.4.79";', 'logo.src = "/nuvio/assets/vertical.png?v=0.4.82";')
-          replace_once('logo.src = "/nuvio/assets/icon-only.png?v=0.4.79";', 'logo.src = "/nuvio/assets/icon-only.png?v=0.4.82";')
-          replace_once('logo.src = "/nuvio/assets/wordmark.png?v=0.4.79";', 'logo.src = "/nuvio/assets/wordmark.png?v=0.4.82";')
+          for name in ('vertical','icon-only','wordmark'):
+              replace_once(f'/nuvio/assets/{name}.png?v=0.4.79', f'/nuvio/assets/{name}.png?v=0.4.82')
           p.write_text(js,encoding='utf-8')
-          m=base/'manifest.json'; obj=json.loads(m.read_text(encoding='utf-8'))
+          manifest=base/'manifest.json'
+          obj=json.loads(manifest.read_text(encoding='utf-8'))
           assert obj['version']=='0.4.81',obj['version']
-          obj['version']='0.4.82'; m.write_text(json.dumps(obj,indent=2)+'\n',encoding='utf-8')
+          obj['version']='0.4.82'
+          manifest.write_text(json.dumps(obj,indent=2)+'\n',encoding='utf-8')
           assert 'getGridOptions()' in js and js.count('max-height:120px!important')>=3
-          print('PASS: vertical launcher 120px at host/card/button and matching HA grid options')
+          print('PASS: vertical launcher 120px at host/card/button plus matching HA grid options')
           PY
-      - name: Validate JS and manifest
+      - name: Validate syntax
         run: |
           node --check custom_components/nuvio/frontend/nuvio-popup-card.js
           python3 -m json.tool custom_components/nuvio/manifest.json >/dev/null
@@ -55,6 +50,6 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add custom_components/nuvio/frontend/nuvio-popup-card.js custom_components/nuvio/manifest.json
-          git commit -m 'v0.4.82: align Nuvio popup grid and lock launcher to 120px'
+          git commit -m 'v0.4.82: fix Nuvio popup grid and enforce 120px launcher height'
           git push origin HEAD:main
-          gh release create v0.4.82 --target "$(git rev-parse HEAD)" --title v0.4.82 --notes 'Fix Nuvio vertical popup launcher height: match Streaming Browser Sections grid sizing and enforce 120px on the host, ha-card, and launcher button. Refresh versioned logo URLs; full-size popup behavior unchanged.'
+          gh release create v0.4.82 --target "$(git rev-parse HEAD)" --title v0.4.82 --notes 'Fix Nuvio popup launcher height by matching the Streaming Browser vertical grid footprint and enforcing 120px host/card/button size. Bust logo cache. The popup content and existing dashboard YAML are unchanged.'
