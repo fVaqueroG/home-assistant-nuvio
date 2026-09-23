@@ -1,0 +1,58 @@
+name: Mobile popup viewport v0.4.85
+'on':
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mobile-popup-viewport-v0485.yml
+permissions:
+  contents: write
+jobs:
+  mobile-popup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Match mobile Normal and Wide popup to the full viewport
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('custom_components/nuvio')
+          popup_file = root / 'frontend/nuvio-popup-card.js'
+          served_file = root / 'frontend/nuvio-card.js'
+          manifest_file = root / 'manifest.json'
+          popup = popup_file.read_text(encoding='utf-8')
+          marker = '// Nuvio popup button. Bundled after nuvio-card.js so HACS loads both card types'
+          assert popup.startswith(marker)
+          old = '@media(max-width:600px){.nuvio-popup-overlay{padding:0}.nuvio-popup-frame{width:100%;max-width:100%;height:100%;max-height:100%;border-radius:0}.nuvio-popup-top{height:44px;min-height:44px;flex-basis:44px;padding:0 8px 0 12px}}'
+          new = '@media(max-width:600px){.nuvio-popup-overlay{padding:0}.nuvio-popup-frame,.nuvio-popup-overlay[data-size="normal"] .nuvio-popup-frame,.nuvio-popup-overlay[data-size="wide"] .nuvio-popup-frame{width:100%;max-width:100%;height:100%;max-height:100%;border-radius:0}.nuvio-popup-top{height:44px;min-height:44px;flex-basis:44px;padding:0 8px 0 12px}}'
+          assert popup.count(old) == 1, 'Mobile override anchor not found'
+          popup = popup.replace(old, new, 1)
+          popup_file.write_text(popup, encoding='utf-8')
+          served = served_file.read_text(encoding='utf-8')
+          assert served.count(marker) == 1
+          prefix, _ = served.split(marker, 1)
+          assert 'console.info("NUVIO-CARD v0.4.84");' in prefix
+          prefix = prefix.replace('console.info("NUVIO-CARD v0.4.84");', 'console.info("NUVIO-CARD v0.4.85");', 1)
+          served_file.write_text(prefix + popup.rstrip() + '\n', encoding='utf-8')
+          manifest = json.loads(manifest_file.read_text(encoding='utf-8'))
+          assert manifest['version'] == '0.4.84', manifest['version']
+          manifest['version'] = '0.4.85'
+          manifest_file.write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
+          assert served_file.read_text(encoding='utf-8').split(marker, 1)[1] == popup[len(marker):].rstrip() + '\n'
+          print('PASS: All three Nuvio popup sizes occupy the same full mobile viewport.')
+          PY
+          node --check custom_components/nuvio/frontend/nuvio-card.js
+          node --check custom_components/nuvio/frontend/nuvio-popup-card.js
+          python3 -m json.tool custom_components/nuvio/manifest.json >/dev/null
+      - name: Publish v0.4.85
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add custom_components/nuvio/frontend/nuvio-card.js custom_components/nuvio/frontend/nuvio-popup-card.js custom_components/nuvio/manifest.json
+          git commit -m 'v0.4.85: keep all Nuvio popup sizes edge-to-edge on mobile'
+          git push origin HEAD:main
+          gh release create v0.4.85 --target "$(git rev-parse HEAD)" --title 'v0.4.85' --notes 'Complete the shared Totalplay/Nuvio/Streaming Browser popup shell: fix the more-specific Normal/Wide CSS rules on narrow screens so all sizes use the full mobile viewport while preserving the 44px header. Retains desktop Normal 900x700 and Wide 1440x900, branding and visual editor.'
