@@ -1705,7 +1705,7 @@ if(!customElements.get("nuvio-card-editor"))customElements.define("nuvio-card-ed
 if(!customElements.get("nuvio-card"))customElements.define("nuvio-card",NuvioCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==="nuvio-card"))window.customCards.push({type:"nuvio-card",name:"Nuvio",description:"Browse, search and play your Nuvio catalog.",preview:true});
-console.info("NUVIO-CARD v0.4.79");
+console.info("NUVIO-CARD v0.4.83");
 
 // Nuvio popup button. Bundled after nuvio-card.js so HACS loads both card types
 // through the existing versioned Lovelace module resource.
@@ -1727,7 +1727,8 @@ class NuvioPopupCard extends HTMLElement {
   }
   static getConfigElement() { return document.createElement("nuvio-popup-card-editor"); }
   static getStubConfig() { return {button_label: "Nuvio", button_style: "horizontal", popup_width: "wide", popup_auto_close_minutes: 2}; }
-  getCardSize() { return this.launcherStyle() === "vertical" ? 2 : 1; }
+  getCardSize() { return 2; }
+  getGridOptions() { const tall = this.launcherStyle() === "vertical"; return {columns: tall ? 4 : 3, rows: tall ? 2 : 1, min_columns: 2, min_rows: tall ? 2 : 1}; }
 launcherStyle() {
   // Old cards that saved an icon must keep showing that icon unless
   // their owner explicitly picks a different layout.
@@ -1768,17 +1769,17 @@ launcherStyle() {
   const icon = String(this._config.button_icon ?? "").trim();
   const style = this.launcherStyle();
   this.shadowRoot.innerHTML = `<style>
-    :host{display:block}ha-card{height:56px;box-sizing:border-box}
-    ha-card.launcher-vertical{height:96px}
-    button{box-sizing:border-box;width:100%;height:100%;border:0;border-radius:var(--ha-card-border-radius,12px);padding:0 12px;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;background:transparent;color:var(--primary-text-color);font:inherit;font-weight:600}
+    :host{display:block;--popup-button-height:120px;height:120px!important;min-height:120px!important;max-height:120px!important;align-self:stretch;box-sizing:border-box}ha-card{display:block;width:100%;height:120px!important;min-height:120px!important;max-height:120px!important;box-sizing:border-box;border-radius:var(--ha-card-border-radius,14px);overflow:hidden}
+    ha-card.launcher-vertical{height:120px!important;min-height:120px!important;max-height:120px!important}
+    button{box-sizing:border-box;width:100%;height:120px!important;min-height:120px!important;max-height:120px!important;border:0;border-radius:inherit;padding:8px;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;background:transparent;color:var(--primary-text-color);font:inherit;font-weight:600}
     button:hover{background:var(--secondary-background-color)}button:focus-visible{outline:2px solid var(--primary-color);outline-offset:-3px}
     ha-icon{color:var(--primary-color);--mdc-icon-size:25px}
     .launcher-visual{min-width:0;display:flex;align-items:center;justify-content:center}
     .launcher-logo{display:block;width:120px;max-width:100%;height:auto;max-height:38px;object-fit:contain}
-    .launcher-vertical-logo{display:block;width:auto;max-width:100%;height:82px;max-height:82px;object-fit:contain}
+    .launcher-vertical-logo{display:block;width:auto;max-width:100%;height:104px;max-height:104px;object-fit:contain}
     .launcher-mark{display:block;width:auto;height:46px;max-width:100%;object-fit:contain}
     .launcher-caption{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .launcher-vertical button{flex-direction:column;gap:0;padding:6px 8px}
+    .launcher-vertical button{flex-direction:column;gap:0;padding:8px}
     .launcher-vertical .launcher-caption{font-size:13px;line-height:17px;max-width:100%}
   </style><ha-card class="launcher-${style}"><button type="button" aria-label="Open Nuvio"><span class="launcher-visual"></span><span class="launcher-caption"></span></button></ha-card>`;
   const visual = this.shadowRoot.querySelector(".launcher-visual");
@@ -1790,13 +1791,13 @@ launcherStyle() {
     const logo = document.createElement("img");
     if (style === "vertical") {
       logo.className = "launcher-vertical-logo";
-      logo.src = "/nuvio/assets/vertical.png?v=0.4.79";
+      logo.src = "/nuvio/assets/vertical.png?v=0.4.82";
     } else if (style === "logo_only") {
       logo.className = "launcher-mark";
-      logo.src = "/nuvio/assets/icon-only.png?v=0.4.79";
+      logo.src = "/nuvio/assets/icon-only.png?v=0.4.82";
     } else {
       logo.className = "launcher-logo";
-      logo.src = "/nuvio/assets/wordmark.png?v=0.4.79";
+      logo.src = "/nuvio/assets/wordmark.png?v=0.4.82";
     }
     logo.alt = "";
     logo.addEventListener("error", () => {
