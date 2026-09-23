@@ -177,7 +177,13 @@ launcherStyle() {
 class NuvioPopupCardEditor extends HTMLElement {
   constructor() { super(); this.attachShadow({mode:"open"}); this._config={}; this._hass=null; }
   set hass(value) { this._hass=value; const editor=this.shadowRoot.querySelector("nuvio-card-editor"); if(editor) editor.hass=value; }
-  setConfig(config) { this._config={...config}; this.render(); }
+  setConfig(config) {
+    const next={...config};
+    const changed=JSON.stringify(this._config)!==JSON.stringify(next);
+    this._config=next;
+    if(!this.shadowRoot.querySelector('nuvio-card-editor')||
+       (changed&&!this.matches(':focus-within')))this.render();
+  }
   emit(config) {
     this._config={...config,type:"custom:nuvio-popup-card"};
     this.dispatchEvent(new CustomEvent("config-changed", {detail:{config:{...this._config}},bubbles:true,composed:true}));

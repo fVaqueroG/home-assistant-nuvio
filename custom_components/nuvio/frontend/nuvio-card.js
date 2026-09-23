@@ -1028,7 +1028,7 @@ async choosePlayer(player){
       ? ""
       : '<button class="ib toolbar-btn remote-toggle-button '+(this._remoteExpanded?"remote-active":"")+'" title="Control" aria-label="Control"><ha-icon icon="mdi:remote-tv"></ha-icon></button>';
     var home='<button class="ib toolbar-btn '+(onHome?"toolbar-active":"")+'" id="homeTop" title="Home" aria-label="Home"><ha-icon icon="mdi:home"></ha-icon></button>';
-    return '<div class="header"><div class="header-title"><img class="nuvio-wordmark" src="/nuvio/assets/wordmark.png?v=0.4.79" alt="Nuvio" decoding="async" style="display:none;height:38px;max-width:150px;width:auto;object-fit:contain"><h2 class="nuvio-wordmark-fallback">'+this.esc(this._config.title||"Nuvio")+'</h2><span class="card-version">v0.4.86</span></div><div class="tools">'+search+this.roomSelect()+'<label class="toolbar-player" title="Select media player"><ha-icon icon="mdi:television" aria-hidden="true"></ha-icon>'+this.playerSelect()+'</label>'+
+    return '<div class="header"><div class="header-title"><img class="nuvio-wordmark" src="/nuvio/assets/wordmark.png?v=0.4.79" alt="Nuvio" decoding="async" style="display:none;height:38px;max-width:150px;width:auto;object-fit:contain"><h2 class="nuvio-wordmark-fallback">'+this.esc(this._config.title||"Nuvio")+'</h2><span class="card-version">v0.4.87</span></div><div class="tools">'+search+this.roomSelect()+'<label class="toolbar-player" title="Select media player"><ha-icon icon="mdi:television" aria-hidden="true"></ha-icon>'+this.playerSelect()+'</label>'+
       home+
       '<button class="ib toolbar-btn" id="refresh" title="Refresh" aria-label="Refresh"><ha-icon icon="mdi:refresh"></ha-icon></button>'+
       addons+remote+'</div></div>';
@@ -1546,10 +1546,17 @@ class NuvioCardEditor extends HTMLElement {
     const previousSources=this.displaySourceSignature();
     const first=!this._hass;
     this._hass=h;
-    // Refresh input choices only when the configured displays' sources change.
-    if(first||!this._rendered||previousSources!==this.displaySourceSignature())this.render();
+    // A focused select must not be rebuilt by Home Assistant state updates.
+    if(first||!this._rendered||
+       (previousSources!==this.displaySourceSignature()&&!this.matches(':focus-within')))this.render();
   }
-  setConfig(config){this._config={...(config||{})};this.render();}
+  setConfig(config){
+    const next={...(config||{})};
+    const changed=JSON.stringify(next)!==JSON.stringify(this._config);
+    this._config=next;
+    // HA echoes config-changed; ignore unchanged echoes and keep active menus.
+    if(!this._rendered||(changed&&!this.matches(':focus-within')))this.render();
+  }
   displaySources(display){
     const states=(this._hass&&this._hass.states)||{};
     const list=((states[display]||{}).attributes||{}).source_list;
@@ -1740,7 +1747,7 @@ if(!customElements.get("nuvio-card-editor"))customElements.define("nuvio-card-ed
 if(!customElements.get("nuvio-card"))customElements.define("nuvio-card",NuvioCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(c=>c.type==="nuvio-card"))window.customCards.push({type:"nuvio-card",name:"Nuvio",description:"Browse, search and play your Nuvio catalog.",preview:true});
-console.info("NUVIO-CARD v0.4.86");
+console.info("NUVIO-CARD v0.4.87");
 
 // Nuvio popup button. Bundled after nuvio-card.js so HACS loads both card types
 // through the existing versioned Lovelace module resource.
@@ -1908,7 +1915,13 @@ launcherStyle() {
 class NuvioPopupCardEditor extends HTMLElement {
   constructor() { super(); this.attachShadow({mode:"open"}); this._config={}; this._hass=null; }
   set hass(value) { this._hass=value; const editor=this.shadowRoot.querySelector("nuvio-card-editor"); if(editor) editor.hass=value; }
-  setConfig(config) { this._config={...config}; this.render(); }
+  setConfig(config) {
+    const next={...config};
+    const changed=JSON.stringify(this._config)!==JSON.stringify(next);
+    this._config=next;
+    if(!this.shadowRoot.querySelector('nuvio-card-editor')||
+       (changed&&!this.matches(':focus-within')))this.render();
+  }
   emit(config) {
     this._config={...config,type:"custom:nuvio-popup-card"};
     this.dispatchEvent(new CustomEvent("config-changed", {detail:{config:{...this._config}},bubbles:true,composed:true}));
