@@ -113,16 +113,16 @@ launcherStyle() {
     overlay.dataset.size = this.popupSize();
     overlay.innerHTML = `<style>
       .nuvio-popup-overlay{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.65);padding:12px;box-sizing:border-box}
-      .nuvio-popup-frame{width:min(1180px,96vw);max-width:96vw;height:min(1050px,92dvh);max-height:92dvh;min-width:0;display:flex;flex-direction:column;overflow:hidden;border-radius:18px;background:var(--card-background-color,var(--ha-card-background,#fff));color:var(--primary-text-color);box-shadow:0 20px 75px rgba(0,0,0,.4)}
-      .nuvio-popup-overlay[data-size="normal"] .nuvio-popup-frame{width:min(850px,96vw)}
+      .nuvio-popup-frame{width:min(1440px,calc(100vw - 24px));max-width:calc(100vw - 24px);height:min(900px,calc(100dvh - 24px));max-height:calc(100dvh - 24px);min-width:0;display:flex;flex-direction:column;overflow:hidden;border-radius:18px;background:var(--card-background-color,var(--ha-card-background,#fff));color:var(--primary-text-color);box-shadow:0 20px 75px rgba(0,0,0,.4)}
+      .nuvio-popup-overlay[data-size="normal"] .nuvio-popup-frame{width:min(900px,calc(100vw - 24px));height:min(700px,calc(100dvh - 24px))}
       .nuvio-popup-overlay[data-size="fullscreen"]{padding:0}
       .nuvio-popup-overlay[data-size="fullscreen"] .nuvio-popup-frame{width:100%;max-width:100%;height:100%;max-height:100%;border-radius:0}
-      .nuvio-popup-top{height:48px;flex:0 0 48px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 12px 0 20px;border-bottom:1px solid var(--divider-color);font:600 16px var(--paper-font-body1_-_font-family,inherit)}
-      .nuvio-popup-top button{width:36px;height:36px;display:grid;place-items:center;border:0;border-radius:50%;cursor:pointer;background:var(--secondary-background-color);color:var(--primary-text-color)}
+      .nuvio-popup-top{height:48px;min-height:48px;box-sizing:border-box;flex:0 0 48px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 12px 0 20px;border-bottom:1px solid var(--divider-color);font:600 16px var(--paper-font-body1_-_font-family,inherit)}
+      .nuvio-popup-top button{box-sizing:border-box;flex:0 0 36px;width:36px;height:36px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;cursor:pointer;background:var(--secondary-background-color);color:var(--primary-text-color)}
       .nuvio-popup-top button:focus-visible{outline:2px solid var(--primary-color)}
       .nuvio-popup-body{min-height:0;flex:1;overflow:auto;overscroll-behavior:contain}
       .nuvio-popup-body nuvio-card{display:block;min-height:100%}
-      @media(max-width:600px){.nuvio-popup-overlay{padding:0}.nuvio-popup-frame{width:100%;height:100%;border-radius:0}.nuvio-popup-top{height:44px;flex-basis:44px}}
+      @media(max-width:600px){.nuvio-popup-overlay{padding:0}.nuvio-popup-frame{width:100%;max-width:100%;height:100%;max-height:100%;border-radius:0}.nuvio-popup-top{height:44px;min-height:44px;flex-basis:44px;padding:0 8px 0 12px}}
     </style><div class="nuvio-popup-frame" role="dialog" aria-modal="true" aria-label="Nuvio"><div class="nuvio-popup-top"><span>Nuvio</span><button type="button" aria-label="Close Nuvio popup"><ha-icon icon="mdi:close"></ha-icon></button></div><div class="nuvio-popup-body"></div></div>`;
     const content = overlay.querySelector(".nuvio-popup-body");
     const card = document.createElement("nuvio-card");
