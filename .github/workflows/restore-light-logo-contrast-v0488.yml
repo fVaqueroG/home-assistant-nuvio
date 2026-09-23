@@ -1,0 +1,62 @@
+name: Restore Nuvio light-theme logo contrast v0.4.88
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/restore-light-logo-contrast-v0488.yml'
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preserve transparent logo while outlining white artwork in Light mode
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          root=Path('custom_components/nuvio')
+          paths=[root/'frontend/nuvio-card.js',root/'frontend/nuvio-popup-card.js']
+          outline='drop-shadow(0 0 1.3px rgba(25,36,58,.88)) drop-shadow(0 1px 1px rgba(25,36,58,.55))'
+          for path in paths:
+              code=path.read_text()
+              old="  target.style.removeProperty('color-scheme');"
+              assert code.count(old)==1,(path,'theme helper')
+              code=code.replace(old,old+"\n  target.style.setProperty('--nuvio-logo-contrast', choice === 'light' ? '"+outline+"' : 'none');",1)
+              old='.launcher-mark{display:block;'
+              assert code.count(old)==1,(path,'launcher logo css')
+              code=code.replace(old,'.launcher-logo,.launcher-vertical-logo,.launcher-mark{filter:var(--nuvio-logo-contrast,none)}\n    '+old,1)
+              if path.name=='nuvio-card.js':
+                  old="return '<style>:host{display:block;--pw:min(150px,34vw)}"
+                  assert code.count(old)==1,'full card logo CSS'
+                  code=code.replace(old,old+'.nuvio-wordmark{filter:var(--nuvio-logo-contrast,none)}',1)
+                  assert code.count('NUVIO-CARD v0.4.87')==1
+                  code=code.replace('NUVIO-CARD v0.4.87','NUVIO-CARD v0.4.88',1)
+                  assert code.count('v0.4.87</span>')==1
+                  code=code.replace('v0.4.87</span>','v0.4.88</span>',1)
+              path.write_text(code)
+          manifest=root/'manifest.json'
+          data=json.loads(manifest.read_text())
+          assert data['version']=='0.4.87',data['version']
+          data['version']='0.4.88'
+          manifest.write_text(json.dumps(data,indent=2)+'\n')
+          print('Light-theme contrast added only to Nuvio branding images; original transparent images unchanged')
+          PY
+      - name: Verify JavaScript and manifest
+        run: |
+          node --check custom_components/nuvio/frontend/nuvio-card.js
+          node --check custom_components/nuvio/frontend/nuvio-popup-card.js
+          python3 -m json.tool custom_components/nuvio/manifest.json > /dev/null
+          grep -q 'nuvio-logo-contrast' custom_components/nuvio/frontend/nuvio-card.js
+      - name: Commit and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/restore-light-logo-contrast-v0488.yml
+          git add custom_components/nuvio/frontend/nuvio-card.js custom_components/nuvio/frontend/nuvio-popup-card.js custom_components/nuvio/manifest.json
+          git commit -m 'v0.4.88: keep transparent Nuvio logos visible on light cards'
+          git push origin HEAD:main
+          gh release create v0.4.88 --target "$(git rev-parse HEAD)" --title v0.4.88 --notes 'Restore contrast for white portions of original Nuvio header and launcher logos in Light mode without changing their transparent assets or popup behavior.'
