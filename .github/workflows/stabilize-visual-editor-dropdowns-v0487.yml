@@ -10,91 +10,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Preserve active dropdowns during HA state and config updates
-        run: |
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          root=Path('custom_components/nuvio')
-          main=root/'frontend/nuvio-card.js'
-          separate=root/'frontend/nuvio-popup-card.js'
-          s=main.read_text()
-          p=separate.read_text()
-          def replace_once(source,old,new,label):
-              assert source.count(old)==1,(label,source.count(old))
-              return source.replace(old,new,1)
-          old='''  set hass(h){
-              const previousSources=this.displaySourceSignature();
-              const first=!this._hass;
-              this._hass=h;
-              // Refresh input choices only when the configured displays' sources change.
-              if(first||!this._rendered||previousSources!==this.displaySourceSignature())this.render();
-            }
-            setConfig(config){this._config={...(config||{})};this.render();}'''
-          # Match the actual checked-in code independent of indentation.
-          old='''  set hass(h){
-    const previousSources=this.displaySourceSignature();
-    const first=!this._hass;
-    this._hass=h;
-    // Refresh input choices only when the configured displays' sources change.
-    if(first||!this._rendered||previousSources!==this.displaySourceSignature())this.render();
-  }
-  setConfig(config){this._config={...(config||{})};this.render();}'''
-          new='''  set hass(h){
-    const previousSources=this.displaySourceSignature();
-    const first=!this._hass;
-    this._hass=h;
-    // Replacing a focused native select destroys its open dropdown. Do not
-    // reconstruct visual editor fields while a user is choosing an option.
-    if(first||!this._rendered||
-       (previousSources!==this.displaySourceSignature()&&!this.matches(':focus-within')))this.render();
-  }
-  setConfig(config){
-    const next={...(config||{})};
-    const changed=JSON.stringify(next)!==JSON.stringify(this._config);
-    this._config=next;
-    // HA often echoes config-changed back; never redraw for an identical echo.
-    // Keep currently opened dropdowns intact even when an external update arrives.
-    if(!this._rendered||(changed&&!this.matches(':focus-within')))this.render();
-  }'''
-          s=replace_once(s,old,new,'main full visual editor setters')
-          old_popup='''  setConfig(config) { this._config={...config}; this.render(); }
-  emit(config) {'''
-          new_popup='''  setConfig(config) {
-    const next={...config};
-    const changed=JSON.stringify(this._config)!==JSON.stringify(next);
-    this._config=next;
-    if(!this.shadowRoot.querySelector('nuvio-card-editor')||
-       (changed&&!this.matches(':focus-within')))this.render();
-  }
-  emit(config) {'''
-          s=replace_once(s,old_popup,new_popup,'bundled popup editor')
-          p=replace_once(p,old_popup,new_popup,'standalone popup editor')
-          s=replace_once(s,'console.info("NUVIO-CARD v0.4.86");','console.info("NUVIO-CARD v0.4.87");','console version')
-          s=replace_once(s,'<span class="card-version">v0.4.86</span>','<span class="card-version">v0.4.87</span>','visible version')
-          manifest=root/'manifest.json'
-          meta=json.loads(manifest.read_text())
-          assert meta['version']=='0.4.86',meta['version']
-          meta['version']='0.4.87'
-          main.write_text(s)
-          separate.write_text(p)
-          manifest.write_text(json.dumps(meta,indent=2)+'\n')
-          print('PASS: Nuvio full and popup visual editors preserve active dropdowns')
-          PY
-      - name: Validate scripts and config
+      - name: Preserve visual editor dropdowns
+        run: python3 .github/scripts/stabilize_visual_editor_dropdowns_v0487.py
+      - name: Validate JavaScript and manifest
         run: |
           node --check custom_components/nuvio/frontend/nuvio-card.js
           node --check custom_components/nuvio/frontend/nuvio-popup-card.js
           python3 -m json.tool custom_components/nuvio/manifest.json >/dev/null
           grep -q 'NUVIO-CARD v0.4.87' custom_components/nuvio/frontend/nuvio-card.js
-      - name: Commit and release
+      - name: Commit validated update and create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git rm .github/workflows/stabilize-visual-editor-dropdowns-v0487.yml
+          git rm .github/workflows/stabilize-visual-editor-dropdowns-v0487.yml .github/scripts/stabilize_visual_editor_dropdowns_v0487.py
           git add custom_components/nuvio
-          git commit -m 'v0.4.87: keep visual editor dropdowns open during updates'
+          git commit -m 'v0.4.87: preserve visual editor dropdowns during HA updates'
           git push origin HEAD:main
-          gh release create v0.4.87 --target "$(git rev-parse HEAD)" --title v0.4.87 --notes 'Preserve open dropdowns in Nuvio full and popup Lovelace visual configurators during Home Assistant updates. Normal popup closing behavior is unchanged.'
+          gh release create v0.4.87 --target "$(git rev-parse HEAD)" --title v0.4.87 --notes 'Keep Nuvio visual configuration dropdowns open during Home Assistant state and configuration updates. Normal popup closing behavior is unchanged.'
