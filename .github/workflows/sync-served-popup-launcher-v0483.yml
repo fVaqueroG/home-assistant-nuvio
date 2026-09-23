@@ -38,7 +38,7 @@ jobs:
           meta['version'] = '0.4.83'
           manifest.write_text(json.dumps(meta, indent=2) + '\n', encoding='utf-8')
           new = served.read_text(encoding='utf-8')
-          assert new.split(marker, 1)[1] == popup_source.rstrip() + '\n'
+          assert new == prefix + popup_source.rstrip() + '\n', 'The served bundle differs from the corrected popup source'
           assert 'ha-card.launcher-vertical{height:96px}' not in new
           assert new.count('class NuvioPopupCard extends HTMLElement') == 1
           print('PASS: Served Nuvio JS now contains the corrected 120px popup and matching grid sizing; popup source and served bundle are synchronized.')
