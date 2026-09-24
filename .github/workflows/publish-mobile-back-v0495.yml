@@ -1,0 +1,48 @@
+name: Publish Nuvio mobile Back reliability v0.4.95
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-mobile-back-v0495.yml']
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Replace old navigation guard and validate
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          path=Path('custom_components/nuvio/frontend/nuvio-card.js')
+          old=path.read_text(encoding='utf-8')
+          marker='/* Nuvio v0.4.94: mobile Back navigates'
+          assert old.count(marker)==1, 'Previous Back implementation missing'
+          original=old.split(marker,1)[0]
+          assert original.count('v0.4.94</span>')==1
+          patch=Path('custom_components/nuvio/frontend/mobile-back-v0495.patch.js').read_text(encoding='utf-8')
+          path.write_text(original.replace('v0.4.94</span>','v0.4.95</span>',1).rstrip()+'\n\n'+patch,encoding='utf-8')
+          manifest=Path('custom_components/nuvio/manifest.json')
+          data=json.loads(manifest.read_text(encoding='utf-8'))
+          assert data['version']=='0.4.94'
+          data['version']='0.4.95'
+          manifest.write_text(json.dumps(data,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
+          assert 'history.back(); // Remove our same-URL guard' not in path.read_text()
+          PY
+          node --check custom_components/nuvio/frontend/mobile-back-v0495.patch.js
+          node --check custom_components/nuvio/frontend/nuvio-card.js
+          python3 -m json.tool custom_components/nuvio/manifest.json >/dev/null
+          echo 'PASS: Nuvio Back guard replacement and syntax'
+      - name: Commit and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add custom_components/nuvio/frontend/nuvio-card.js custom_components/nuvio/manifest.json
+          git commit -m 'fix: keep Android Back guarded through popup teardown (v0.4.95)'
+          git push origin HEAD:main
+          gh release create v0.4.95 --target "$(git rev-parse HEAD)" --title v0.4.95 --notes 'Keep mobile Back interception active through popup history cleanup; share one guard across cards; handle nested views without navigation leaking into Home Assistant.'
