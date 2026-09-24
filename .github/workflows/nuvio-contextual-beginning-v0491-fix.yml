@@ -1,0 +1,42 @@
+name: Publish Nuvio contextual Beginning navigation v0.4.91 (corrected)
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/nuvio-contextual-beginning-v0491-fix.yml']
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Apply corrected source navigation update
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('.github/workflows/nuvio-contextual-beginning-v0491.yml').read_text(encoding='utf-8')
+          start=source.index("          python3 - <<'PY'\n")+len("          python3 - <<'PY'\n")
+          end=source.index('\n          PY\n',start)
+          code='\n'.join(line[10:] if line.startswith('          ') else line for line in source[start:end].splitlines())
+          original="    if count!=1: raise RuntimeError(f'{label}: expected one match, got {count}')"
+          assert code.count(original)==1
+          code=code.replace(original,"    if count not in (1,2): raise RuntimeError(f'{label}: expected one or two matches, got {count}')",1)
+          exec(compile(code,'corrected-nuvio-navigation','exec'),{'__name__':'__main__'})
+          PY
+          node --check custom_components/nuvio/frontend/nuvio-card.js
+          python3 -m json.tool custom_components/nuvio/manifest.json >/dev/null
+          echo 'PASS: Nuvio contextual Beginning patch and syntax'
+      - name: Commit and publish HACS release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add custom_components/nuvio/frontend/nuvio-card.js custom_components/nuvio/manifest.json
+          git commit -m 'feat: contextual Beginning in Nuvio Home, catalogs and Sources (v0.4.91)'
+          git push origin HEAD:main
+          gh release create v0.4.91 --target "$(git rev-parse HEAD)" --title v0.4.91 --notes 'Show Beginning only after scrolling; add a header Beginning control to Sources and keep its scroll position on re-render.'
