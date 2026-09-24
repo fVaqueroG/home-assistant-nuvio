@@ -1033,7 +1033,7 @@ async choosePlayer(player){
     ? '<button type="button" class="ib toolbar-btn nuvio-scroll-start nuvio-header-start" hidden title="Back to beginning" aria-label="Back to beginning"><ha-icon icon="mdi:arrow-up"></ha-icon></button>'
     : "";
   var home='<button class="ib toolbar-btn '+(onHome?"toolbar-active":"")+'" id="homeTop" title="Home" aria-label="Home"><ha-icon icon="mdi:home"></ha-icon></button>';
-    return '<div class="header"><div class="header-title"><img class="nuvio-wordmark" src="/nuvio/assets/wordmark.png?v=0.4.79" alt="Nuvio" decoding="async" style="display:none;height:38px;max-width:150px;width:auto;object-fit:contain"><h2 class="nuvio-wordmark-fallback">'+this.esc(this._config.title||"Nuvio")+'</h2><span class="card-version">v0.4.95</span></div><div class="tools">'+search+this.roomSelect()+'<label class="toolbar-player" title="Select media player"><ha-icon icon="mdi:television" aria-hidden="true"></ha-icon>'+this.playerSelect()+'</label>'+
+    return '<div class="header"><div class="header-title"><img class="nuvio-wordmark" src="/nuvio/assets/wordmark.png?v=0.4.79" alt="Nuvio" decoding="async" style="display:none;height:38px;max-width:150px;width:auto;object-fit:contain"><h2 class="nuvio-wordmark-fallback">'+this.esc(this._config.title||"Nuvio")+'</h2><span class="card-version">v0.4.96</span></div><div class="tools">'+search+this.roomSelect()+'<label class="toolbar-player" title="Select media player"><ha-icon icon="mdi:television" aria-hidden="true"></ha-icon>'+this.playerSelect()+'</label>'+
       home+
       '<button class="ib toolbar-btn" id="refresh" title="Refresh" aria-label="Refresh"><ha-icon icon="mdi:refresh"></ha-icon></button>'+
       addons+'<div class="nuvio-header-nav">'+beginning+remote+'</div></div>';
@@ -2004,80 +2004,57 @@ if(!window.customCards.some(card=>card.type==="nuvio-popup-card"))window.customC
   const Popup = customElements.get('nuvio-popup-card');
   if (!Card || !Popup) throw new Error('Nuvio Back: card not registered');
   const mobile = () => navigator.maxTouchPoints > 0 || matchMedia('(pointer:coarse)').matches;
-  const manager = window.__fvHaCardBackManagerV2 ||= (() => {
-    const owners = [];
-    let token = null, url = null, armed = false, unwinding = false;
-    let handling = false, requested = false, lastHandled = 0;
-    const current = () => armed && history.state?.__fvCardBackV2 === token;
-    const disarm = () => {
-      if (owners.length || unwinding) return;
-      armed = false; requested = false;
-      window.removeEventListener('popstate', onPop, true);
-    };
-    const arm = () => {
-      if (!owners.length || armed || unwinding) return;
-      url = location.href;
-      token = 'fv-back-' + Math.random().toString(36).slice(2);
-      try {
-        history.pushState({ ...(history.state || {}), __fvCardBackV2: token }, '', url);
-        armed = true; requested = false;
-      } catch (error) { console.warn('Card Back: history protection unavailable', error); }
-    };
-    const unwind = () => {
-      if (owners.length || unwinding) return;
-      if (!current()) { disarm(); return; }
-      unwinding = true;
-      requested = false;
-      try { history.back(); } catch (error) { unwinding = false; disarm(); }
-    };
-    function onPop(event) {
-      if (unwinding) {
-        if (location.href === url) event.stopImmediatePropagation();
-        unwinding = false; armed = false; requested = false;
-        if (owners.length) arm(); else disarm();
-        return;
+  const manager = window.__fvHaCardBackManagerV3 ||= (() => {
+  const owners = [];
+  const key = '__fvCardBackV3';
+  const token = 'fv-' + Math.random().toString(36).slice(2);
+  let page = '', lastPress = 0;
+  const stamped = () => history.state?.[key] === token;
+  const push = () => history.pushState({ ...(history.state || {}), [key]: token }, '', page);
+  // Android may dispatch a native dialog cancellation INSTEAD of popstate.
+  // Never issue a second browser Back on dialog cancel or teardown:
+  // that can turn a single Android Back into an app-exiting second navigation.
+  function onPop(event) {
+    if (!owners.length || location.href !== page) return;
+    event.stopImmediatePropagation();
+    // Restore spare same-page entries BEFORE a synchronous card rerender can
+    // remove the last Back owner. This also covers catalog loading transitions.
+    try { if (stamped()) push(); else { push(); push(); } }
+    catch (error) { console.warn('Card Back: could not restore history guard', error); }
+    const now = Date.now();
+    if (now - lastPress < 180) return; // Prevent cancel + popstate double handling.
+    lastPress = now;
+    owners[owners.length - 1]?.back();
+  }
+  return {
+    add(owner) {
+      if (!mobile() || owners.includes(owner)) return;
+      if (!owners.length) {
+        page = location.href;
+        window.addEventListener('popstate', onPop, true);
+        try { if (stamped()) push(); else { push(); push(); } }
+        catch (error) { console.warn('Card Back: history guard unavailable', error); }
       }
-      if (!armed || !owners.length) return;
-      if (location.href !== url) { // A genuine Home Assistant route change, not a card Back action.
-        owners.length = 0; armed = false; requested = false; disarm(); return;
-      }
-      event.stopImmediatePropagation();
-      requested = false; lastHandled = Date.now();
-      // The browser may have popped into an older guard after an HA history update.
-      armed = history.state?.__fvCardBackV2 === token;
-      const owner = owners[owners.length - 1];
-      handling = true;
-      try { owner.back(); } finally { handling = false; }
-      if (owners.length) { if (!armed) arm(); }
-      else if (armed) unwind(); else disarm();
+      owners.push(owner);
+    },
+    remove(owner) {
+      const index = owners.indexOf(owner);
+      if (index < 0) return;
+      owners.splice(index, 1);
+      // Leave the current same-page guard in place; never navigate away
+      // from Home Assistant just to clean up a card's history entries.
+      if (!owners.length) window.removeEventListener('popstate', onPop, true);
+    },
+    request(owner) {
+      if (owners[owners.length - 1] !== owner) return false;
+      const now = Date.now();
+      if (now - lastPress < 180) return true;
+      lastPress = now;
+      owner.back(); // Native dialog Back already occurred; act directly.
+      return true;
     }
-    return {
-      add(owner) {
-        if (!mobile() || owners.includes(owner)) return;
-        if (!owners.length && !unwinding) window.addEventListener('popstate', onPop, true);
-        owners.push(owner); arm();
-      },
-      remove(owner) {
-        const index = owners.indexOf(owner);
-        if (index < 0) return;
-        owners.splice(index, 1);
-        if (!owners.length && !handling) unwind();
-      },
-      request(owner) {
-        if (!owners.length || owners[owners.length - 1] !== owner) return false;
-        if (requested || Date.now() - lastHandled < 300) return true;
-        if (current()) {
-          requested = true;
-          try { history.back(); } catch (error) { requested = false; owner.back(); }
-        } else {
-          lastHandled = Date.now();
-          owner.back();
-          if (owners.length && !armed) arm();
-        }
-        return true;
-      },
-    };
-  })();
+  };
+})();
   const nested = card => !!card && (card._view !== 'home' || !!card._remoteExpanded);
   function step(card) {
     if (!card) return false;
@@ -2088,7 +2065,7 @@ if(!window.customCards.some(card=>card.type==="nuvio-popup-card"))window.customC
     if (card._view === 'details') {
       card._view = card._returnView || 'home'; card._error = ''; card.render(); return true;
     }
-    if (card._view === 'search' || card._view === 'catalog') { void card.goHome(); return true; }
+    if (card._view === 'search' || card._view === 'catalog') { if (card._view === 'catalog') card._catalogRequest = (card._catalogRequest || 0) + 1; void card.goHome(); return true; }
     return false;
   }
   const oldOpen = Popup.prototype.openPopup;
