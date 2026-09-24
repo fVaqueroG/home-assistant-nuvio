@@ -1,0 +1,127 @@
+name: Publish Nuvio Back reliability v0.4.96
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/fix-native-back-v0496.yml']
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Replace the fragile mobile history handler
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          path=Path('custom_components/nuvio/frontend/nuvio-card.js')
+          text=path.read_text()
+          start=text.index('  const manager = window.__fvHaCardBackManagerV2 ||=')
+          end=text.index('  const nested = card =>',start)
+          manager=r'''  const manager = window.__fvHaCardBackManagerV3 ||= (() => {
+            const owners = [];
+            const key = '__fvCardBackV3';
+            const token = 'fv-' + Math.random().toString(36).slice(2);
+            let page = '', lastPress = 0;
+            const stamped = () => history.state?.[key] === token;
+            const push = () => history.pushState({ ...(history.state || {}), [key]: token }, '', page);
+            // Android may dispatch a native dialog cancellation INSTEAD of popstate.
+            // Never call history.back() from a dialog's cancel handler or during teardown:
+            // that can turn a single Android Back into an app-exiting second navigation.
+            function onPop(event) {
+              if (!owners.length || location.href !== page) return;
+              event.stopImmediatePropagation();
+              // Restore spare same-page entries BEFORE a synchronous card rerender can
+              // remove the last Back owner. This also covers catalog loading transitions.
+              try { if (stamped()) push(); else { push(); push(); } }
+              catch (error) { console.warn('Card Back: could not restore history guard', error); }
+              const now = Date.now();
+              if (now - lastPress < 180) return; // Prevent cancel + popstate double handling.
+              lastPress = now;
+              owners[owners.length - 1]?.back();
+            }
+            return {
+              add(owner) {
+                if (!mobile() || owners.includes(owner)) return;
+                if (!owners.length) {
+                  page = location.href;
+                  window.addEventListener('popstate', onPop, true);
+                  try { if (stamped()) push(); else { push(); push(); } }
+                  catch (error) { console.warn('Card Back: history guard unavailable', error); }
+                }
+                owners.push(owner);
+              },
+              remove(owner) {
+                const index = owners.indexOf(owner);
+                if (index < 0) return;
+                owners.splice(index, 1);
+                // Leave the current same-page guard in place; never navigate away
+                // from Home Assistant just to clean up a card's history entries.
+                if (!owners.length) window.removeEventListener('popstate', onPop, true);
+              },
+              request(owner) {
+                if (owners[owners.length - 1] !== owner) return false;
+                const now = Date.now();
+                if (now - lastPress < 180) return true;
+                lastPress = now;
+                owner.back(); // Native dialog Back already occurred; act directly.
+                return true;
+              }
+            };
+          })();
+          '''
+          text=text[:start]+manager+text[end:]
+          old='if (card._view === \'search\' || card._view === \'catalog\') { void card.goHome(); return true; }'
+          new='if (card._view === \'search\' || card._view === \'catalog\') { if (card._view === \'catalog\') card._catalogRequest = (card._catalogRequest || 0) + 1; void card.goHome(); return true; }'
+          assert text.count(old)==1
+          text=text.replace(old,new,1)
+          assert text.count('v0.4.95</span>')==1
+          text=text.replace('v0.4.95</span>','v0.4.96</span>',1)
+          path.write_text(text)
+          manifest=Path('custom_components/nuvio/manifest.json')
+          data=json.loads(manifest.read_text())
+          assert data['version']=='0.4.95'
+          data['version']='0.4.96'
+          manifest.write_text(json.dumps(data,indent=2,ensure_ascii=False)+'\n')
+          PY
+          node --check custom_components/nuvio/frontend/nuvio-card.js
+          python3 -m json.tool custom_components/nuvio/manifest.json >/dev/null
+      - name: Test actual navigation manager: popstate, native cancel, teardown
+        run: |
+          node - <<'JS'
+          const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+          const src=fs.readFileSync('custom_components/nuvio/frontend/nuvio-card.js','utf8');
+          const start=src.indexOf('  const manager = window.__fvHaCardBackManagerV3 ||=');
+          const end=src.indexOf('  const nested = card =>',start);
+          assert(start>0 && end>start);
+          const script=src.slice(start,end);
+          assert(!script.includes('history.back('),'Manager must not issue extra Back actions');
+          let now=1000,index=0,synthetic=0,steps=0;
+          const entries=[{state:{ha:1},url:'https://ha.local/home'}],listeners={};
+          const win={addEventListener(name,fn){listeners[name]=fn;},removeEventListener(name,fn){if(listeners[name]===fn)delete listeners[name];}};
+          const hist={get state(){return entries[index].state;},pushState(state,_,url){entries.splice(index+1);entries.push({state,url});index++;},back(){synthetic++;index--;listeners.popstate?.({stopImmediatePropagation(){}});}};
+          const context={window:win,history:hist,location:{href:'https://ha.local/home'},navigator:{maxTouchPoints:1},matchMedia:()=>({matches:true}),Date:{now:()=>now},Math,console};
+          const manager=vm.runInNewContext('(()=>{const mobile=()=>true;'+script+'return manager;})()',context);
+          const owner={back(){steps++;}};
+          manager.add(owner);assert.equal(entries.length,3,'Two spare entries on opening');
+          hist.back();assert.equal(steps,1,'Hardware history Back handled within card');
+          assert.equal(entries.length,3,'Spare entries restored before rerender');
+          now+=200;manager.request(owner);assert.equal(steps,2,'Native cancel invokes card directly');
+          assert.equal(synthetic,1,'Cancel must not call history.back');
+          manager.remove(owner);assert.equal(synthetic,1,'Teardown must not call history.back');
+          assert(!listeners.popstate,'No stale card listener after closing');
+          console.log('PASS: popstate, spare history, native cancel, and teardown regression tests');
+          JS
+      - name: Commit and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add custom_components/nuvio/frontend/nuvio-card.js custom_components/nuvio/manifest.json
+          git commit -m 'fix: prevent Nuvio mobile Back from navigating out during catalog and popup teardown (v0.4.96)'
+          git push origin HEAD:main
+          gh release create v0.4.96 --target "$(git rev-parse HEAD)" --title v0.4.96 --notes 'Remove synthetic Back on native dialog cancel and cleanup, maintain spare same-page history while in Catalog, and invalidate unfinished Catalog responses on exit. Includes navigation-state regression tests; Android companion-app native behavior requires device verification.'
