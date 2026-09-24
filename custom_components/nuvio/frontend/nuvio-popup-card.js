@@ -221,3 +221,67 @@ if(!customElements.get("nuvio-popup-card-editor"))customElements.define("nuvio-p
 if(!customElements.get("nuvio-popup-card"))customElements.define("nuvio-popup-card",NuvioPopupCard);
 window.customCards=window.customCards||[];
 if(!window.customCards.some(card=>card.type==="nuvio-popup-card"))window.customCards.push({type:"nuvio-popup-card",name:"Nuvio Popup Button",description:"Open the full Nuvio catalog in a popup from a compact button.",preview:true});
+
+
+/* Nuvio remote foreground bridge v1 */
+function nuvioRaisePopupRemote(popup) {
+  let portal=null, attributes=null, top=null, stopped=false;
+  const find=()=>popup._popupCard?._remoteExpanded ? document.getElementById('nuvio-remote-portal') : null;
+  function dismiss() {
+    const dialog=top;top=null;
+    if(!dialog)return;
+    if(portal?.parentNode===dialog && portal.isConnected)document.body.appendChild(portal);
+    if(dialog.open)dialog.close();
+    dialog.remove();
+  }
+  function sync() {
+    if(stopped)return;
+    const found=find();
+    if(found!==portal){
+      attributes?.disconnect();dismiss();portal=found;
+      if(portal){attributes=new MutationObserver(sync);attributes.observe(portal,{attributes:true,attributeFilter:['hidden','style','class']});}
+    }
+    if(!portal?.isConnected || portal.hidden || getComputedStyle(portal).display==='none'){dismiss();return;}
+    if(top)return;
+    const dialog=document.createElement('dialog');top=dialog;
+    dialog.className='nuvio-remote-front-dialog';
+    dialog.style.cssText='position:fixed;inset:0;margin:0;padding:0;border:0;width:100vw;height:100dvh;max-width:100vw;max-height:100dvh;overflow:visible;background:transparent;color:inherit;';
+    const style=document.createElement('style');
+    style.textContent='.nuvio-remote-front-dialog::backdrop{background:transparent!important;backdrop-filter:none!important}';
+    dialog.appendChild(style);
+    dialog.addEventListener('cancel',event=>{
+      event.preventDefault();
+      const close=portal?.querySelector('.nuvio-remote-close');
+      if(close)close.click();
+      else if(popup._popupCard?._remoteExpanded)popup._popupCard.toggleRemote();
+      queueMicrotask(sync);
+    });
+    const children=new MutationObserver(()=>queueMicrotask(sync));
+    children.observe(dialog,{childList:true});
+    dialog.addEventListener('close',()=>children.disconnect(),{once:true});
+    document.body.appendChild(dialog);dialog.appendChild(portal);
+    try{dialog.showModal();}
+    catch(error){dismiss();console.error('Nuvio remote foreground:',error);}
+  }
+  const body=new MutationObserver(sync);body.observe(document.body,{childList:true});
+  const onClick=()=>queueMicrotask(sync);
+  document.addEventListener('click',onClick,true);
+  function cleanup(){
+    if(stopped)return;stopped=true;
+    attributes?.disconnect();body.disconnect();
+    document.removeEventListener('click',onClick,true);
+    dismiss();
+  }
+  sync();return cleanup;
+}
+const nuvioPopupOpenForeground=NuvioPopupCard.prototype.openPopup;
+NuvioPopupCard.prototype.openPopup=function(...args){
+  const result=nuvioPopupOpenForeground.apply(this,args);
+  if(this._overlay && !this._remoteForegroundCleanup)this._remoteForegroundCleanup=nuvioRaisePopupRemote(this);
+  return result;
+};
+const nuvioPopupCloseForeground=NuvioPopupCard.prototype.closePopup;
+NuvioPopupCard.prototype.closePopup=function(...args){
+  this._remoteForegroundCleanup?.();this._remoteForegroundCleanup=null;
+  return nuvioPopupCloseForeground.apply(this,args);
+};
