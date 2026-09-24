@@ -144,7 +144,7 @@ launcherStyle() {
       .nuvio-popup-top button:focus-visible{outline:2px solid var(--primary-color)}
       .nuvio-popup-body{min-height:0;flex:1;overflow:auto;overscroll-behavior:contain}
       .nuvio-popup-body nuvio-card{display:block;min-height:100%}
-      @media(max-width:600px){.nuvio-popup-overlay{padding:0}.nuvio-popup-frame,.nuvio-popup-overlay[data-size="normal"] .nuvio-popup-frame,.nuvio-popup-overlay[data-size="wide"] .nuvio-popup-frame{width:100%;max-width:100%;height:100%;max-height:100%;border-radius:0}.nuvio-popup-top{height:44px;min-height:44px;flex-basis:44px;padding:0 8px 0 12px}}
+      @media(max-width:600px), (pointer:coarse){.nuvio-popup-overlay{padding:0}.nuvio-popup-frame,.nuvio-popup-overlay[data-size="normal"] .nuvio-popup-frame,.nuvio-popup-overlay[data-size="wide"] .nuvio-popup-frame{width:100%;max-width:100%;height:100%;max-height:100%;border-radius:0}.nuvio-popup-top{height:44px;min-height:44px;flex-basis:44px;padding:0 8px 0 12px}}
     </style><div class="nuvio-popup-frame" role="dialog" aria-modal="true" aria-label="Nuvio"><div class="nuvio-popup-top"><span>Nuvio</span><button type="button" aria-label="Close Nuvio popup"><ha-icon icon="mdi:close"></ha-icon></button></div><div class="nuvio-popup-body"></div></div>`;
     const content = overlay.querySelector(".nuvio-popup-body");
     const card = document.createElement("nuvio-card");
