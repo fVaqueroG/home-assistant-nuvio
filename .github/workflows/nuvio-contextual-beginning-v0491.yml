@@ -1,0 +1,75 @@
+name: Publish Nuvio contextual Beginning navigation v0.4.91
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/nuvio-contextual-beginning-v0491.yml']
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Apply source navigation updates
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          p=Path('custom_components/nuvio/frontend/nuvio-card.js')
+          s=p.read_text(encoding='utf-8')
+          def once(old,new,label):
+              global s
+              count=s.count(old)
+              if count!=1: raise RuntimeError(f'{label}: expected one match, got {count}')
+              s=s.replace(old,new,1)
+          once('    var home=\'<button class="ib toolbar-btn ', '''    var beginning=this._view==="sources"
+              ? '<button type="button" class="ib toolbar-btn nuvio-scroll-start nuvio-header-start" hidden title="Back to beginning" aria-label="Back to beginning"><ha-icon icon="mdi:arrow-up"></ha-icon></button>'
+              : "";
+            var home='<button class="ib toolbar-btn ''', 'source header button')
+          once("addons+remote+'</div></div>';", "addons+beginning+remote+'</div></div>';",'place source button alongside header tools')
+          once('    this._addonFilter="all";\n    this._view="sources";', '    this._addonFilter="all";\n    this._view="sources";\n    this._nuvioSourcesScrollTop=0;', 'reset source navigation on new title')
+          once('.nuvio-home-scroll{height:', '.nuvio-sources-scroll{height:min(64dvh,680px);min-height:180px;max-width:100%;overflow-y:auto;overscroll-behavior-y:contain;scrollbar-gutter:stable}.nuvio-home-scroll{height:', 'bounded source scrolling')
+          once('.nuvio-scroll-start:focus-visible{', '.nuvio-scroll-start[hidden],.nuvio-home-toolbar[hidden],.nuvio-catalog-quick-nav[hidden]{display:none!important}.nuvio-scroll-start:focus-visible{', 'hidden beginning button styles')
+          once('this.shadowRoot.querySelector(".nuvio-home-scroll, .catalog-scroll")?.scrollTo(', 'this.shadowRoot.querySelector(".nuvio-home-scroll, .catalog-scroll, .nuvio-sources-scroll")?.scrollTo(', 'beginning action includes sources')
+          once('  render(){\n    if(!this.shadowRoot)return;', '''  syncBeginningControls(){
+              const scroller=this.shadowRoot?.querySelector('.nuvio-home-scroll, .catalog-scroll, .nuvio-sources-scroll');
+              const update=()=>{
+                const awayFromStart=!!scroller&&scroller.scrollTop>4;
+                this.shadowRoot.querySelectorAll('.nuvio-scroll-start').forEach(button=>{
+                  button.hidden=!awayFromStart;
+                  const bar=button.closest('.nuvio-home-toolbar, .nuvio-catalog-quick-nav');
+                  if(bar)bar.hidden=!awayFromStart;
+                });
+              };
+              if(scroller)scroller.addEventListener('scroll',update,{passive:true});
+              update();
+            }
+            render(){
+              if(!this.shadowRoot)return;''', 'update button on actual scroll')
+          once('    var oldScroller=this.shadowRoot.querySelector(".catalog-scroll");', '    var oldSourcesScroller=this.shadowRoot.querySelector(".nuvio-sources-scroll");\n    if(oldSourcesScroller)this._nuvioSourcesScrollTop=oldSourcesScroller.scrollTop;\n    var oldScroller=this.shadowRoot.querySelector(".catalog-scroll");', 'preserve sources scroll')
+          once('    var content=this._config.show_remote===false', '    if(this._view==="sources")body=\'<div class="nuvio-sources-scroll">\'+body+\'</div>\';\n    var content=this._config.show_remote===false', 'wrap sources in bounded scroller')
+          once('    this.observeLazyCatalogs();\n    this.observeCatalogScroll();', '    var sourcesScroller=this.shadowRoot.querySelector(".nuvio-sources-scroll");\n    if(sourcesScroller)sourcesScroller.scrollTop=this._nuvioSourcesScrollTop||0;\n    this.syncBeginningControls();\n    this.observeLazyCatalogs();\n    this.observeCatalogScroll();', 'restore sources position and wire visibility')
+          once('v0.4.90</span>', 'v0.4.91</span>', 'update displayed version')
+          p.write_text(s,encoding='utf-8')
+          m=Path('custom_components/nuvio/manifest.json')
+          data=json.loads(m.read_text(encoding='utf-8'))
+          if data['version']!='0.4.90': raise RuntimeError('Unexpected Nuvio manifest version')
+          data['version']='0.4.91'
+          m.write_text(json.dumps(data,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
+          PY
+          node --check custom_components/nuvio/frontend/nuvio-card.js
+          python3 -m json.tool custom_components/nuvio/manifest.json >/dev/null
+      - name: Publish updated HACS integration
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add custom_components/nuvio/frontend/nuvio-card.js custom_components/nuvio/manifest.json
+          git commit -m 'feat: contextual Beginning in Nuvio Home, catalogs and sources (v0.4.91)'
+          git push origin HEAD:main
+          gh release create v0.4.91 --target "$(git rev-parse HEAD)" --title v0.4.91 --notes 'Show Beginning only after scrolling; add a fixed Nuvio header control for returning to the top of the bounded Sources list.'
