@@ -1,0 +1,45 @@
+name: Publish Nuvio mobile Back v0.4.94
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-mobile-back-v0494.yml']
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply mobile Back navigation and validate
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          source=Path('custom_components/nuvio/frontend/nuvio-card.js')
+          patch=Path('custom_components/nuvio/frontend/mobile-back-v0494.patch.js').read_text(encoding='utf-8')
+          original=source.read_text(encoding='utf-8')
+          assert 'Nuvio v0.4.94: mobile Back' not in original
+          assert original.count('v0.4.93</span>')==1
+          source.write_text(original.replace('v0.4.93</span>','v0.4.94</span>',1)+'\n'+patch,encoding='utf-8')
+          manifest=Path('custom_components/nuvio/manifest.json')
+          data=json.loads(manifest.read_text(encoding='utf-8'))
+          assert data['version']=='0.4.93'
+          data['version']='0.4.94'
+          manifest.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+          node --check custom_components/nuvio/frontend/mobile-back-v0494.patch.js
+          node --check custom_components/nuvio/frontend/nuvio-card.js
+          python3 -m json.tool custom_components/nuvio/manifest.json >/dev/null
+          echo 'PASS: Nuvio mobile Back source and syntax checks'
+      - name: Commit and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add custom_components/nuvio/frontend/nuvio-card.js custom_components/nuvio/manifest.json
+          git commit -m 'feat: navigate Nuvio cards with mobile Back (v0.4.94)'
+          git push origin HEAD:main
+          gh release create v0.4.94 --target "$(git rev-parse HEAD)" --title v0.4.94 --notes 'Android Back and Escape navigate remote, Sources, details, search and catalog before closing the Nuvio popup. Scoped same-URL history guards support Android navigation in the mobile HA app and standalone cards.'
