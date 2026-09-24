@@ -1,0 +1,114 @@
+name: Fix Nuvio popup remote foreground
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/fix-popup-remote-front-v0489.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Promote the original Nuvio remote to the browser top layer
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          base=Path('custom_components/nuvio')
+          path=base/'frontend/nuvio-popup-card.js'
+          text=path.read_text()
+          assert 'class NuvioPopupCard extends HTMLElement' in text
+          assert 'openPopup() {' in text and 'closePopup() {' in text
+          assert '/* Nuvio remote foreground bridge v1 */' not in text
+          patch=r'''
+          /* Nuvio remote foreground bridge v1 */
+          function nuvioRaisePopupRemote(popup) {
+            let portal=null, attributes=null, top=null, stopped=false;
+            const find=()=>popup._popupCard?._remoteExpanded ? document.getElementById('nuvio-remote-portal') : null;
+            function dismiss() {
+              const dialog=top;top=null;
+              if(!dialog)return;
+              if(portal?.parentNode===dialog && portal.isConnected)document.body.appendChild(portal);
+              if(dialog.open)dialog.close();
+              dialog.remove();
+            }
+            function sync() {
+              if(stopped)return;
+              const found=find();
+              if(found!==portal){
+                attributes?.disconnect();dismiss();portal=found;
+                if(portal){attributes=new MutationObserver(sync);attributes.observe(portal,{attributes:true,attributeFilter:['hidden','style','class']});}
+              }
+              if(!portal?.isConnected || portal.hidden || getComputedStyle(portal).display==='none'){dismiss();return;}
+              if(top)return;
+              const dialog=document.createElement('dialog');top=dialog;
+              dialog.className='nuvio-remote-front-dialog';
+              dialog.style.cssText='position:fixed;inset:0;margin:0;padding:0;border:0;width:100vw;height:100dvh;max-width:100vw;max-height:100dvh;overflow:visible;background:transparent;color:inherit;';
+              const style=document.createElement('style');
+              style.textContent='.nuvio-remote-front-dialog::backdrop{background:transparent!important;backdrop-filter:none!important}';
+              dialog.appendChild(style);
+              dialog.addEventListener('cancel',event=>{
+                event.preventDefault();
+                const close=portal?.querySelector('.nuvio-remote-close');
+                if(close)close.click();
+                else if(popup._popupCard?._remoteExpanded)popup._popupCard.toggleRemote();
+                queueMicrotask(sync);
+              });
+              const children=new MutationObserver(()=>queueMicrotask(sync));
+              children.observe(dialog,{childList:true});
+              dialog.addEventListener('close',()=>children.disconnect(),{once:true});
+              document.body.appendChild(dialog);dialog.appendChild(portal);
+              try{dialog.showModal();}
+              catch(error){dismiss();console.error('Nuvio remote foreground:',error);}
+            }
+            const body=new MutationObserver(sync);body.observe(document.body,{childList:true});
+            const onClick=()=>queueMicrotask(sync);
+            document.addEventListener('click',onClick,true);
+            function cleanup(){
+              if(stopped)return;stopped=true;
+              attributes?.disconnect();body.disconnect();
+              document.removeEventListener('click',onClick,true);
+              dismiss();
+            }
+            sync();return cleanup;
+          }
+          const nuvioPopupOpenForeground=NuvioPopupCard.prototype.openPopup;
+          NuvioPopupCard.prototype.openPopup=function(...args){
+            const result=nuvioPopupOpenForeground.apply(this,args);
+            if(this._overlay && !this._remoteForegroundCleanup)this._remoteForegroundCleanup=nuvioRaisePopupRemote(this);
+            return result;
+          };
+          const nuvioPopupCloseForeground=NuvioPopupCard.prototype.closePopup;
+          NuvioPopupCard.prototype.closePopup=function(...args){
+            this._remoteForegroundCleanup?.();this._remoteForegroundCleanup=null;
+            return nuvioPopupCloseForeground.apply(this,args);
+          };
+          '''
+          path.write_text(text+'\n'+patch)
+          manifest=base/'manifest.json';data=json.loads(manifest.read_text())
+          assert data['version']=='0.4.88',f"Unexpected base version {data['version']}"
+          data['version']='0.4.89';manifest.write_text(json.dumps(data,indent=2)+'\n')
+          card=base/'frontend/nuvio-card.js';source=card.read_text()
+          assert 'v0.4.88' in source
+          card.write_text(source.replace('v0.4.88','v0.4.89'))
+          print('PASS: Nuvio remote raised above popup; close restores card and releases listeners')
+          PY
+          node --check custom_components/nuvio/frontend/nuvio-popup-card.js
+          node --check custom_components/nuvio/frontend/nuvio-card.js
+          python3 -m json.tool custom_components/nuvio/manifest.json > /dev/null
+      - name: Commit and publish HACS version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add custom_components/nuvio
+          git commit -m 'fix: show Nuvio remote in foreground over popup (v0.4.89)'
+          git push origin HEAD:main
+          gh release create v0.4.89 --target "$(git rev-parse HEAD)" --title v0.4.89 --notes 'Fix Nuvio popup remote layering while retaining the original remote, theme, commands and catalog state.'
