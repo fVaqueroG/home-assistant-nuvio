@@ -1864,9 +1864,10 @@ launcherStyle() {
     if (this._popupCard) this._popupCard.setConfig({...this._config, type: "custom:nuvio-card"});
   }
   _refreshPopupTheme() {
-      nuvioThemeStyle(this,this._config.theme);
+      const darkMode=Boolean(this._hass?.themes?.darkMode);
+      nuvioThemeStyle(this,this._config.theme,darkMode);
       const frame=this._overlay?.querySelector('.nuvio-popup-frame');
-      if (frame) nuvioThemeStyle(frame,this._config.theme);
+      if (frame) nuvioThemeStyle(frame,this._config.theme,darkMode);
     }
     set hass(value) {
       this._hass = value;
@@ -1881,8 +1882,8 @@ launcherStyle() {
     :host{display:block;--popup-button-height:120px;height:120px!important;min-height:120px!important;max-height:120px!important;align-self:stretch;box-sizing:border-box}ha-card{display:block;width:100%;height:120px!important;min-height:120px!important;max-height:120px!important;box-sizing:border-box;border-radius:var(--ha-card-border-radius,14px);overflow:hidden}
     ha-card.launcher-vertical{height:120px!important;min-height:120px!important;max-height:120px!important}
     button{box-sizing:border-box;width:100%;height:120px!important;min-height:120px!important;max-height:120px!important;border:0;border-radius:inherit;padding:8px;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;background:transparent;color:var(--primary-text-color);font:inherit;font-weight:600}
-    button:hover{background:var(--secondary-background-color)}button:focus-visible{outline:2px solid var(--nuvio-focus-color,var(--primary-color));outline-offset:-3px}
-    ha-icon{color:var(--primary-color);--mdc-icon-size:25px}
+    button:hover{background:color-mix(in srgb,var(--nuvio-primary,#6157fb) 9%,var(--secondary-background-color))}button:focus-visible{outline:2px solid var(--nuvio-focus-color,var(--primary-color));outline-offset:-3px}
+    ha-icon{color:var(--nuvio-primary,var(--primary-color));--mdc-icon-size:25px}
     .launcher-visual{min-width:0;display:flex;align-items:center;justify-content:center}
     .launcher-logo{display:block;width:120px;max-width:100%;height:auto;max-height:38px;object-fit:contain}
     .launcher-vertical-logo{display:block;width:auto;max-width:100%;height:104px;max-height:104px;object-fit:contain}
@@ -1901,13 +1902,13 @@ launcherStyle() {
     const logo = document.createElement("img");
     if (style === "vertical") {
       logo.className = "launcher-vertical-logo";
-      logo.src = "/nuvio/assets/vertical.png?v=0.4.82";
+      logo.src = "/nuvio/assets/vertical.png?v=0.4.97";
     } else if (style === "logo_only") {
       logo.className = "launcher-mark";
-      logo.src = "/nuvio/assets/icon-only.png?v=0.4.82";
+      logo.src = "/nuvio/assets/icon-only.png?v=0.4.97";
     } else {
       logo.className = "launcher-logo";
-      logo.src = "/nuvio/assets/wordmark.png?v=0.4.82";
+      logo.src = "/nuvio/assets/wordmark.png?v=0.4.97";
     }
     logo.alt = "";
     logo.addEventListener("error", () => {
@@ -1932,7 +1933,7 @@ launcherStyle() {
     overlay.dataset.size = this.popupSize();
     overlay.innerHTML = `<style>
       .nuvio-popup-overlay{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.65);padding:12px;box-sizing:border-box}
-      .nuvio-popup-frame{width:min(1440px,calc(100vw - 24px));max-width:calc(100vw - 24px);height:min(900px,calc(100dvh - 24px));max-height:calc(100dvh - 24px);min-width:0;display:flex;flex-direction:column;overflow:hidden;border-radius:18px;background:var(--card-background-color,var(--ha-card-background,#fff));color:var(--primary-text-color);box-shadow:0 20px 75px rgba(0,0,0,.4)}
+      .nuvio-popup-frame{width:min(1440px,calc(100vw - 24px));max-width:calc(100vw - 24px);height:min(900px,calc(100dvh - 24px));max-height:calc(100dvh - 24px);min-width:0;display:flex;flex-direction:column;overflow:hidden;border-radius:18px;background:var(--card-background-color,var(--ha-card-background,#fff));color:var(--primary-text-color);box-shadow:0 20px 75px rgba(0,0,0,.4);border:1px solid color-mix(in srgb,var(--nuvio-primary,#6157fb) 24%,var(--divider-color))}
       .nuvio-popup-overlay[data-size="normal"] .nuvio-popup-frame{width:min(900px,calc(100vw - 24px));height:min(700px,calc(100dvh - 24px))}
       .nuvio-popup-overlay[data-size="fullscreen"]{padding:0}
       .nuvio-popup-overlay[data-size="fullscreen"] .nuvio-popup-frame{width:100%;max-width:100%;height:100%;max-height:100%;border-radius:0}
