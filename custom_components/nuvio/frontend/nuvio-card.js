@@ -2025,7 +2025,7 @@ if(!window.customCards.some(card=>card.type==="nuvio-popup-card"))window.customC
   const Card = customElements.get('nuvio-card');
   const Popup = customElements.get('nuvio-popup-card');
   if (!Card || !Popup) throw new Error('Nuvio Back: card not registered');
-  const mobile = () => navigator.maxTouchPoints > 0 || matchMedia('(pointer:coarse)').matches;
+  const mobile = () => Number(window.navigator?.maxTouchPoints || 0) > 0 || Boolean(window.matchMedia?.('(pointer:coarse)').matches);
   const manager = window.__fvHaCardBackManagerV3 ||= (() => {
   const owners = [];
   const key = '__fvCardBackV3';
