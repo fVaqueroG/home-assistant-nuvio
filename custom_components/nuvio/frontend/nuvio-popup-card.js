@@ -1,12 +1,31 @@
-function nuvioThemeStyle(target, choice) {
+function nuvioThemeStyle(target, choice, darkMode=false) {
   if (!target) return;
+  const brand = {
+    '--nuvio-cyan':'#23dcfd',
+    '--nuvio-sky':'#05a7f9',
+    '--nuvio-blue':'#315dfa',
+    '--nuvio-indigo':'#6157fb',
+    '--nuvio-violet':'#9136f6',
+    '--nuvio-purple':'#bc37fc',
+    '--nuvio-magenta':'#ea47ef',
+    '--nuvio-ink':'#0b0d12',
+    '--nuvio-white':'#ffffff',
+    '--nuvio-primary':'#6157fb',
+    '--nuvio-primary-hover':'#5e35d5',
+    '--nuvio-spectrum':'linear-gradient(90deg,#23dcfd 0%,#096ff6 25%,#6157fb 50%,#bc37fc 75%,#ea47ef 100%)'
+  };
   const palettes = {
     light: {'--card-background-color':'#ffffff','--ha-card-background':'#ffffff','--primary-text-color':'#182436','--secondary-text-color':'#58697d','--secondary-background-color':'#edf2f7','--divider-color':'#d8e0e9','--ha-card-border-color':'#d8e0e9'},
     dark: {'--card-background-color':'#171b24','--ha-card-background':'#171b24','--primary-text-color':'#f2f5fb','--secondary-text-color':'#aab6c8','--secondary-background-color':'#283142','--divider-color':'#465267','--ha-card-border-color':'#465267'}
   };
+  const mode = choice === 'light' || choice === 'dark' ? choice : (darkMode ? 'dark' : 'light');
   for (const key of Object.keys(palettes.light)) target.style.removeProperty(key);
   target.style.removeProperty('color-scheme');
-  target.style.setProperty('--nuvio-logo-contrast', choice === 'light' ? 'drop-shadow(0 0 1.3px rgba(25,36,58,.88)) drop-shadow(0 1px 1px rgba(25,36,58,.55))' : 'none');
+  for (const [key,value] of Object.entries(brand)) target.style.setProperty(key,value);
+  target.style.setProperty('--primary-color','var(--nuvio-primary)');
+  target.style.setProperty('--accent-color','var(--nuvio-violet)');
+  target.style.setProperty('--nuvio-focus-color',mode === 'dark' ? 'var(--nuvio-cyan)' : '#096ff6');
+  target.style.setProperty('--nuvio-logo-contrast',mode === 'light' ? 'drop-shadow(0 0 1.3px rgba(25,36,58,.88)) drop-shadow(0 1px 1px rgba(25,36,58,.55))' : 'none');
   if (Object.hasOwn(palettes, choice)) {
     for (const [key,value] of Object.entries(palettes[choice])) target.style.setProperty(key,value);
     target.style.setProperty('color-scheme',choice);
@@ -67,9 +86,10 @@ launcherStyle() {
     if (this._popupCard) this._popupCard.setConfig({...this._config, type: "custom:nuvio-card"});
   }
   _refreshPopupTheme() {
-      nuvioThemeStyle(this,this._config.theme);
+      const darkMode=Boolean(this._hass?.themes?.darkMode);
+      nuvioThemeStyle(this,this._config.theme,darkMode);
       const frame=this._overlay?.querySelector('.nuvio-popup-frame');
-      if (frame) nuvioThemeStyle(frame,this._config.theme);
+      if (frame) nuvioThemeStyle(frame,this._config.theme,darkMode);
     }
     set hass(value) {
       this._hass = value;
@@ -84,8 +104,8 @@ launcherStyle() {
     :host{display:block;--popup-button-height:120px;height:120px!important;min-height:120px!important;max-height:120px!important;align-self:stretch;box-sizing:border-box}ha-card{display:block;width:100%;height:120px!important;min-height:120px!important;max-height:120px!important;box-sizing:border-box;border-radius:var(--ha-card-border-radius,14px);overflow:hidden}
     ha-card.launcher-vertical{height:120px!important;min-height:120px!important;max-height:120px!important}
     button{box-sizing:border-box;width:100%;height:120px!important;min-height:120px!important;max-height:120px!important;border:0;border-radius:inherit;padding:8px;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;background:transparent;color:var(--primary-text-color);font:inherit;font-weight:600}
-    button:hover{background:var(--secondary-background-color)}button:focus-visible{outline:2px solid var(--primary-color);outline-offset:-3px}
-    ha-icon{color:var(--primary-color);--mdc-icon-size:25px}
+    button:hover{background:color-mix(in srgb,var(--nuvio-primary,#6157fb) 9%,var(--secondary-background-color))}button:focus-visible{outline:2px solid var(--nuvio-focus-color,var(--primary-color));outline-offset:-3px}
+    ha-icon{color:var(--nuvio-primary,var(--primary-color));--mdc-icon-size:25px}
     .launcher-visual{min-width:0;display:flex;align-items:center;justify-content:center}
     .launcher-logo{display:block;width:120px;max-width:100%;height:auto;max-height:38px;object-fit:contain}
     .launcher-vertical-logo{display:block;width:auto;max-width:100%;height:104px;max-height:104px;object-fit:contain}
@@ -104,13 +124,13 @@ launcherStyle() {
     const logo = document.createElement("img");
     if (style === "vertical") {
       logo.className = "launcher-vertical-logo";
-      logo.src = "/nuvio/assets/vertical.png?v=0.4.82";
+      logo.src = "/nuvio/assets/vertical.png?v=0.4.97";
     } else if (style === "logo_only") {
       logo.className = "launcher-mark";
-      logo.src = "/nuvio/assets/icon-only.png?v=0.4.82";
+      logo.src = "/nuvio/assets/icon-only.png?v=0.4.97";
     } else {
       logo.className = "launcher-logo";
-      logo.src = "/nuvio/assets/wordmark.png?v=0.4.82";
+      logo.src = "/nuvio/assets/wordmark.png?v=0.4.97";
     }
     logo.alt = "";
     logo.addEventListener("error", () => {
@@ -135,13 +155,13 @@ launcherStyle() {
     overlay.dataset.size = this.popupSize();
     overlay.innerHTML = `<style>
       .nuvio-popup-overlay{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.65);padding:12px;box-sizing:border-box}
-      .nuvio-popup-frame{width:min(1440px,calc(100vw - 24px));max-width:calc(100vw - 24px);height:min(900px,calc(100dvh - 24px));max-height:calc(100dvh - 24px);min-width:0;display:flex;flex-direction:column;overflow:hidden;border-radius:18px;background:var(--card-background-color,var(--ha-card-background,#fff));color:var(--primary-text-color);box-shadow:0 20px 75px rgba(0,0,0,.4)}
+      .nuvio-popup-frame{width:min(1440px,calc(100vw - 24px));max-width:calc(100vw - 24px);height:min(900px,calc(100dvh - 24px));max-height:calc(100dvh - 24px);min-width:0;display:flex;flex-direction:column;overflow:hidden;border-radius:18px;background:var(--card-background-color,var(--ha-card-background,#fff));color:var(--primary-text-color);box-shadow:0 20px 75px rgba(0,0,0,.4);border:1px solid color-mix(in srgb,var(--nuvio-primary,#6157fb) 24%,var(--divider-color))}
       .nuvio-popup-overlay[data-size="normal"] .nuvio-popup-frame{width:min(900px,calc(100vw - 24px));height:min(700px,calc(100dvh - 24px))}
       .nuvio-popup-overlay[data-size="fullscreen"]{padding:0}
       .nuvio-popup-overlay[data-size="fullscreen"] .nuvio-popup-frame{width:100%;max-width:100%;height:100%;max-height:100%;border-radius:0}
       .nuvio-popup-top{height:48px;min-height:48px;box-sizing:border-box;flex:0 0 48px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 12px 0 20px;border-bottom:1px solid var(--divider-color);font:600 16px var(--paper-font-body1_-_font-family,inherit)}
       .nuvio-popup-top button{box-sizing:border-box;flex:0 0 36px;width:36px;height:36px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;cursor:pointer;background:var(--secondary-background-color);color:var(--primary-text-color)}
-      .nuvio-popup-top button:focus-visible{outline:2px solid var(--primary-color)}
+      .nuvio-popup-top button:focus-visible{outline:2px solid var(--nuvio-focus-color,var(--primary-color))}
       .nuvio-popup-body{min-height:0;flex:1;overflow:auto;overscroll-behavior:contain}
       .nuvio-popup-body nuvio-card{display:block;min-height:100%}
       @media(max-width:600px), (pointer:coarse){.nuvio-popup-overlay{padding:0}.nuvio-popup-frame,.nuvio-popup-overlay[data-size="normal"] .nuvio-popup-frame,.nuvio-popup-overlay[data-size="wide"] .nuvio-popup-frame{width:100%;max-width:100%;height:100%;max-height:100%;border-radius:0}.nuvio-popup-top{height:44px;min-height:44px;flex-basis:44px;padding:0 8px 0 12px}}
