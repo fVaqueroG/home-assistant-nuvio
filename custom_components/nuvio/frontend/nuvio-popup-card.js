@@ -1,5 +1,32 @@
-function nuvioThemeStyle(target, choice, darkMode=false) {
+const NUVIO_ACCENTS = Object.freeze({
+  indigo: Object.freeze({label:'Indigo',hex:'#6157FB'}),
+  cyan: Object.freeze({label:'Cyan',hex:'#23DCFD'}),
+  blue: Object.freeze({label:'Electric Blue',hex:'#315DFA'}),
+  violet: Object.freeze({label:'Violet',hex:'#9136F6'}),
+  purple: Object.freeze({label:'Purple',hex:'#BC37FC'}),
+  magenta: Object.freeze({label:'Magenta',hex:'#EA47EF'})
+});
+function nuvioNormalizeHex(value, fallback='#6157FB') {
+  const text=String(value||'').trim();
+  if (/^#[0-9a-f]{6}$/i.test(text)) return text.toUpperCase();
+  if (/^#[0-9a-f]{3}$/i.test(text)) return '#'+[...text.slice(1)].map(ch=>ch+ch).join('').toUpperCase();
+  return fallback;
+}
+function nuvioAccentValue(preset, customColor) {
+  const key=String(preset||'indigo').trim().toLowerCase();
+  if (key==='custom') return nuvioNormalizeHex(customColor);
+  return NUVIO_ACCENTS[key]?.hex || NUVIO_ACCENTS.indigo.hex;
+}
+function nuvioAccentInk(hex) {
+  const color=nuvioNormalizeHex(hex);
+  const channels=[1,3,5].map(i=>parseInt(color.slice(i,i+2),16)/255)
+    .map(v=>v<=0.04045?v/12.92:Math.pow((v+0.055)/1.055,2.4));
+  const luminance=0.2126*channels[0]+0.7152*channels[1]+0.0722*channels[2];
+  return luminance>0.34?'#0B0D12':'#FFFFFF';
+}
+function nuvioThemeStyle(target, choice, darkMode=false, accentPreset='indigo', accentColor='#6157FB') {
   if (!target) return;
+  const selectedAccent=nuvioAccentValue(accentPreset,accentColor);
   const brand = {
     '--nuvio-cyan':'#23dcfd',
     '--nuvio-sky':'#05a7f9',
@@ -10,8 +37,8 @@ function nuvioThemeStyle(target, choice, darkMode=false) {
     '--nuvio-magenta':'#ea47ef',
     '--nuvio-ink':'#0b0d12',
     '--nuvio-white':'#ffffff',
-    '--nuvio-primary':'#6157fb',
-    '--nuvio-primary-hover':'#5e35d5',
+    '--nuvio-primary':selectedAccent,
+    '--nuvio-primary-ink':nuvioAccentInk(selectedAccent),
     '--nuvio-spectrum':'linear-gradient(90deg,#23dcfd 0%,#096ff6 25%,#6157fb 50%,#bc37fc 75%,#ea47ef 100%)'
   };
   const palettes = {
@@ -22,10 +49,16 @@ function nuvioThemeStyle(target, choice, darkMode=false) {
   for (const key of Object.keys(palettes.light)) target.style.removeProperty(key);
   target.style.removeProperty('color-scheme');
   for (const [key,value] of Object.entries(brand)) target.style.setProperty(key,value);
+  target.style.setProperty('--nuvio-primary-hover',
+    mode === 'dark'
+      ? `color-mix(in srgb, ${selectedAccent} 82%, white)`
+      : `color-mix(in srgb, ${selectedAccent} 84%, #0b0d12)`);
   target.style.setProperty('--primary-color','var(--nuvio-primary)');
-  target.style.setProperty('--accent-color','var(--nuvio-violet)');
-  target.style.setProperty('--nuvio-focus-color',mode === 'dark' ? 'var(--nuvio-cyan)' : '#096ff6');
+  target.style.setProperty('--accent-color','var(--nuvio-primary)');
+  target.style.setProperty('--nuvio-focus-color',
+    selectedAccent.toUpperCase()==='#23DCFD' && mode==='light' ? '#096FF6' : selectedAccent);
   target.style.setProperty('--nuvio-logo-contrast',mode === 'light' ? 'drop-shadow(0 0 1.3px rgba(25,36,58,.88)) drop-shadow(0 1px 1px rgba(25,36,58,.55))' : 'none');
+  target.dataset.nuvioAccent=String(accentPreset||'indigo').trim().toLowerCase();
   if (Object.hasOwn(palettes, choice)) {
     for (const [key,value] of Object.entries(palettes[choice])) target.style.setProperty(key,value);
     target.style.setProperty('color-scheme',choice);
@@ -50,7 +83,7 @@ class NuvioPopupCard extends HTMLElement {
     };
   }
   static getConfigElement() { return document.createElement("nuvio-popup-card-editor"); }
-  static getStubConfig() { return {button_label: "Nuvio", button_style: "horizontal", popup_width: "wide", popup_auto_close_minutes: 2}; }
+  static getStubConfig() { return {button_label: "Nuvio", button_style: "horizontal", popup_width: "wide", popup_auto_close_minutes: 2, accent_preset: "indigo", accent_color: "#6157FB"}; }
   getCardSize() { return 2; }
   getGridOptions() { const tall = this.launcherStyle() === "vertical"; return {columns: tall ? 4 : 3, rows: tall ? 2 : 1, min_columns: 2, min_rows: tall ? 2 : 1}; }
 launcherStyle() {
@@ -87,9 +120,9 @@ launcherStyle() {
   }
   _refreshPopupTheme() {
       const darkMode=Boolean(this._hass?.themes?.darkMode);
-      nuvioThemeStyle(this,this._config.theme,darkMode);
+      nuvioThemeStyle(this,this._config.theme,darkMode,this._config.accent_preset,this._config.accent_color);
       const frame=this._overlay?.querySelector('.nuvio-popup-frame');
-      if (frame) nuvioThemeStyle(frame,this._config.theme,darkMode);
+      if (frame) nuvioThemeStyle(frame,this._config.theme,darkMode,this._config.accent_preset,this._config.accent_color);
     }
     set hass(value) {
       this._hass = value;
@@ -124,13 +157,13 @@ launcherStyle() {
     const logo = document.createElement("img");
     if (style === "vertical") {
       logo.className = "launcher-vertical-logo";
-      logo.src = "/nuvio/assets/vertical.png?v=0.4.97";
+      logo.src = "/nuvio/assets/vertical.png?v=0.4.98";
     } else if (style === "logo_only") {
       logo.className = "launcher-mark";
-      logo.src = "/nuvio/assets/icon-only.png?v=0.4.97";
+      logo.src = "/nuvio/assets/icon-only.png?v=0.4.98";
     } else {
       logo.className = "launcher-logo";
-      logo.src = "/nuvio/assets/wordmark.png?v=0.4.97";
+      logo.src = "/nuvio/assets/wordmark.png?v=0.4.98";
     }
     logo.alt = "";
     logo.addEventListener("error", () => {
