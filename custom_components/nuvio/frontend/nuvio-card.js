@@ -1608,14 +1608,14 @@ class NuvioCardEditor extends HTMLElement {
     this._hass=h;
     // A focused select must not be rebuilt by Home Assistant state updates.
     if(first||!this._rendered||
-       (previousSources!==this.displaySourceSignature()&&!this.matches(':focus-within')))this.render();
+       (previousSources!==this.displaySourceSignature()&&!this.shadowRoot?.activeElement))this.render();
   }
   setConfig(config){
     const next={...(config||{})};
     const changed=JSON.stringify(next)!==JSON.stringify(this._config);
     this._config=next;
     // HA echoes config-changed; ignore unchanged echoes and keep active menus.
-    if(!this._rendered||(changed&&!this.matches(':focus-within')))this.render();
+    if(!this._rendered||(changed&&!this.shadowRoot?.activeElement))this.render();
   }
   displaySources(display){
     const states=(this._hass&&this._hass.states)||{};
@@ -1982,7 +1982,7 @@ class NuvioPopupCardEditor extends HTMLElement {
     const changed=JSON.stringify(this._config)!==JSON.stringify(next);
     this._config=next;
     if(!this.shadowRoot.querySelector('nuvio-card-editor')||
-       (changed&&!this.matches(':focus-within')))this.render();
+       (changed&&!this.shadowRoot?.activeElement))this.render();
   }
   emit(config) {
     this._config={...config,type:"custom:nuvio-popup-card"};
