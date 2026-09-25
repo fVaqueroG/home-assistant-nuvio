@@ -79,7 +79,7 @@ assert.equal(launcher.shadowRoot.querySelector('.launcher-vertical-logo').getAtt
 assert.equal(launcher.shadowRoot.querySelector('.launcher-caption').textContent,'Nuvio');
 assert.equal(launcher.shadowRoot.querySelector('.launcher-caption').style.display,'none');
 launcher.setConfig({type:'custom:nuvio-popup-card',button_style:'horizontal',button_icon:'mdi:star',button_label:'Nuvio'});
-assert.equal(launcher.getCardSize(),1);
+assert.equal(launcher.getCardSize(),2);
 assert.equal(launcher.shadowRoot.querySelector('.launcher-logo').getAttribute('src'),'/nuvio/assets/wordmark.png?v=0.4.97');
 assert.equal(launcher.shadowRoot.querySelector('.launcher-visual ha-icon'),null);
 launcher.setConfig({type:'custom:nuvio-popup-card',button_style:'icon_text',button_label:'Watch'});
@@ -93,7 +93,7 @@ assert.match(cardSource,/buttonStyle.addEventListener\("change",\(\)=>this.emit/
 // Logo-only: the user's exact uploaded icon PNG, without caption or MDI icon.
 launcher.setConfig({type:'custom:nuvio-popup-card',button_style:'logo_only',button_label:'Custom label',button_icon:'mdi:star',popup_width:'normal'});
 assert.equal(launcher.launcherStyle(),'logo_only');
-assert.equal(launcher.getCardSize(),1);
+assert.equal(launcher.getCardSize(),2);
 assert.equal(launcher.shadowRoot.querySelector('.launcher-mark').getAttribute('src'),'/nuvio/assets/icon-only.png?v=0.4.97');
 assert.equal(launcher.shadowRoot.querySelector('.launcher-logo'),null);
 assert.equal(launcher.shadowRoot.querySelector('.launcher-visual ha-icon'),null);
